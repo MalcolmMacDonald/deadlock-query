@@ -17,3 +17,6 @@ Single source for "what should I do next?". Prompt Claude with: **"Do the next t
 1. **Now:** repo Settings → Pages → Source = GitHub Actions.
 2. **S2:** on the machine with Deadlock installed, install Source2Viewer CLI, then start a session in `map-extractor` and paste the output of `ls` on the game's `game/citadel/maps` folder plus the CLI `--help`. Claude writes the rest.
 3. **Cloudflare (M4):** create account + Pages project, then add the secrets listed in `docs/secrets.md`.
+
+## Agent conventions
+- Open a PR automatically when a task's work is pushed (no need to ask). Label `infra` for root/tooling changes; title prefixed `[<module-id>]`.
