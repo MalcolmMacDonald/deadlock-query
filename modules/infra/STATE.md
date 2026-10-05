@@ -1,6 +1,6 @@
 # infra — state
 
-- **Status:** M0+M1 (local) done
+- **Status:** M0+M1 done, M2 workflow written (needs Pages enabled)
 - **Version:** 0.0.0
 - **Current milestone:** none (see PLAN.md §6)
 - **Last updated:** 2026-10-05
@@ -10,10 +10,10 @@
 - M1: `check:scope/state/deps` (tools/lib/checks.ts, 6 tests), `ci.yml`, CODEOWNERS for `semantics/**`, claude/* semantics guard.
 
 ## In progress
-- (nothing yet)
+- M2: `deploy.yml` + `tools/build.ts` (placeholder page until `modules/shell/dist` exists). Needs one-time human step: repo Settings → Pages → Source = GitHub Actions.
 
 ## Next
-- Start the first milestone in PLAN.md.
+- M3 data release flow (after S2 produces a bundle); M4 needs a Cloudflare account + secrets.
 
 ## Blockers / Requests to other modules
 - (none)
