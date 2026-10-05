@@ -13,7 +13,7 @@
 - Docs from M7 started: `docs/secrets.md`, `docs/takedown.md`; root `NEXT.md` tracks next task per module.
 - M2: `deploy.yml` + `tools/build.ts` (placeholder page until `modules/shell/dist` exists). Needs one-time human step: repo Settings → Pages → Source = GitHub Actions.
 
-## M4 (code done, not yet live)
+## M4 (done, live on Cloudflare)
 - `functions/_middleware.ts` + `functions/auth/{login,logout,session}.ts`, `modules/infra/src/auth.ts` (PBKDF2, HMAC session; 3 tests), `tools/hash-password.ts`, `wrangler.toml`, `dev` job in `deploy.yml` (skips until Cloudflare secrets exist), `docs/dev-site.md`.
 - Verified live 2026-10-05: no cookie gives 302 to login (HTML) or 401 (assets); wrong password 401; right password 303 + cookie then site served.
 
@@ -21,7 +21,7 @@
 
 ## Next
 - M4 done (login gate verified). Next: M5 GitHub proxy with allowlist + CSRF.
-- M3 data release flow (after S2 produces a bundle); M4 needs a Cloudflare account + secrets.
+- M3 data release flow (after S2 produces a bundle).
 
 ## Blockers / Requests to other modules
 - (none)
