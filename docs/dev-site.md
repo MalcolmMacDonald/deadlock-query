@@ -4,7 +4,7 @@
 
 - `functions/_middleware.ts` gates every request on a signed session cookie (HttpOnly, Secure, SameSite=Strict, 12 h). No cookie: HTML requests redirect to `/auth/login`, everything else gets 401 with no assets.
 - `functions/auth/login.ts`: PBKDF2-SHA256 check against `DEV_PASSWORD_HASH`, constant-time compare, 5 attempts/minute per IP.
-- The rate limiter is in-memory per Worker isolate, so it is best-effort. Add Cloudflare WAF rate limiting on `/auth/login` for a hard limit.
+- The in-app rate limiter is in-memory per Worker isolate and was observed not to trigger in practice. Treat it as a no-op and use a Cloudflare WAF rate-limiting rule on `/auth/login` (Security → WAF → Rate limiting rules; e.g. 5 requests per 10 s per IP, block 1 min).
 - Local run: `wrangler pages dev dist` with `.dev.vars` containing `DEV_PASSWORD_HASH` and `SESSION_HMAC_KEY`.
 
 ## One-time setup (Malcolm)
