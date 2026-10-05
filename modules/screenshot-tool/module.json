@@ -1,0 +1,9 @@
+{
+  "id": "screenshot-tool",
+  "version": "0.0.0",
+  "kind": "cli",
+  "dependsOn": ["contracts"],
+  "devOnly": false,
+  "firstPhase": "3",
+  "paths": ["modules/screenshot-tool/**"]
+}

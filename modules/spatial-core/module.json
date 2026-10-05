@@ -1,0 +1,9 @@
+{
+  "id": "spatial-core",
+  "version": "0.0.0",
+  "kind": "lib",
+  "dependsOn": ["contracts"],
+  "devOnly": false,
+  "firstPhase": "2",
+  "paths": ["modules/spatial-core/**"]
+}

@@ -1,0 +1,9 @@
+{
+  "id": "query-library",
+  "version": "0.0.0",
+  "kind": "library",
+  "dependsOn": ["contracts","spatial-core"],
+  "devOnly": false,
+  "firstPhase": "1",
+  "paths": ["modules/query-library/**"]
+}

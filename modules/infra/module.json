@@ -1,0 +1,9 @@
+{
+  "id": "infra",
+  "version": "0.0.0",
+  "kind": "tooling",
+  "dependsOn": ["contracts"],
+  "devOnly": false,
+  "firstPhase": "1",
+  "paths": ["modules/infra/**"]
+}

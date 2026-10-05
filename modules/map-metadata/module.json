@@ -1,0 +1,9 @@
+{
+  "id": "map-metadata",
+  "version": "0.0.0",
+  "kind": "web",
+  "dependsOn": ["contracts"],
+  "devOnly": false,
+  "firstPhase": "3",
+  "paths": ["modules/map-metadata/**"]
+}

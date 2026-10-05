@@ -1,0 +1,9 @@
+{
+  "id": "kanban",
+  "version": "0.0.0",
+  "kind": "web",
+  "dependsOn": ["contracts"],
+  "devOnly": true,
+  "firstPhase": "1",
+  "paths": ["modules/kanban/**"]
+}

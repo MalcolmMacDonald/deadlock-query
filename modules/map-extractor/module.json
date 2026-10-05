@@ -1,0 +1,9 @@
+{
+  "id": "map-extractor",
+  "version": "0.0.0",
+  "kind": "cli",
+  "dependsOn": ["contracts","spatial-core"],
+  "devOnly": false,
+  "firstPhase": "1",
+  "paths": ["modules/map-extractor/**"]
+}
