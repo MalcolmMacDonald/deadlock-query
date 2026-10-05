@@ -1,12 +1,13 @@
 # infra — state
 
-- **Status:** not started
+- **Status:** M0+M1 (local) done
 - **Version:** 0.0.0
 - **Current milestone:** none (see PLAN.md §6)
 - **Last updated:** 2026-10-05
 
 ## Done
-- (nothing yet)
+- M0: root workspace, `new-module`, `verify:all`.
+- M1: `check:scope/state/deps` (tools/lib/checks.ts, 6 tests), `ci.yml`, CODEOWNERS for `semantics/**`, claude/* semantics guard.
 
 ## In progress
 - (nothing yet)

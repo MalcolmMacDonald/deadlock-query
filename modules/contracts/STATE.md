@@ -1,18 +1,18 @@
 # contracts — state
 
-- **Status:** not started
+- **Status:** M0 done
 - **Version:** 0.0.0
 - **Current milestone:** none (see PLAN.md §6; start at the first milestone)
 - **Last updated:** 2026-10-05
 
 ## Done
-- (nothing yet)
+- M0: package scaffold, `Space`, module/service type skeletons (SelectionBus, ViewerService, DevAuth) + mock layers, tests; root workspace (package.json, tsconfig.base.json, root CLAUDE.md). `bun run verify:all` green.
 
 ## In progress
 - (nothing yet)
 
 ## Next
-- Start milestone M0 in PLAN.md.
+- M1 after spike S2 (needs real extracted data): MapBundle, QueryResult, MapDataService, QueryEngine, fixtures.
 
 ## Blockers / Requests to other modules
 - (none)

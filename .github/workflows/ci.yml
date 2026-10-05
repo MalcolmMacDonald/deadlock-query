@@ -1,0 +1,21 @@
+name: ci
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+  push:
+    branches: [main]
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - run: bun run check:deps
+      - run: bun run verify:all
+      - if: github.event_name == 'pull_request'
+        run: |
+          INFRA=""; if echo '${{ toJson(github.event.pull_request.labels.*.name) }}' | grep -q '"infra"'; then INFRA="--infra"; fi
+          bun run check:scope -- --base origin/${{ github.base_ref }} --branch "${{ github.head_ref }}" $INFRA
+          bun run check:state -- --base origin/${{ github.base_ref }}
