@@ -1,0 +1,10 @@
+{
+  "name": "@deadlock-query/infra",
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -p .",
+    "test": "bun test",
+    "verify": "bun run typecheck && bun run test"
+  }
+}
