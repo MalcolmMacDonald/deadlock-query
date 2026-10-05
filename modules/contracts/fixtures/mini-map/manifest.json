@@ -1,0 +1,93 @@
+{
+  "schemaVersion": "1.0.0",
+  "gameBuildId": "0",
+  "mapName": "mini_map",
+  "tier": "lite",
+  "coordinateSystem": {
+    "up": "Z",
+    "unit": "source",
+    "glbToWorld": [
+      1,
+      0,
+      0,
+      0,
+      0,
+      0,
+      1,
+      0,
+      0,
+      -1,
+      0,
+      0,
+      0,
+      0,
+      0,
+      1
+    ]
+  },
+  "bounds": {
+    "min": [
+      -4000,
+      -3000,
+      -50
+    ],
+    "max": [
+      4000,
+      3000,
+      620
+    ]
+  },
+  "tiles": [
+    {
+      "id": "t0",
+      "bounds": {
+        "min": [
+          -4000,
+          -3000,
+          -50
+        ],
+        "max": [
+          4000,
+          3000,
+          620
+        ]
+      },
+      "file": "render/t0.glb",
+      "bytes": 5884,
+      "sha256": "86f173f6d209937419cb29e27a79f3a3b534c95335d55e7baf9530d1c18bc816"
+    }
+  ],
+  "collision": {
+    "file": "collision/physics.glb",
+    "format": "glb",
+    "glbToWorld": [
+      1,
+      0,
+      0,
+      0,
+      0,
+      0,
+      1,
+      0,
+      0,
+      -1,
+      0,
+      0,
+      0,
+      0,
+      0,
+      1
+    ],
+    "layers": [
+      "solid",
+      "blocklos",
+      "window"
+    ]
+  },
+  "entitiesFile": "entities.json",
+  "provenance": {
+    "extractorVersion": "fixture",
+    "s2vVersion": "none",
+    "synthetic": true
+  }
+}

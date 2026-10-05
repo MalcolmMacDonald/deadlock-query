@@ -1,0 +1,252 @@
+{
+  "schemaVersion": "1.0.0",
+  "entities": [
+    {
+      "id": "guardian-1-2",
+      "class": "info_super_trooper_spawn",
+      "kind": "guardian",
+      "position": [
+        -2500,
+        -2000,
+        20
+      ],
+      "team": 2,
+      "lane": 1,
+      "properties": {
+        "subclass_name": "boss_combine_t1_yellow"
+      }
+    },
+    {
+      "id": "guardian-1-3",
+      "class": "info_super_trooper_spawn",
+      "kind": "guardian",
+      "position": [
+        2500,
+        -2000,
+        20
+      ],
+      "team": 3,
+      "lane": 1,
+      "properties": {
+        "subclass_name": "boss_combine_t1_yellow"
+      }
+    },
+    {
+      "id": "guardian-2-2",
+      "class": "info_super_trooper_spawn",
+      "kind": "guardian",
+      "position": [
+        -2500,
+        0,
+        20
+      ],
+      "team": 2,
+      "lane": 2,
+      "properties": {
+        "subclass_name": "boss_combine_t1_yellow"
+      }
+    },
+    {
+      "id": "guardian-2-3",
+      "class": "info_super_trooper_spawn",
+      "kind": "guardian",
+      "position": [
+        2500,
+        0,
+        20
+      ],
+      "team": 3,
+      "lane": 2,
+      "properties": {
+        "subclass_name": "boss_combine_t1_yellow"
+      }
+    },
+    {
+      "id": "guardian-3-2",
+      "class": "info_super_trooper_spawn",
+      "kind": "guardian",
+      "position": [
+        -2500,
+        2000,
+        20
+      ],
+      "team": 2,
+      "lane": 3,
+      "properties": {
+        "subclass_name": "boss_combine_t1_yellow"
+      }
+    },
+    {
+      "id": "guardian-3-3",
+      "class": "info_super_trooper_spawn",
+      "kind": "guardian",
+      "position": [
+        2500,
+        2000,
+        20
+      ],
+      "team": 3,
+      "lane": 3,
+      "properties": {
+        "subclass_name": "boss_combine_t1_yellow"
+      }
+    },
+    {
+      "id": "walker-2-1",
+      "class": "npc_boss_tier2",
+      "kind": "walker",
+      "position": [
+        -3000,
+        0,
+        20
+      ],
+      "team": 2,
+      "lane": 2,
+      "properties": {}
+    },
+    {
+      "id": "walker-3-1",
+      "class": "npc_boss_tier2",
+      "kind": "walker",
+      "position": [
+        3000,
+        0,
+        20
+      ],
+      "team": 3,
+      "lane": 2,
+      "properties": {}
+    },
+    {
+      "id": "patron-2",
+      "class": "npc_boss_tier3",
+      "kind": "patron",
+      "position": [
+        -3800,
+        0,
+        20
+      ],
+      "team": 2,
+      "properties": {}
+    },
+    {
+      "id": "patron-3",
+      "class": "npc_boss_tier3",
+      "kind": "patron",
+      "position": [
+        3800,
+        0,
+        20
+      ],
+      "team": 3,
+      "properties": {}
+    },
+    {
+      "id": "camp-1",
+      "class": "info_neutral_trooper_camp",
+      "kind": "creepCamp",
+      "position": [
+        -1000,
+        -1000,
+        20
+      ],
+      "properties": {
+        "subclass_name": "neutral_camp_medium"
+      }
+    },
+    {
+      "id": "camp-2",
+      "class": "info_neutral_trooper_camp",
+      "kind": "creepCamp",
+      "position": [
+        1000,
+        1000,
+        20
+      ],
+      "properties": {
+        "subclass_name": "neutral_camp_strong"
+      }
+    },
+    {
+      "id": "camp-3",
+      "class": "info_neutral_trooper_camp",
+      "kind": "creepCamp",
+      "position": [
+        0,
+        -2500,
+        20
+      ],
+      "properties": {
+        "subclass_name": "neutral_camp_weak"
+      }
+    },
+    {
+      "id": "orb-1",
+      "class": "citadel_pickup_spawner",
+      "kind": "healingOrb",
+      "position": [
+        -800,
+        400,
+        20
+      ],
+      "properties": {
+        "subclass_name": "citadel_pickup_floating_health",
+        "spawn_delay_override": 180
+      }
+    },
+    {
+      "id": "orb-2",
+      "class": "citadel_pickup_spawner",
+      "kind": "healingOrb",
+      "position": [
+        800,
+        -400,
+        20
+      ],
+      "properties": {
+        "subclass_name": "citadel_pickup_floating_health",
+        "spawn_delay_override": 180
+      }
+    },
+    {
+      "id": "orb-3",
+      "class": "citadel_pickup_spawner",
+      "kind": "healingOrb",
+      "position": [
+        1500,
+        -1000,
+        620
+      ],
+      "properties": {
+        "subclass_name": "citadel_pickup_floating_health",
+        "spawn_delay_override": 180
+      }
+    },
+    {
+      "id": "orb-4",
+      "class": "citadel_pickup_spawner",
+      "kind": "healingOrb",
+      "position": [
+        0,
+        1000,
+        20
+      ],
+      "properties": {
+        "subclass_name": "citadel_pickup_floating_health",
+        "spawn_delay_override": 180
+      }
+    },
+    {
+      "id": "prop-1",
+      "class": "prop_dynamic",
+      "position": [
+        200,
+        200,
+        0
+      ],
+      "properties": {
+        "model": "models/props/crate.vmdl"
+      }
+    }
+  ]
+}

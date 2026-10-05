@@ -1,0 +1,270 @@
+{
+  "dialect": "draft-2020-12",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "schemaVersion": {
+        "type": "string"
+      },
+      "gameBuildId": {
+        "type": "string"
+      },
+      "mapName": {
+        "type": "string"
+      },
+      "tier": {
+        "type": "string",
+        "enum": [
+          "full",
+          "lite"
+        ]
+      },
+      "coordinateSystem": {
+        "type": "object",
+        "properties": {
+          "up": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "Z"
+                ]
+              }
+            ]
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "source"
+                ]
+              }
+            ]
+          },
+          "glbToWorld": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "minItems": 16,
+            "maxItems": 16
+          }
+        },
+        "required": [
+          "up",
+          "unit",
+          "glbToWorld"
+        ],
+        "additionalProperties": true
+      },
+      "bounds": {
+        "type": "object",
+        "properties": {
+          "min": {
+            "type": "array",
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "maxItems": 3,
+            "minItems": 3
+          },
+          "max": {
+            "type": "array",
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "maxItems": 3,
+            "minItems": 3
+          }
+        },
+        "required": [
+          "min",
+          "max"
+        ],
+        "additionalProperties": true
+      },
+      "tiles": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "bounds": {
+              "type": "object",
+              "properties": {
+                "min": {
+                  "type": "array",
+                  "prefixItems": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    }
+                  ],
+                  "maxItems": 3,
+                  "minItems": 3
+                },
+                "max": {
+                  "type": "array",
+                  "prefixItems": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    }
+                  ],
+                  "maxItems": 3,
+                  "minItems": 3
+                }
+              },
+              "required": [
+                "min",
+                "max"
+              ],
+              "additionalProperties": true
+            },
+            "file": {
+              "type": "string"
+            },
+            "bytes": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "Infinity",
+                    "-Infinity",
+                    "NaN"
+                  ]
+                }
+              ]
+            },
+            "sha256": {
+              "type": "string"
+            },
+            "materials": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "id",
+            "bounds",
+            "file",
+            "bytes",
+            "sha256"
+          ],
+          "additionalProperties": true
+        }
+      },
+      "collision": {
+        "type": "object",
+        "properties": {
+          "file": {
+            "type": "string"
+          },
+          "format": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "glb"
+                ]
+              }
+            ]
+          },
+          "glbToWorld": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "minItems": 16,
+            "maxItems": 16
+          },
+          "layers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "file",
+          "format",
+          "glbToWorld",
+          "layers"
+        ],
+        "additionalProperties": true
+      },
+      "entitiesFile": {
+        "type": "string"
+      },
+      "baked": {
+        "type": "object"
+      },
+      "provenance": {
+        "type": "object",
+        "properties": {
+          "extractorVersion": {
+            "type": "string"
+          },
+          "s2vVersion": {
+            "type": "string"
+          },
+          "synthetic": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "extractorVersion",
+          "s2vVersion"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "required": [
+      "schemaVersion",
+      "gameBuildId",
+      "mapName",
+      "tier",
+      "coordinateSystem",
+      "bounds",
+      "tiles",
+      "entitiesFile",
+      "provenance"
+    ],
+    "additionalProperties": true
+  },
+  "definitions": {}
+}

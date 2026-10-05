@@ -1,0 +1,126 @@
+{
+  "dialect": "draft-2020-12",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "schemaVersion": {
+        "type": "string"
+      },
+      "entities": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "class": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "guardian",
+                "walker",
+                "patron",
+                "barracks",
+                "baseSentry",
+                "healingOrb",
+                "creepCamp",
+                "zipline",
+                "jumpPad",
+                "climbRope",
+                "interior",
+                "shop",
+                "spawn",
+                "trooperSpawn",
+                "capturePoint",
+                "powerup",
+                "crate",
+                "laneMarker"
+              ]
+            },
+            "position": {
+              "type": "array",
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "maxItems": 3,
+              "minItems": 3
+            },
+            "rotation": {
+              "type": "array",
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "maxItems": 3,
+              "minItems": 3
+            },
+            "team": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "Infinity",
+                    "-Infinity",
+                    "NaN"
+                  ]
+                }
+              ]
+            },
+            "lane": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "Infinity",
+                    "-Infinity",
+                    "NaN"
+                  ]
+                }
+              ]
+            },
+            "properties": {
+              "type": "object"
+            }
+          },
+          "required": [
+            "id",
+            "class",
+            "position",
+            "properties"
+          ],
+          "additionalProperties": true
+        }
+      }
+    },
+    "required": [
+      "schemaVersion",
+      "entities"
+    ],
+    "additionalProperties": true
+  },
+  "definitions": {}
+}
