@@ -15,7 +15,9 @@ jobs:
       - run: bun run check:deps
       - run: bun run verify:all
       - if: github.event_name == 'pull_request'
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
-          INFRA=""; if echo '${{ toJson(github.event.pull_request.labels.*.name) }}' | grep -q '"infra"'; then INFRA="--infra"; fi
+          INFRA=""; if echo '${{ toJson(github.event.pull_request.labels.*.name) }}' | grep -q '"infra"' || echo "$PR_TITLE" | grep -qi '^\[infra\]'; then INFRA="--infra"; fi
           bun run check:scope -- --base origin/${{ github.base_ref }} --branch "${{ github.head_ref }}" $INFRA
           bun run check:state -- --base origin/${{ github.base_ref }}
