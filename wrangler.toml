@@ -1,4 +1,0 @@
-name = "deadlock-query-dev"
-compatibility_date = "2026-01-01"
-pages_build_output_dir = "dist"
-# Secrets (DEV_PASSWORD_HASH, SESSION_HMAC_KEY) live in the Cloudflare dashboard; for local use put them in .dev.vars.

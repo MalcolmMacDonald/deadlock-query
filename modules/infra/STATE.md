@@ -18,7 +18,7 @@
 - Verified live 2026-10-05: no cookie gives 302 to login (HTML) or 401 (assets); wrong password 401; right password 303 + cookie then site served.
 - Gap found: in-memory limiter never triggered, and the Cache API limiter (PR #8) also never triggered live: Cache API is a no-op on pages.dev. Replaced with a KV-backed limiter (`RATE_LIMIT` binding); off until the binding exists. Re-verify live after Malcolm adds the binding.
 
-- Rate limit still not triggering after binding added: login responses now carry `x-ratelimit-store: kv|none` to show whether the RATE_LIMIT binding reaches the function.
+- Header `x-ratelimit-store` showed `none` even with the dashboard KV binding. Likely cause: wrangler.toml makes wrangler own Pages config and drops dashboard bindings. Removed wrangler.toml; re-check the header after deploy (if still `none`, declare the binding in wrangler.toml with the namespace id instead).
 
 ## Next
 - Malcolm adds KV namespace + `RATE_LIMIT` binding; re-verify rate limit live, then M5 (GitHub proxy).

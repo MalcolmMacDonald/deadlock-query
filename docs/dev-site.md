@@ -5,6 +5,7 @@
 - `functions/_middleware.ts` gates every request on a signed session cookie (HttpOnly, Secure, SameSite=Strict, 12 h). No cookie: HTML requests redirect to `/auth/login`, everything else gets 401 with no assets.
 - `functions/auth/login.ts`: PBKDF2-SHA256 check against `DEV_PASSWORD_HASH`, constant-time compare, 5 attempts/minute per IP.
 - Login rate limit (5 attempts/min per IP) is stored in a KV namespace bound as `RATE_LIMIT`. Without the binding the limit is off. The Workers Cache API and in-memory counters do not work for this on `pages.dev` (both were tried and never triggered).
+- There is deliberately no `wrangler.toml`: when one exists, `wrangler pages deploy` treats it as the source of truth and ignores dashboard bindings (the `RATE_LIMIT` KV binding never reached the function). Bindings and secrets are managed in the dashboard.
 - Local run: `wrangler pages dev dist` with `.dev.vars` containing `DEV_PASSWORD_HASH` and `SESSION_HMAC_KEY`.
 
 ## One-time setup (Malcolm)
