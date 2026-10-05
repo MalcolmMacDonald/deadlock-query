@@ -6,5 +6,9 @@
     "typecheck": "tsc -p .",
     "test": "bun test",
     "verify": "bun run typecheck && bun run test"
+  },
+  "dependencies": {
+    "@deadlock-query/contracts": "workspace:*",
+    "effect": "4.0.1"
   }
 }

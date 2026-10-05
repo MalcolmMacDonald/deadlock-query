@@ -11,7 +11,7 @@
     },
     "modules/contracts": {
       "name": "@deadlock-query/contracts",
-      "version": "0.0.0",
+      "version": "0.1.0",
       "dependencies": {
         "effect": "4.0.1",
       },
@@ -19,6 +19,10 @@
     "modules/infra": {
       "name": "@deadlock-query/infra",
       "version": "0.0.0",
+      "dependencies": {
+        "@deadlock-query/contracts": "workspace:*",
+        "effect": "4.0.1",
+      },
     },
     "modules/spatial-core": {
       "name": "@deadlock-query/spatial-core",

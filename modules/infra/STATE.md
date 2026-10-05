@@ -1,6 +1,6 @@
 # infra — state
 
-- **Status:** M0+M1 done, M2 workflow written (needs Pages enabled), M4 live on Cloudflare (rate limit gap)
+- **Status:** M0+M1 done, M2 workflow written (needs Pages enabled), M4 live on Cloudflare, M5 code done (needs `GITHUB_TOKEN_PROXY` secret to go live)
 - **Version:** 0.0.0
 - **Current milestone:** none (see PLAN.md §6)
 - **Last updated:** 2026-10-05
@@ -20,7 +20,14 @@
 
 - Header `x-ratelimit-store` stayed `none` with the dashboard binding, with or without wrangler.toml. Now declaring the KV namespace in wrangler.toml (`[[kv_namespaces]]`). Re-check header and 429 after deploy.
 
+## M5 (code done)
+- `functions/api/github/[[path]].ts` + `modules/infra/src/proxy.ts`: allowlist of repo-scoped issues/PR/labels/runs/dispatch/contents-read endpoints, CSRF header (`x-dlq-csrf: 1`) required on every request, Origin must match, upstream gets only the token, response headers are whitelisted (no cookies/auth echoed). Session cookie still enforced by `_middleware.ts`. Returns 503 until `GITHUB_TOKEN_PROXY` is set.
+- `modules/infra/src/devAuth.ts`: `DevAuthLive` layer over `/auth/session` + `/auth/login`.
+- 6 contract tests in `test/proxy.test.ts`. Infra now depends on `contracts` and `effect`.
+- Not done: live verification (needs the token secret and a redeploy).
+
 ## Next
+- Malcolm creates the fine-grained PAT and sets `GITHUB_TOKEN_PROXY` (see `docs/secrets.md`); then curl the live proxy with a session cookie, confirm the token never appears in a response.
 - Malcolm adds KV namespace + `RATE_LIMIT` binding; re-verify rate limit live, then M5 (GitHub proxy).
 - M3 data release flow (after S2 produces a bundle); M4 needs a Cloudflare account + secrets.
 
