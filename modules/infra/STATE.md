@@ -1,6 +1,6 @@
 # infra — state
 
-- **Status:** M0+M1 done, M2 workflow written (needs Pages enabled), M4 code written (needs Cloudflare secrets)
+- **Status:** M0+M1 done, M2 workflow written (needs Pages enabled), M4 live on Cloudflare (rate limit gap)
 - **Version:** 0.0.0
 - **Current milestone:** none (see PLAN.md §6)
 - **Last updated:** 2026-10-05
@@ -15,10 +15,11 @@
 
 ## M4 (code done, not yet live)
 - `functions/_middleware.ts` + `functions/auth/{login,logout,session}.ts`, `modules/infra/src/auth.ts` (PBKDF2, HMAC session, rate limiter; 4 tests), `tools/hash-password.ts`, `wrangler.toml`, `dev` job in `deploy.yml` (skips until Cloudflare secrets exist), `docs/dev-site.md`.
-- Acceptance (401 + no assets / right password serves / rate limit) to be verified live once secrets are set.
+- Verified live 2026-10-05: no cookie gives 302 to login (HTML) or 401 (assets); wrong password 401; right password 303 + cookie then site served.
+- Gap found: the first in-memory rate limiter did not trigger (6+ rapid wrong attempts all 401; many isolates). Site is on a bare pages.dev (no zone, so no WAF). Replaced with a Cache API backed limiter (per data centre); to be re-verified live after deploy.
 
 ## Next
-- Malcolm: Cloudflare setup per docs/dev-site.md, then verify M4 live.
+- Re-verify rate limit live after deploy, then M5 (GitHub proxy).
 - M3 data release flow (after S2 produces a bundle); M4 needs a Cloudflare account + secrets.
 
 ## Blockers / Requests to other modules
@@ -31,7 +32,7 @@
 
 - 2026-10-05 — Decisions accepted: Cloudflare for dev (D9), hosting lite tier publicly (D8), branch `main`; add CODEOWNERS for semantics/ and takedown runbook.
 
-- 2026-10-05 — Login rate limit is per-isolate in-memory (no KV); WAF rule recommended for a hard limit. PBKDF2 at 100k iterations (Workers cap).
+- 2026-10-05 — Login rate limit uses the Workers Cache API (no KV setup; per data centre). PBKDF2 at 100k iterations (Workers cap).
 
 ## Open questions
 - (see PLAN.md §9)

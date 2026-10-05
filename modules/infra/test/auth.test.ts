@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { RateLimiter, hashPassword, readCookie, signSession, verifyPassword, verifySession } from "../src/auth.ts"
+import { type CacheLike, RateLimiter, hashPassword, readCookie, signSession, verifyPassword, verifySession } from "../src/auth.ts"
 
 test("password hash round-trips and rejects wrong password", async () => {
   const h = await hashPassword("hunter2")
@@ -19,11 +19,19 @@ test("sessions verify, expire, and reject tampering", async () => {
   expect(await verifySession("key", undefined)).toBe(false)
 })
 
-test("rate limiter blocks after max attempts then resets", () => {
-  const r = new RateLimiter(2, 1000)
-  expect([r.allow("a", 0), r.allow("a", 1), r.allow("a", 2)]).toEqual([true, true, false])
-  expect(r.allow("a", 1001)).toBe(true)
-  expect(r.allow("b", 2)).toBe(true)
+const fakeCache = (): CacheLike => {
+  const m = new Map<string, string>()
+  return {
+    match: async (k) => (m.has(k) ? new Response(m.get(k)) : undefined),
+    put: async (k, r) => { m.set(k, await r.text()) },
+  }
+}
+
+test("rate limiter blocks after max attempts then resets", async () => {
+  const r = new RateLimiter(fakeCache(), 2, 1000)
+  expect([await r.allow("a", 0), await r.allow("a", 1), await r.allow("a", 2)]).toEqual([true, true, false])
+  expect(await r.allow("a", 1001)).toBe(true)
+  expect(await r.allow("b", 2)).toBe(true)
 })
 
 test("readCookie finds the named cookie", () => {
