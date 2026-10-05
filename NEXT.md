@@ -6,7 +6,7 @@ Single source for "what should I do next?". Prompt Claude with: **"Do the next t
 |---|---|---|
 | infra | M3 data release flow; M5 live (set `GITHUB_TOKEN_PROXY`); then M6 budgets/promote/previews | M3: a bundle from the extractor (M1). M5 live: PAT secret from Malcolm |
 | contracts | M1 MapBundle/QueryResult/fixtures (S2 findings are in `modules/map-extractor/STATE.md`) | none |
-| map-extractor | M0: CLI scaffold + `doctor`; then M1 open questions (see STATE.md) | none (S2 done, GO) |
+| map-extractor | M1 open questions (see STATE.md); run `doctor` on dev machine | none (S2 done, GO; M0 done) |
 | query-builder | S1 spike: Monaco TS worker + custom `.d.ts` + sandboxed run/cancel | none |
 | spatial-core | S5 spike: three-mesh-bvh benchmark (1M tris, Bun + Worker) | none |
 | query-library, map-viewer, shell | wait for contracts M1 | contracts M1 |
