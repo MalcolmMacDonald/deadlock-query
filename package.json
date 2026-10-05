@@ -1,0 +1,12 @@
+{
+  "name": "deadlock-query",
+  "private": true,
+  "workspaces": ["modules/*"],
+  "scripts": {
+    "verify:all": "bun run --filter './modules/*' verify"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "@types/bun": "latest"
+  }
+}
