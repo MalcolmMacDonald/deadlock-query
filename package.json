@@ -9,6 +9,7 @@
     "check:scope": "bun tools/check.ts scope",
     "check:state": "bun tools/check.ts state",
     "check:deps": "bun tools/check.ts deps",
+    "build": "bun tools/build.ts",
     "new-module": "bun tools/new-module.ts"
   },
   "devDependencies": {
