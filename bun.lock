@@ -24,6 +24,16 @@
         "effect": "4.0.1",
       },
     },
+    "modules/query-builder": {
+      "name": "@deadlock-query/query-builder",
+      "version": "0.0.0",
+      "dependencies": {
+        "monaco-editor": "^0.52.2",
+      },
+      "devDependencies": {
+        "playwright-core": "^1.56.1",
+      },
+    },
     "modules/spatial-core": {
       "name": "@deadlock-query/spatial-core",
       "version": "0.0.0",
@@ -40,6 +50,8 @@
     "@deadlock-query/contracts": ["@deadlock-query/contracts@workspace:modules/contracts"],
 
     "@deadlock-query/infra": ["@deadlock-query/infra@workspace:modules/infra"],
+
+    "@deadlock-query/query-builder": ["@deadlock-query/query-builder@workspace:modules/query-builder"],
 
     "@deadlock-query/spatial-core": ["@deadlock-query/spatial-core@workspace:modules/spatial-core"],
 
@@ -64,6 +76,10 @@
     "fflate": ["fflate@0.8.3", "", {}, "sha512-tbZNuJrLwGUp3zshBtdy4W+ORxZuIh8a5ilyIEQDC5rY1f3U20JMry0Ll3WBzU58EZKsEuJFXhb5gwv8CsPvgA=="],
 
     "meshoptimizer": ["meshoptimizer@0.18.1", "", {}, "sha512-ZhoIoL7TNV4s5B6+rx5mC//fw8/POGyNxS/DZyCJeiZ12ScLfVwRE/GfsxwiTkMYYD5DmK2/JXnEVXqL4rF+Sw=="],
+
+    "monaco-editor": ["monaco-editor@0.52.2", "", {}, "sha512-GEQWEZmfkOGLdd3XK8ryrfWz3AIP8YymVXiPHEdewrUq7mh0qrKrfHLNCXcbB6sTnMLnOZ3ztSiKcciFUkIJwQ=="],
+
+    "playwright-core": ["playwright-core@1.63.0", "", { "bin": { "playwright-core": "cli.js" } }, "sha512-rYCsBF/M5HjUch52bbtVONEFjv6Xu8sm8h72dNlR5bzIE1fvC/bxgspzkjSfU+MweEMmPM8KJebG6nnyxo5mCg=="],
 
     "three": ["three@0.170.0", "", {}, "sha512-FQK+LEpYc0fBD+J8g6oSEyyNzjp+Q7Ks1C568WWaoMRLW+TkNNWmenWeGgJjV105Gd+p/2ql1ZcjYvNiPZBhuQ=="],
 
