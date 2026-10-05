@@ -1,5 +1,5 @@
 import { isMainThread } from "bun"
-import { Sphere, Vector3, Ray } from "three"
+import { Sphere, Vector3, Ray, Box3, Line3 } from "three"
 import { MeshBVH } from "three-mesh-bvh"
 import { makeScene } from "./scene.ts"
 
@@ -32,6 +32,30 @@ function run(where: string) {
       bvh.intersectsSphere(sphere)
     }
   }) + " (1000 sphere tests)"
+
+  // Capsule (segment + radius) overlap via shapecast, the character-sweep primitive.
+  const seg = new Line3(new Vector3(), new Vector3()), tmp = new Vector3(), tmp2 = new Vector3()
+  const box = new Box3(), segBox = new Box3(), RADIUS = 30
+  let capsuleHits = 0
+  out.capsuleShapecast1000Ms = ms(() => {
+    for (let i = 0; i < 1000; i++) {
+      const x = rnd() * bounds.x, y = rnd() * bounds.x
+      seg.start.set(x, y, -150); seg.end.set(x, y, 150)
+      segBox.setFromPoints([seg.start, seg.end])
+      const hit = bvh.shapecast({
+        intersectsBounds: (b) => {
+          box.copy(b).expandByScalar(RADIUS)
+          return box.containsPoint(seg.start) || box.intersectsBox(segBox) ? 1 : 0
+        },
+        intersectsTriangle: (tri) => {
+          tri.closestPointToSegment(seg, tmp, tmp2)
+          return tmp.distanceTo(tmp2) <= RADIUS
+        },
+      })
+      if (hit) capsuleHits++
+    }
+  })
+  out.capsuleHits = capsuleHits
 
   const sBVH = MeshBVH.serialize(bvh, { cloneBuffers: false })
   const bytes = sBVH.roots.reduce((a: number, r: ArrayBuffer) => a + r.byteLength, 0)
