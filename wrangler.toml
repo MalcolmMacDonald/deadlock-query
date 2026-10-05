@@ -1,0 +1,9 @@
+name = "deadlock-query-dev"
+compatibility_date = "2026-01-01"
+pages_build_output_dir = "dist"
+
+# Bindings must be declared here: `wrangler pages deploy` does not carry dashboard bindings.
+# Secrets (DEV_PASSWORD_HASH, SESSION_HMAC_KEY) live in the Cloudflare dashboard; for local use put them in .dev.vars.
+[[kv_namespaces]]
+binding = "RATE_LIMIT"
+id = "f9b45de3f1844a62b55a62360d1d4eb6"
