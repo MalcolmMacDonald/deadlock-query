@@ -8,7 +8,7 @@ Single source for "what should I do next?". Prompt Claude with: **"Do the next t
 | contracts | M1 MapBundle/QueryResult/fixtures | S2 findings (human, local) |
 | map-extractor | S2 spike: run Source2Viewer on the game, record what exists in STATE.md | Human: game install (see below) |
 | query-builder | S1 spike: Monaco TS worker + custom `.d.ts` + sandboxed run/cancel | none |
-| spatial-core | S5 spike: three-mesh-bvh benchmark (1M tris, Bun + Worker) | none |
+| spatial-core | M0 scaffold + `Raycaster` over three-mesh-bvh (S5 done: go) | none |
 | query-library, map-viewer, shell | wait for contracts M1 | contracts M1 |
 | kanban | wait for infra M4/M5 | infra |
 | screenshot-tool, map-metadata | Phase 3 | — |
