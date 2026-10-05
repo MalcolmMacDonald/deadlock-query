@@ -4,7 +4,7 @@ Single source for "what should I do next?". Prompt Claude with: **"Do the next t
 
 | Module | Next task | Blocked on |
 |---|---|---|
-| infra | M3 data release flow; M4 Cloudflare dev site (code merged once this PR lands; go live) | M3: a bundle from S2. M4 live: Cloudflare setup in `docs/dev-site.md` |
+| infra | M5 live (set `GITHUB_TOKEN_PROXY`); then M6 budgets/promote/previews. M3 done (pointer + download in deploy) | M5 live: PAT secret from Malcolm |
 | contracts | M1 MapBundle/QueryResult/fixtures | S2 findings (human, local) |
 | map-extractor | S2 spike: run Source2Viewer on the game, record what exists in STATE.md | Human: game install (see below) |
 | query-builder | S1 spike: Monaco TS worker + custom `.d.ts` + sandboxed run/cancel | none |

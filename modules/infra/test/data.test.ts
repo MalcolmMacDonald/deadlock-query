@@ -8,7 +8,7 @@ import { fetchData, parsePointer, sha256Hex } from "../../../tools/lib/data.ts"
 const good = { buildId: "1", tag: "data-1", assets: [{ name: "a.zip", sha256: "a".repeat(64), dest: "data/x" }] }
 
 test("committed pointer is valid", () => {
-  parsePointer(JSON.parse(readFileSync("data/current-build.json", "utf8")))
+  parsePointer(JSON.parse(readFileSync(join(import.meta.dir, "../../../data/current-build.json"), "utf8")))
 })
 
 test("parsePointer rejects bad shapes and unsafe paths", () => {
