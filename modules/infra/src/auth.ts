@@ -7,7 +7,7 @@ export const COOKIE_NAME = "dlq_session"
 
 const hex = (b: ArrayBuffer | Uint8Array): string =>
   [...new Uint8Array(b)].map((x) => x.toString(16).padStart(2, "0")).join("")
-const unhex = (s: string): Uint8Array => new Uint8Array((s.match(/../g) ?? []).map((h) => parseInt(h, 16)))
+const unhex = (s: string): Uint8Array<ArrayBuffer> => new Uint8Array((s.match(/../g) ?? []).map((h) => parseInt(h, 16)))
 
 /** Length-independent constant-time comparison. */
 export const safeEqual = (a: string, b: string): boolean => {
@@ -17,13 +17,13 @@ export const safeEqual = (a: string, b: string): boolean => {
   return d === 0
 }
 
-const pbkdf2 = async (password: string, salt: Uint8Array, iterations: number): Promise<string> => {
+const pbkdf2 = async (password: string, salt: Uint8Array<ArrayBuffer>, iterations: number): Promise<string> => {
   const key = await crypto.subtle.importKey("raw", enc.encode(password), "PBKDF2", false, ["deriveBits"])
   return hex(await crypto.subtle.deriveBits({ name: "PBKDF2", hash: "SHA-256", salt, iterations }, key, 256))
 }
 
 /** Returns `pbkdf2$<iterations>$<saltHex>$<hashHex>`. */
-export const hashPassword = async (password: string, salt = crypto.getRandomValues(new Uint8Array(16))): Promise<string> =>
+export const hashPassword = async (password: string, salt: Uint8Array<ArrayBuffer> = crypto.getRandomValues(new Uint8Array(16))): Promise<string> =>
   `pbkdf2$${ITERATIONS}$${hex(salt)}$${await pbkdf2(password, salt, ITERATIONS)}`
 
 export const verifyPassword = async (password: string, stored: string): Promise<boolean> => {
