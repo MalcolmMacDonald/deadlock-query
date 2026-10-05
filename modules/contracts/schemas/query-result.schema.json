@@ -1,0 +1,124 @@
+{
+  "dialect": "draft-2020-12",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "schemaVersion": {
+        "type": "string"
+      },
+      "columns": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "enum": [
+                "number",
+                "string",
+                "bool",
+                "point",
+                "segment",
+                "polyline",
+                "polygon",
+                "entityRef"
+              ]
+            }
+          },
+          "required": [
+            "name",
+            "type"
+          ],
+          "additionalProperties": true
+        }
+      },
+      "rows": {
+        "type": "array",
+        "items": {
+          "type": "array"
+        }
+      },
+      "geometryColumns": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "stats": {
+        "type": "object",
+        "properties": {
+          "rowCount": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "enum": [
+                  "Infinity",
+                  "-Infinity",
+                  "NaN"
+                ]
+              }
+            ]
+          },
+          "compileMs": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "enum": [
+                  "Infinity",
+                  "-Infinity",
+                  "NaN"
+                ]
+              }
+            ]
+          },
+          "runMs": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "enum": [
+                  "Infinity",
+                  "-Infinity",
+                  "NaN"
+                ]
+              }
+            ]
+          }
+        },
+        "required": [
+          "rowCount",
+          "compileMs",
+          "runMs"
+        ],
+        "additionalProperties": true
+      },
+      "warnings": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      }
+    },
+    "required": [
+      "schemaVersion",
+      "columns",
+      "rows",
+      "geometryColumns",
+      "stats",
+      "warnings"
+    ],
+    "additionalProperties": true
+  },
+  "definitions": {}
+}

@@ -1,0 +1,92 @@
+{
+  "schemaVersion": "1.0.0",
+  "columns": [
+    {
+      "name": "guardian",
+      "type": "entityRef"
+    },
+    {
+      "name": "position",
+      "type": "point"
+    },
+    {
+      "name": "nearestOrb",
+      "type": "entityRef"
+    },
+    {
+      "name": "distance",
+      "type": "number"
+    }
+  ],
+  "rows": [
+    [
+      "guardian-1-2",
+      [
+        -2500,
+        -2000,
+        20
+      ],
+      "orb-1",
+      2941.088
+    ],
+    [
+      "guardian-1-3",
+      [
+        2500,
+        -2000,
+        20
+      ],
+      "orb-3",
+      1536.229
+    ],
+    [
+      "guardian-2-2",
+      [
+        -2500,
+        0,
+        20
+      ],
+      "orb-1",
+      1746.425
+    ],
+    [
+      "guardian-2-3",
+      [
+        2500,
+        0,
+        20
+      ],
+      "orb-3",
+      1536.229
+    ],
+    [
+      "guardian-3-2",
+      [
+        -2500,
+        2000,
+        20
+      ],
+      "orb-1",
+      2334.524
+    ],
+    [
+      "guardian-3-3",
+      [
+        2500,
+        2000,
+        20
+      ],
+      "orb-4",
+      2692.582
+    ]
+  ],
+  "geometryColumns": [
+    "position"
+  ],
+  "stats": {
+    "rowCount": 6,
+    "compileMs": 0,
+    "runMs": 0
+  },
+  "warnings": []
+}

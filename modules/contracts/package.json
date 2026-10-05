@@ -1,12 +1,19 @@
 {
   "name": "@deadlock-query/contracts",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
-  "exports": { ".": "./src/index.ts" },
+  "exports": {
+    ".": "./src/index.ts"
+  },
   "scripts": {
     "typecheck": "tsc -p .",
     "test": "bun test",
-    "verify": "bun run typecheck && bun run test"
+    "verify": "bun run typecheck && bun run test",
+    "gen:fixtures": "bun scripts/gen-fixtures.ts",
+    "gen:schemas": "bun scripts/gen-schemas.ts",
+    "check:real": "bun scripts/check-real.ts"
   },
-  "dependencies": { "effect": "4.0.1" }
+  "dependencies": {
+    "effect": "4.0.1"
+  }
 }
