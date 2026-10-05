@@ -1,0 +1,11 @@
+{
+  "source2viewer-cli": {
+    "version": "20.0",
+    "windows-x64": {
+      "url": "https://github.com/ValveResourceFormat/ValveResourceFormat/releases/download/20.0/cli-windows-x64.zip",
+      "bytes": 52735867,
+      "sha256": "d32ab327b8bbb42a2528866afb03bb582bdb779d0005488da32b90292afd3ff5"
+    }
+  },
+  "game": { "steamAppId": 1422450, "installDir": "Deadlock", "testedBuildId": "25712201", "mainMap": "dl_midtown" }
+}

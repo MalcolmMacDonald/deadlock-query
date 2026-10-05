@@ -24,6 +24,17 @@
         "effect": "4.0.1",
       },
     },
+    "modules/map-extractor": {
+      "name": "@deadlock-query/map-extractor",
+      "version": "0.0.0",
+      "bin": {
+        "dlq-extract": "./src/cli.ts",
+      },
+      "dependencies": {
+        "@deadlock-query/contracts": "workspace:*",
+        "effect": "4.0.1",
+      },
+    },
     "modules/query-builder": {
       "name": "@deadlock-query/query-builder",
       "version": "0.0.0",
@@ -50,6 +61,8 @@
     "@deadlock-query/contracts": ["@deadlock-query/contracts@workspace:modules/contracts"],
 
     "@deadlock-query/infra": ["@deadlock-query/infra@workspace:modules/infra"],
+
+    "@deadlock-query/map-extractor": ["@deadlock-query/map-extractor@workspace:modules/map-extractor"],
 
     "@deadlock-query/query-builder": ["@deadlock-query/query-builder@workspace:modules/query-builder"],
 

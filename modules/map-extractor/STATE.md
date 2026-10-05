@@ -2,7 +2,7 @@
 
 - **Status:** S2 spike complete — **GO** (render, collision, entities, nav all obtainable)
 - **Version:** 0.0.0
-- **Current milestone:** S2 done; next is M0 (see PLAN.md §6)
+- **Current milestone:** M0 code done (unit-tested; not yet run on the dev machine); next is M1
 - **Last updated:** 2026-10-05
 
 ## Done
@@ -106,11 +106,15 @@ Other (bulk, likely out of scope): `light_omni2` 1,968, `light_barn` 755, `citad
 - **GO** for M0/M1: CLI works headless on Windows, exports collision (small, tagged), full render (huge; needs split/decimate), and entities (text).
 - Contracts agent unblocked for entity schema (see classes above) and the manifest (physics `extras` tags, `glbToWorld`).
 
+- **M0** (2026-10-05): `dlq-extract` CLI scaffold (`bun run dlq-extract doctor|list-maps [--json] [--game-dir]`), hand-rolled argv (no `@effect/cli`), `tools.lock.json` pin, Steam locate (`--game-dir` > `DEADLOCK_DIR` > `libraryfolders.vdf`), VDF parser, tagged errors, stable exit codes (0 ok, 1 usage, 2 problem). 6 unit tests against a fake Steam tree.
+  - **Not verified on a real install:** the `Source2Viewer-CLI --version` output format (`parseVersion` takes the first `N.N` found) and `doctor` on Malcolm's machine. Run `bun run dlq-extract doctor` there; the tool is found via `S2V_CLI` or `~/tools/s2v`.
+  - **Deferred:** `doctor --fix` / tool download with sha check (lock file has url+sha; `sha256File` exists, download not wired).
+
 ## In progress
 - (nothing)
 
 ## Next
-1. M0: scaffold CLI + `doctor`: Steam `libraryfolders.vdf`/`appmanifest_1422450.acf`, build id, S2V version/sha pin (`tools.lock.json`).
+1. Run `doctor` on the dev machine and fix `parseVersion` if needed; optionally wire `doctor --fix` download.
 2. M1 open questions to settle first: (a) are physics GLB and render glTF in the same coordinate frame (compare bboxes after applying node matrices); (b) are all hulls exported; (c) per-entity volume models (interior/trigger) export; (d) how to cut render triangles (29.4 M) for `lite`: filter by material name, `--gltf_mesh_list`, instancing; (e) parse the `.vents` text format (specified above).
 3. Check `dl_hideout` / `new_player_basics` only if the owner wants them (not in Slice 1).
 
@@ -121,6 +125,8 @@ Other (bulk, likely out of scope): `light_omni2` 1,968, `light_barn` 755, `citad
 - 2026-10-05 — Module scaffolded (rev 2 of IMPLEMENTATION_PLAN.md).
 - 2026-10-05 — Branch is `main`; bake calls spatial-core semantics (placeholder-aware).
 - 2026-10-05 — S2: main map is `dl_midtown` (not `dl_*` generic); Source2Viewer-CLI 20.0 pinned as the first tested version; render export must be `.gltf` (+bins), not `.glb`, because of the 2 GiB limit.
+
+- 2026-10-05 — M0: no `@effect/cli` yet (two commands); hand-rolled parser, swap when `extract` flags grow. Tool path via `S2V_CLI` or `~/tools/s2v`.
 
 ## Open questions
 - (see PLAN.md §9, and "Next" item 2 above)
