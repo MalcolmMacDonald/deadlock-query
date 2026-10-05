@@ -1,6 +1,6 @@
 # infra — state
 
-- **Status:** M0+M1 done, M2 workflow written (needs Pages enabled), M4 live on Cloudflare
+- **Status:** M0+M1 done, M2 workflow written (needs Pages enabled), M4 live on Cloudflare, M5 code done (needs `GITHUB_TOKEN_PROXY` secret to go live)
 - **Version:** 0.0.0
 - **Current milestone:** none (see PLAN.md §6)
 - **Last updated:** 2026-10-05
@@ -19,8 +19,14 @@
 
 - Rate limiting: in-memory, Cache API and KV counters all failed to throttle live (KV binding did reach the function after declaring it in wrangler.toml, but counts never advanced). Removed the limiter; now a 1 s delay per failed login plus PBKDF2 and a random 20-char password. Hard limit later via Durable Object or WAF if needed.
 
+## M5 (code done)
+- `functions/api/github/[[path]].ts` + `modules/infra/src/proxy.ts`: allowlist of repo-scoped issues/PR/labels/runs/dispatch/contents-read endpoints, CSRF header (`x-dlq-csrf: 1`) required on every request, Origin must match, upstream gets only the token, response headers are whitelisted (no cookies/auth echoed). Session cookie still enforced by `_middleware.ts`. Returns 503 until `GITHUB_TOKEN_PROXY` is set.
+- `modules/infra/src/devAuth.ts`: `DevAuthLive` layer over `/auth/session` + `/auth/login`.
+- 6 contract tests in `test/proxy.test.ts`. Infra now depends on `contracts` and `effect`.
+- Not done: live verification (needs the token secret and a redeploy).
+
 ## Next
-- M4 done (login gate verified). Next: M5 GitHub proxy with allowlist + CSRF.
+- Malcolm creates the fine-grained PAT and sets `GITHUB_TOKEN_PROXY` (see `docs/secrets.md`); then curl the live proxy with a session cookie, confirm the token never appears in a response.
 - M3 data release flow (after S2 produces a bundle).
 
 ## Blockers / Requests to other modules
