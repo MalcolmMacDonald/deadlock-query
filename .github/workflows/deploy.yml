@@ -26,3 +26,21 @@ jobs:
         with: { path: dist }
       - id: deployment
         uses: actions/deploy-pages@v4
+  dev:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - if: env.CLOUDFLARE_API_TOKEN == ''
+        run: echo "Cloudflare secrets not set; skipping dev deploy (see docs/dev-site.md)"
+      - if: env.CLOUDFLARE_API_TOKEN != ''
+        uses: actions/checkout@v4
+      - if: env.CLOUDFLARE_API_TOKEN != ''
+        uses: oven-sh/setup-bun@v2
+      - if: env.CLOUDFLARE_API_TOKEN != ''
+        run: bun install --frozen-lockfile
+      - if: env.CLOUDFLARE_API_TOKEN != ''
+        run: bun tools/build.ts --target dev
+      - if: env.CLOUDFLARE_API_TOKEN != ''
+        run: bunx wrangler@4 pages deploy dist --project-name deadlock-query-dev --branch main
