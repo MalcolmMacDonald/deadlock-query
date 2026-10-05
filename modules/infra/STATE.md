@@ -16,10 +16,10 @@
 ## M4 (code done, not yet live)
 - `functions/_middleware.ts` + `functions/auth/{login,logout,session}.ts`, `modules/infra/src/auth.ts` (PBKDF2, HMAC session, rate limiter; 4 tests), `tools/hash-password.ts`, `wrangler.toml`, `dev` job in `deploy.yml` (skips until Cloudflare secrets exist), `docs/dev-site.md`.
 - Verified live 2026-10-05: no cookie gives 302 to login (HTML) or 401 (assets); wrong password 401; right password 303 + cookie then site served.
-- Gap found: the first in-memory rate limiter did not trigger (6+ rapid wrong attempts all 401; many isolates). Site is on a bare pages.dev (no zone, so no WAF). Replaced with a Cache API backed limiter (per data centre); to be re-verified live after deploy.
+- Gap found: in-memory limiter never triggered, and the Cache API limiter (PR #8) also never triggered live: Cache API is a no-op on pages.dev. Replaced with a KV-backed limiter (`RATE_LIMIT` binding); off until the binding exists. Re-verify live after Malcolm adds the binding.
 
 ## Next
-- Re-verify rate limit live after deploy, then M5 (GitHub proxy).
+- Malcolm adds KV namespace + `RATE_LIMIT` binding; re-verify rate limit live, then M5 (GitHub proxy).
 - M3 data release flow (after S2 produces a bundle); M4 needs a Cloudflare account + secrets.
 
 ## Blockers / Requests to other modules
@@ -32,7 +32,7 @@
 
 - 2026-10-05 — Decisions accepted: Cloudflare for dev (D9), hosting lite tier publicly (D8), branch `main`; add CODEOWNERS for semantics/ and takedown runbook.
 
-- 2026-10-05 — Login rate limit uses the Workers Cache API (no KV setup; per data centre). PBKDF2 at 100k iterations (Workers cap).
+- 2026-10-05 — Login rate limit uses KV (`RATE_LIMIT`); Cache API verified to not work on pages.dev. PBKDF2 at 100k iterations (Workers cap).
 
 ## Open questions
 - (see PLAN.md §9)
