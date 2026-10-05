@@ -1,6 +1,6 @@
 # infra — state
 
-- **Status:** M0+M1 done, M2 workflow written (needs Pages enabled), M4 live on Cloudflare (rate limit gap)
+- **Status:** M0+M1+M3 done, M2 workflow written (needs Pages enabled), M4 live on Cloudflare (rate limit gap)
 - **Version:** 0.0.0
 - **Current milestone:** none (see PLAN.md §6)
 - **Last updated:** 2026-10-05
@@ -19,6 +19,11 @@
 - Gap found: in-memory limiter never triggered, and the Cache API limiter (PR #8) also never triggered live: Cache API is a no-op on pages.dev. Replaced with a KV-backed limiter (`RATE_LIMIT` binding); off until the binding exists. Re-verify live after Malcolm adds the binding.
 
 - Header `x-ratelimit-store` stayed `none` with the dashboard binding, with or without wrangler.toml. Now declaring the KV namespace in wrangler.toml (`[[kv_namespaces]]`). Re-check header and 429 after deploy.
+
+## M3 (done)
+- `data/current-build.json` pins a Release tag plus per-asset sha256 and extract dir; `tools/lib/data.ts` + `tools/fetch-data.ts` download, verify the hash, and unzip into `dist/data/<dest>`; both `deploy.yml` jobs run it after `build`. Currently points at the interim raw bundle `data-25712201` (dl_midtown collision GLB + entities + manifest). Tests in `test/data.test.ts`; verified against the real Release.
+- Publishing a new bundle stays manual for now (extractor uploads a Release, then a PR bumps the pointer + hash). A `data.yml` publish workflow is deferred until the extractor emits the `lite` archive (M1).
+- To un-publish: delete the Release and the pointer (docs/takedown.md); builds then fail loudly instead of deploying stale data.
 
 ## Next
 - Malcolm adds KV namespace + `RATE_LIMIT` binding; re-verify rate limit live, then M5 (GitHub proxy).

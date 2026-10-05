@@ -21,6 +21,7 @@ jobs:
       - uses: oven-sh/setup-bun@v2
       - run: bun install --frozen-lockfile
       - run: bun tools/build.ts --target prod
+      - run: bun tools/fetch-data.ts dist
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with: { path: dist }
@@ -42,5 +43,7 @@ jobs:
         run: bun install --frozen-lockfile
       - if: env.CLOUDFLARE_API_TOKEN != ''
         run: bun tools/build.ts --target dev
+      - if: env.CLOUDFLARE_API_TOKEN != ''
+        run: bun tools/fetch-data.ts dist
       - if: env.CLOUDFLARE_API_TOKEN != ''
         run: bunx wrangler@4 pages deploy dist --project-name deadlock-query-dev --branch main
