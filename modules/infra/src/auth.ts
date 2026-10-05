@@ -65,10 +65,28 @@ export interface CacheLike {
   put(req: string, res: Response): Promise<void>
 }
 
+/** Minimal slice of a Workers KV namespace. */
+export interface KvLike {
+  get(key: string): Promise<string | null>
+  put(key: string, value: string, opts?: { expirationTtl?: number }): Promise<void>
+}
+
+/** Adapts a KV namespace to the limiter's cache interface (KV's minimum TTL is 60 s). */
+export const kvCache = (kv: KvLike): CacheLike => ({
+  match: async (k) => {
+    const v = await kv.get(k)
+    return v === null ? undefined : new Response(v)
+  },
+  put: async (k, r) => {
+    const ttl = Number(/max-age=(\d+)/.exec(r.headers.get("cache-control") ?? "")?.[1] ?? 60)
+    await kv.put(k, await r.text(), { expirationTtl: Math.max(60, ttl) })
+  },
+})
+
 /**
- * Fixed-window login rate limiter backed by the Workers Cache API, which is shared by all
- * isolates in a data centre (an in-memory counter is not: each isolate sees a fraction of attempts).
- * Per-data-centre, so a hard global limit still needs a WAF rule or KV.
+ * Fixed-window login rate limiter. Counters must be shared across isolates, so back it with a KV
+ * namespace (`RATE_LIMIT` binding). The Workers Cache API does NOT work on `*.pages.dev`/`*.workers.dev`
+ * (calls are silently ignored), and an in-memory counter only sees a fraction of attempts.
  */
 export class RateLimiter {
   constructor(private readonly cache: CacheLike, private readonly max = 5, private readonly windowMs = 60_000) {}
