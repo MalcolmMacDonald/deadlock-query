@@ -1,6 +1,6 @@
 # infra — state
 
-- **Status:** M0+M1 done, M2 workflow written (needs Pages enabled), M4 live on Cloudflare, M5 code done (needs `GITHUB_TOKEN_PROXY` secret to go live)
+- **Status:** M0+M1 done, M2 workflow written (needs Pages enabled), M4 live on Cloudflare, M5 code done (needs `GITHUB_TOKEN_PROXY` secret to go live), M6 done
 - **Version:** 0.0.0
 - **Current milestone:** none (see PLAN.md §6)
 - **Last updated:** 2026-10-05
@@ -25,6 +25,12 @@
 - 6 contract tests in `test/proxy.test.ts`. Infra now depends on `contracts` and `effect`.
 - Not done: live verification (needs the token secret and a redeploy).
 
+## M6 (done)
+- `tools/lib/budget.ts` + budget gate in `tools/build.ts` (tile 20 MB, site 900 MB, initial JS 1.5 MB gz); 5 tests in `test/budget.test.ts`.
+- `deploy.yml`: `workflow_dispatch` input `promote`; prod job runs only on promote dispatch (pushes to main update dev only).
+- `preview.yml`: same-repo PRs deploy to dev Pages branch `pr-<n>`. Needs Preview-environment secrets in Cloudflare (Malcolm), see `docs/dev-site.md`.
+- Docs updated in `docs/dev-site.md`.
+
 ## Next
 - Malcolm creates the fine-grained PAT and sets `GITHUB_TOKEN_PROXY` (see `docs/secrets.md`); then curl the live proxy with a session cookie, confirm the token never appears in a response.
 - M3 data release flow (after S2 produces a bundle).
@@ -33,6 +39,8 @@
 - (none)
 
 ## Decisions log
+- 2026-10-05 — M6: prod deploy is promote-only (was every push to main), per "Promote to Prod" in the plan.
+
 - 2026-10-05 — CI treats a `[infra]` PR title like the `infra` label (label is added after PR creation, so the first CI run raced it).
 
 - 2026-10-05 — Module scaffolded (rev 2 of IMPLEMENTATION_PLAN.md).
