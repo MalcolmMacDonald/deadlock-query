@@ -59,15 +59,27 @@ export const readCookie = (header: string | null, name = COOKIE_NAME): string | 
 export const sessionCookie = (value: string, maxAge = SESSION_TTL_SECONDS): string =>
   `${COOKIE_NAME}=${value}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${maxAge}`
 
-/** Fixed-window login rate limiter (per isolate; best-effort, see docs/dev-site.md). */
+/** Minimal slice of the Workers Cache API used by the limiter. */
+export interface CacheLike {
+  match(req: string): Promise<Response | undefined>
+  put(req: string, res: Response): Promise<void>
+}
+
+/**
+ * Fixed-window login rate limiter backed by the Workers Cache API, which is shared by all
+ * isolates in a data centre (an in-memory counter is not: each isolate sees a fraction of attempts).
+ * Per-data-centre, so a hard global limit still needs a WAF rule or KV.
+ */
 export class RateLimiter {
-  private hits = new Map<string, { n: number; reset: number }>()
-  constructor(private readonly max = 5, private readonly windowMs = 60_000) {}
+  constructor(private readonly cache: CacheLike, private readonly max = 5, private readonly windowMs = 60_000) {}
   /** True if the attempt is allowed; counts it. */
-  allow(id: string, now = Date.now()): boolean {
-    const h = this.hits.get(id)
-    if (!h || h.reset <= now) { this.hits.set(id, { n: 1, reset: now + this.windowMs }); return true }
-    h.n++
-    return h.n <= this.max
+  async allow(id: string, now = Date.now()): Promise<boolean> {
+    const key = `https://ratelimit.invalid/login/${encodeURIComponent(id)}`
+    const hit = await this.cache.match(key)
+    const prev = hit ? ((await hit.json()) as { n: number; reset: number }) : undefined
+    const cur = prev && prev.reset > now ? { n: prev.n + 1, reset: prev.reset } : { n: 1, reset: now + this.windowMs }
+    const ttl = Math.max(1, Math.ceil((cur.reset - now) / 1000))
+    await this.cache.put(key, new Response(JSON.stringify(cur), { headers: { "cache-control": `max-age=${ttl}` } }))
+    return cur.n <= this.max
   }
 }
