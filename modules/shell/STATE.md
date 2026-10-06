@@ -1,6 +1,6 @@
 # shell — state
 
-- **Status:** M2 partly done (viewer wired, Query preset, lazy editor; viewer↔editor wiring blocked on query-builder)
+- **Status:** M2 mostly done (viewer + embedded query editor wired to the shared viewer/selection; rows overlay and highlight on the map)
 - **Version:** 0.1.0
 - **Current milestone:** M1 complete; M2 next (needs real viewer/editor/results modules)
 - **Last updated:** 2026-10-06
@@ -20,14 +20,17 @@
 
 - 2026-10-06 — M2 (viewer panels): `viewer.tools` and `viewer.layers` (map-viewer M3) mounted from `src/viewer.ts` over the shared `ViewerController`; default "Query" preset docks Tools left of the map (220 px) with Layers below it. `LAYOUT_VERSION` bumped to 2 so saved layouts without the new panels reset once. New `e2e/panels.ts` (in `bun run e2e`) checks both panels sit left of the map and a point drawn with the tool shows up in the layers list.
 
+- 2026-10-06 — M2 (editor ↔ viewer): the iframe `editor/` panel is replaced by query-builder's `makeQueryEditorPanel` (`src/editor.tsx`), mounted in-page (Monaco lazy via dynamic import, only once the panel is visible). The module's Layer captures the runtime's shared `ViewerService` / `SelectionBus` values and hands them to the panel, so a run sets the `query-result` overlay on the real map (listed in the Layers panel) and a row click highlights its features. The panel's bundle is the published `./data/dl_midtown` entities when present, else the mini-map fixture (same choice as the Map panel). Monaco's two workers are bundled by Vite (`src/monacoWorkers.ts`, `?worker&url`, `worker.format: "es"`) and served from the site's assets; `monaco-editor` is now a shell dependency for that. The library artifact is still read from `./editor/library.json`, which `tools/build.ts` keeps shipping from the standalone editor build. `e2e/slice.ts` now runs a query in the embedded editor and asserts the overlay layer and the viewer highlight (via a `__viewerController` window hook, like `__dockview`). `bun run e2e` passes all four scripts.
+
 ## In progress
 - (nothing yet)
 
 ## Next
-- M2 (remaining): rows highlight on the map. Blocked on query-builder (see Requests). After that: slice e2e asserts overlay + selection sync, swap fixture for the published MapBundle once the extractor emits it.
+- M2 (remaining): swap the fixture for the published MapBundle once the extractor emits a real one; selection sync with a results panel (the editor panel carries its own table).
+- Infra follow-up: ship `library.json` without the standalone editor app (it is only published for that file now).
 
 ## Blockers / Requests to other modules
-- **query-builder (blocks M2 rest):** the editor runs as a standalone app in an iframe with its own mock `ViewerService`/`SelectionBus`, so query results cannot reach the shell's real viewer. Needs a package entry (`index.ts`) exporting an embeddable panel, e.g. `makeQueryEditorPanel({ library, bundle }) => { mount(container) => dispose }` whose layer requirements (`ViewerService`, `SelectionBus`) the shell provides; `check:deps` forbids deep imports into `query-builder/src`, so the shell cannot reuse `main.ts` pieces itself. A postMessage protocol (result overlay + selection) on the iframe would also work if query-builder prefers to keep Monaco out of the shell bundle.
+- query-builder (resolved 2026-10-06): the embeddable panel shipped in PR #67 and is wired. Still nice to have there: a `SelectionBus` change stream (the panel polls `current` every 250 ms).
 - map-viewer: confirmed — shell mounts a panel `component` that is `{ mount(container) => dispose }` (see `src/panels.tsx`); React components also work. `viewer.main` can use the handle as-is.
 - infra: optionally run `bun run --filter @deadlock-query/shell e2e` in CI (needs Chromium); `tools/build.ts` already picks up `modules/shell/dist` (run `bun run --filter @deadlock-query/shell build` first).
 

@@ -1,4 +1,4 @@
-// M2 acceptance (editor half): load the built site, map renders, run a query in the editor, rows appear.
+// M2 acceptance: load the built site, run a query in the embedded editor; its rows overlay and highlight on the real map.
 // Needs a Chromium, the query-library build, and no network. Run: bun e2e/slice.ts
 import { chromium } from "playwright-core"
 import { mkdtempSync } from "node:fs"
@@ -17,13 +17,22 @@ try {
   const page = await browser.newPage()
   await page.goto(`http://localhost:${server.port}/`)
   await page.locator("canvas").first().waitFor({ timeout: 20000 })
-  const frame = page.frameLocator('iframe[title="Query editor"]')
-  await frame.locator("#run").waitFor({ timeout: 30000 })
-  await frame.locator("#run").click()
-  await frame.getByTestId("results-table").waitFor({ timeout: 30000 })
-  const rows = await frame.locator('[data-testid="results-table"] tbody tr').count()
+  // The query editor is mounted in the page (no iframe) and shares the shell's viewer.
+  const run = page.locator("#run")
+  await run.waitFor({ timeout: 60000 })
+  await run.click()
+  const table = page.getByTestId("results-table")
+  await table.waitFor({ timeout: 30000 })
+  const rows = await table.locator("tbody tr").count()
   if (rows < 1) throw new Error("no result rows")
-  console.log(`e2e ok: map canvas rendered, query ran in the editor panel, ${rows} rows`)
+  // The result overlay lands on the real map: the viewer's Layers panel lists it.
+  await page.locator('[data-testid="viewer-layers"] [data-layer="query-result"]').waitFor({ timeout: 10000 })
+  // Clicking a row highlights its features on the map.
+  await table.locator("tbody tr").first().click()
+  await page.waitForFunction(() => (globalThis as any).__viewerController?.highlighted?.length > 0, null, { timeout: 10000 })
+  const highlighted = await page.evaluate(() => (globalThis as any).__viewerController.highlighted as string[])
+  if (!highlighted.every((id) => id.includes(":"))) throw new Error(`unexpected highlight ids: ${highlighted}`)
+  console.log(`e2e ok: map rendered, query ran in the embedded editor, ${rows} rows, overlay on the map, row click highlighted ${highlighted.join(",")}`)
 } finally {
   await browser.close()
   server.stop(true)
