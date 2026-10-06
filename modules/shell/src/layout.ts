@@ -1,6 +1,6 @@
 /** Versioned persistence for the dockview layout. Pure functions so they are unit-testable without a DOM. */
 export const LAYOUT_KEY = "dlq.shell.layout"
-export const LAYOUT_VERSION = 1
+export const LAYOUT_VERSION = 2
 
 export interface StoredLayout {
   readonly version: number

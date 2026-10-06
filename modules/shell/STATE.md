@@ -18,6 +18,8 @@
 
 - 2026-10-06 — M2 (layout): default "Query" preset (`src/presets.ts`: viewer left, editor docked right at 520 px, extras below) replaces the ad-hoc default placement; the editor iframe mounts lazily on first visibility (`src/LazyPanel.tsx`). New `e2e/slice.ts` builds the site (shell + editor + library) and checks: map canvas renders, a query runs in the editor panel, rows appear. Repaired stale `e2e/layout.ts` / `e2e/isolation.ts` (they still referenced the removed dummy Alpha/Beta panels); `bun run e2e` passes all three.
 
+- 2026-10-06 — M2 (viewer panels): `viewer.tools` and `viewer.layers` (map-viewer M3) mounted from `src/viewer.ts` over the shared `ViewerController`; default "Query" preset docks Tools left of the map (220 px) with Layers below it. `LAYOUT_VERSION` bumped to 2 so saved layouts without the new panels reset once. New `e2e/panels.ts` (in `bun run e2e`) checks both panels sit left of the map and a point drawn with the tool shows up in the layers list.
+
 ## In progress
 - (nothing yet)
 
