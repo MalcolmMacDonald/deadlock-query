@@ -14,6 +14,8 @@
 
 - 2026-10-06 — M2 (viewer): one shared `ViewerController` (`src/viewer.ts`, lazy) backs both the Map panel and `ViewerService` via `appBaseLayer` (`src/runtime.ts`), replacing `MockViewerService` in the app; falls back to the mock if the viewer chunk fails to load. Unit-tested.
 
+- 2026-10-06 — Map panel loads the published bundle (`./data/dl_midtown/manifest.json`, unzipped by `tools/fetch-data.ts` at deploy) via `ViewerController.loadBundle`, falling back to the fixture if absent. Note: the lite bundle has `tiles: []` (collision GLB only), so only entities render until the viewer draws collision/tiles.
+
 ## In progress
 - (nothing yet)
 

@@ -4,6 +4,9 @@ import type { ViewerController } from "@deadlock-query/map-viewer"
 
 const VIEWER_PANEL_ID = "viewer.main"
 
+/** Where the deploy unzips the published bundle (`tools/fetch-data.ts` → `<site>/data/<map>`). */
+export const BUNDLE_MANIFEST_URL = "./data/dl_midtown/manifest.json"
+
 const viewerPackage = () => import("@deadlock-query/map-viewer")
 
 let controller: Promise<ViewerController> | undefined
@@ -20,8 +23,8 @@ export const viewerServiceLayer: Layer.Layer<ViewerService> = Layer.unwrap(
 
 /**
  * Map viewer module. Three.js and the mini-map fixture load lazily on first mount so the
- * initial bundle stays small. Real published data replaces the fixture once the extractor
- * emits MapBundles (the data-25712201 release is raw extractor output, not a bundle).
+ * initial bundle stays small. The zipped bundle published to the data Release (unzipped into
+ * `./data/<map>` at deploy) is loaded over the fixture; the fixture remains the fallback.
  */
 export const viewerModule: ModuleDefinition = {
   id: "map-viewer",
@@ -40,6 +43,8 @@ export const viewerModule: ModuleDefinition = {
             const c = await getViewerController()
             if (cancelled) return
             dispose = v.makeViewerPanel(data, c).mount(container)
+            // Prefer the published bundle; keep the fixture when it is absent (local dev, no fetch-data).
+            await c.loadBundle(BUNDLE_MANIFEST_URL).catch((e) => console.warn("bundle not loaded, using fixture:", e))
           }).catch((e) => {
             container.textContent = `Map failed to load: ${String(e)}`
           })
