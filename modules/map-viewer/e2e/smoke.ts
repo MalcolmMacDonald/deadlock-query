@@ -373,7 +373,7 @@ try {
   await page.click('[data-testid="viewer-tools"] button[data-tool="select"]')
   const png = async (opts: object) => page.evaluate(async (o) => {
     const bytes: Uint8Array = await (globalThis as any).__viewer.capture(o)
-    const bmp = await createImageBitmap(new Blob([bytes], { type: "image/png" }))
+    const bmp = await createImageBitmap(new Blob([bytes as BlobPart], { type: "image/png" }))
     const c = new OffscreenCanvas(bmp.width, bmp.height)
     const ctx = c.getContext("2d")!
     ctx.drawImage(bmp, 0, 0)
