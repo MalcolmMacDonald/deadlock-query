@@ -4,21 +4,19 @@ Single source for "what should I do next?". Prompt Claude with: **"Do the next t
 
 | Module | Next task | Blocked on |
 |---|---|---|
-| infra | M5 live (set `GITHUB_TOKEN_PROXY`, redeploy, verify). M3, M4, M6 done; M5 code done | M5 live: PAT secret from Malcolm |
+| infra | M3 data release flow; M4 Cloudflare dev site (code merged once this PR lands; go live) | M3: a bundle from S2. M4 live: Cloudflare setup in `docs/dev-site.md` |
 | contracts | M1 MapBundle/QueryResult/fixtures | S2 findings (human, local) |
-| map-extractor | M1: settle the open questions in STATE.md "Next" (frame agreement, hulls, volume models, lite triangle cut, `.vents` parser). M0 code done; run `dlq-extract doctor` on the dev machine | Human: game install (local runs) |
-| query-builder | M0: editor panel with fixture `.d.ts`, `MockQueryEngine`, results table (S1 done, GO) | none |
-| spatial-core | M0: math, `Raycaster` interface + three-mesh-bvh impl, deterministic serialise tests (S5 done, GO) | none |
-| query-library | M5: headline query 3 + helpers (`groupBy` region, heat/density) (M0-M4 done; M4 real-map perf unverified) | none |
-| map-viewer | M1: Three.js scene, mini-map GLBs, Map/Orbit/Fly cameras, URL-hash state, Playwright smoke (M0 done) | none |
-| shell | M1: layer composition, per-module error panels, contracts mocks (M0 done) | none |
-| kanban | wait for infra M5 live (`GITHUB_TOKEN_PROXY`) | infra |
+| map-extractor | S2 spike: run Source2Viewer on the game, record what exists in STATE.md | Human: game install (see below) |
+| query-builder | S1 spike: Monaco TS worker + custom `.d.ts` + sandboxed run/cancel | none |
+| spatial-core | S5 spike: three-mesh-bvh benchmark (1M tris, Bun + Worker) | none |
+| query-library, map-viewer, shell | wait for contracts M1 | contracts M1 |
+| kanban | wait for infra M4/M5 | infra |
 | screenshot-tool, map-metadata | Phase 3 | — |
 
 ## Human-only steps
 1. **Now:** repo Settings → Pages → Source = GitHub Actions.
-2. ~~S2~~ done (2026-10-05).
-3. ~~Cloudflare (M4)~~ done (dev site live). Remaining secret: `GITHUB_TOKEN_PROXY` (infra M5 live); copy `DEV_PASSWORD_HASH` and `SESSION_HMAC_KEY` to the Preview environment for PR previews.
+2. **S2:** on the machine with Deadlock installed, install Source2Viewer CLI, then start a session in `map-extractor` and paste the output of `ls` on the game's `game/citadel/maps` folder plus the CLI `--help`. Claude writes the rest.
+3. **Cloudflare (M4):** create account + Pages project, then add the secrets listed in `docs/secrets.md`.
 
 ## Agent conventions
 - Open a PR automatically when a task's work is pushed (no need to ask). Label `infra` for root/tooling changes; title prefixed `[<module-id>]`.
