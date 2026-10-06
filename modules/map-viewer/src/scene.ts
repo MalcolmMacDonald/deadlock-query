@@ -34,6 +34,21 @@ export const buildScene = async (data: ViewerData): Promise<THREE.Group> => {
     holder.add(group)
     root.add(holder)
   }
+  if (data.collision && data.manifest.collision) {
+    const group = await parseGlb(data.collision)
+    const collisionMat = new THREE.MeshStandardMaterial({ color: 0x6f8fb0, roughness: 0.9, side: THREE.DoubleSide, flatShading: true })
+    const meshes: THREE.Mesh[] = []
+    group.traverse((o) => { if ((o as THREE.Mesh).isMesh) meshes.push(o as THREE.Mesh) })
+    for (const m of meshes) m.material = collisionMat
+    // Sky / sky-clip volumes enclose the whole map and hide everything inside; leave them out.
+    const hidden = (m: THREE.Mesh) => ((m.userData.InteractAs ?? m.parent?.userData.InteractAs) as string[] | undefined)?.some((l) => l === "sky" || l === "Citadel_Skyclip") ?? false
+    for (const m of meshes) m.visible = !hidden(m)
+    const holder = new THREE.Group()
+    holder.matrixAutoUpdate = false
+    holder.matrix.copy(glbToThreeMatrix(data.manifest.collision.glbToWorld))
+    holder.add(group)
+    root.add(holder)
+  }
   const geo = new THREE.SphereGeometry(40, 12, 8)
   for (const e of data.entities) {
     const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: ENTITY_COLORS[e.kind ?? ""] ?? 0x8a8f98 }))
