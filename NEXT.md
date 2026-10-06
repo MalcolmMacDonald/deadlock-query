@@ -5,7 +5,7 @@ Single source for "what should I do next?". Prompt Claude with: **"Do the next t
 | Module | Next task | Blocked on |
 |---|---|---|
 | infra | M5 live (set `GITHUB_TOKEN_PROXY`, redeploy, verify). M0–M4, M6 done; M5 code done; data publish helper (`tools/publish-data.ts`) not yet run on a real bundle | M5 live: PAT secret from Malcolm |
-| contracts | M2: run `check:real` on the first real bundle and adjust schemas (M0, M1 done; `rowIds` added to `QueryResult`). M3 follows | Real bundle from extractor (dev machine) |
+| contracts | M3: baked-data specs (adopt the real `manifest.baked` shape and a tile `lod` field; extend `check:real` to cover baked files and LOD tiles). M0–M2 done: `check:real` passes on the real dl_midtown bundle, no schema change needed | none |
 | map-extractor | Real-data run on the dev machine: `extract --tier lite`, `tile`, `pack-lite`; record sizes in STATE.md. Then M4 `bake` (collision BVH + sample grid; spatial-core M5 is merged). M0–M3 code done; M1 open questions (b) hulls, (c) volume models, (d) triangle cut remain | Human: game install (local runs) |
 | query-builder | M3: safety hardening + adversarial corpus, row/memory caps (M0–M2 done; Results ↔ viewer overlay wired to mocks) | none |
 | spatial-core | Owner-written semantics (placeholders in `src/semantics/**`, Malcolm only). M0–M5 done; leftovers: navmesh funnel smoothing, spatial index for `NavMesh.nearestPoint`, Dijkstra benchmark, SampleGrid cost report on a real map | Malcolm (semantics); real bake (benchmarks) |
