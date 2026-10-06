@@ -129,8 +129,8 @@ test("extract (full) requests glTF materials and counts textures in the tile", a
   const root = mkdtempSync(join(tmpdir(), "dlq-"))
   const calls: string[][] = []
   const runner: S2VRunner = async (a) => {
-    calls.push(a)
-    if (!a.includes(".vwnod_c") && !a.some((x) => x.endsWith(".vwnod_c"))) return fakeRunner([])(a)
+    calls.push([...a])
+    if (!a.some((x) => x.endsWith(".vwnod_c"))) return fakeRunner([])(a)
     const out = a[a.indexOf("-o") + 1]!
     mkdirSync(join(dirname(out), "textures"), { recursive: true })
     writeFileSync(join(dirname(out), "textures", "wall_color.png"), "png")
