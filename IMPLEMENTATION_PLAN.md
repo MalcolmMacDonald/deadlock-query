@@ -53,7 +53,7 @@ Modules import **only** `contracts` and (where listed in their `module.json` `de
 
 ```
 contracts  <- every module
-spatial-core <- map-extractor, query-library, (map-viewer optional)
+spatial-core <- map-extractor, query-library, (map-viewer optional), (screenshot-tool optional: line-of-sight check when a baked bundle is given)
 query-library -> consumed by query-builder as a built artifact (types .d.ts + runtime JS + apiCatalog.json), not by import
 ```
 
