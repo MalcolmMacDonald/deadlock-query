@@ -4,7 +4,7 @@ import { MapDataService, type Entity, type Manifest, type Vec3 } from "@deadlock
 import { boundsOf, fitTopDown } from "./projection.ts"
 import { frameBounds, type CameraMode } from "./camera.ts"
 import { FOV_DEG, ViewerControls } from "./controls.ts"
-import { buildScene } from "./scene.ts"
+import { buildScene, surfaceMeshes } from "./scene.ts"
 import { OverlayScene, pickFeature } from "./overlays.ts"
 import { ViewerController } from "./viewerService.ts"
 import { eyeOf } from "./camera.ts"
@@ -130,27 +130,78 @@ export const makeViewerPanel = (data: ViewerData, controller: ViewerController =
       const r = canvas.getBoundingClientRect()
       return pickFeature(overlays.layerData(), project, e.clientX - r.left, e.clientY - r.top)
     }
+    // Annotation tools place points on the first terrain hit, falling back to the horizontal plane through the
+    // last placed point (or the camera target). Hover previews use the plane only: a mesh raycast per mouse move
+    // is too slow on the real map until BVH picking lands.
+    const raycaster = new THREE.Raycaster()
+    const ndc = (e: PointerEvent): THREE.Vector2 => {
+      const r = canvas.getBoundingClientRect()
+      return new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1)
+    }
+    let lastZ: number | undefined
+    const worldAt = (e: PointerEvent, useMesh: boolean): Vec3 | undefined => {
+      raycaster.setFromCamera(ndc(e), camera)
+      if (useMesh && world) {
+        world.updateMatrixWorld(true)
+        const hit = raycaster.intersectObjects(surfaceMeshes(world), false)[0]
+        if (hit) return [hit.point.x, -hit.point.z, hit.point.y]
+      }
+      const z = lastZ ?? controls.pose.target[2]
+      const at = raycaster.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), -z), new THREE.Vector3())
+      return at ? [at.x, -at.z, at.y] : undefined
+    }
+    const toolActive = () => controller.tools.tool !== "select"
     let hovered: string | null = null
     let down: { x: number; y: number } | undefined
     const onMove = (e: PointerEvent) => {
       if (e.buttons) return
+      if (toolActive()) {
+        const p = worldAt(e, false)
+        if (p) controller.tools.move(p)
+        return
+      }
       const id = pickAt(e)
       if (id !== hovered) { hovered = id; controller.emit({ _tag: "hover", id }) }
     }
     const onDown = (e: PointerEvent) => { down = { x: e.clientX, y: e.clientY } }
     const onUp = (e: PointerEvent) => {
       if (!down || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 4) return
+      if (toolActive()) {
+        if (e.button !== 0) return
+        const p = worldAt(e, true)
+        if (p) { lastZ = p[2]; controller.tools.click(p) }
+        return
+      }
       const id = pickAt(e)
-      if (id) controller.emit({ _tag: "pick", id })
+      if (id) {
+        controller.emit({ _tag: "pick", id })
+        controller.selectFeature(id)
+      } else controller.selectAnnotation(undefined)
     }
+    const onKey = (e: KeyboardEvent) => {
+      const mod = e.ctrlKey || e.metaKey
+      if (e.key === "Escape") controller.tools.cancel()
+      else if (e.key === "Enter") controller.tools.finish()
+      else if (mod && e.key.toLowerCase() === "z") { e.preventDefault(); e.shiftKey ? controller.annotations.redo() : controller.annotations.undo() }
+      else if (mod && e.key.toLowerCase() === "y") { e.preventDefault(); controller.annotations.redo() }
+      else if (e.key === "Delete" || e.key === "Backspace") controller.deleteSelected()
+    }
+    const onDblClick = () => controller.tools.finish()
     canvas.addEventListener("pointermove", onMove)
     canvas.addEventListener("pointerdown", onDown)
     canvas.addEventListener("pointerup", onUp)
+    canvas.addEventListener("keydown", onKey)
+    canvas.addEventListener("dblclick", onDblClick)
+    const syncTool = () => { canvas.dataset.tool = controller.tools.tool; canvas.style.cursor = toolActive() ? "crosshair" : "" }
+    const unsubTool = controller.tools.subscribe(syncTool)
+    syncTool()
 
     const detach = controller.attach({
       setOverlay: (id, f, s) => overlays.set(id, f, s),
       removeOverlay: (id) => overlays.remove(id),
       highlight: (ids) => overlays.highlight(ids),
+      setAppearance: (id, a) => overlays.setAppearance(id, a),
+      setDraft: (f) => overlays.setDraft(f),
       getPose: () => controls.pose,
       setPose: (p) => controls.setPose(p),
       capture: async () => {
@@ -185,6 +236,9 @@ export const makeViewerPanel = (data: ViewerData, controller: ViewerController =
       canvas.removeEventListener("pointermove", onMove)
       canvas.removeEventListener("pointerdown", onDown)
       canvas.removeEventListener("pointerup", onUp)
+      canvas.removeEventListener("keydown", onKey)
+      canvas.removeEventListener("dblclick", onDblClick)
+      unsubTool()
       overlays.dispose()
       cancelAnimationFrame(frame)
       ro?.disconnect()

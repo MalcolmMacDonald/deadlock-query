@@ -1,8 +1,8 @@
 # map-viewer — state
 
-- **Status:** M2 done; M1 real-bundle perf check pending
-- **Version:** 0.2.0
-- **Current milestone:** M3 (next)
+- **Status:** M3 partly done (layers panel, annotation tools, undo/redo); import/export + autosave blocked on contracts `Annotation`; M1 real-bundle perf check pending
+- **Version:** 0.3.0
+- **Current milestone:** M3 (finish)
 - **Last updated:** 2026-10-06
 
 ## Done
@@ -14,15 +14,19 @@
 
 - 2026-10-06 — Collision GLB is drawn (`ViewerData.collision`, `buildScene` uses `manifest.collision.glbToWorld`; `loadBundle` fetches it). Checked against the real dl_midtown lite bundle: mesh bounds equal manifest bounds in Three space.
 
+- 2026-10-06 — M3 (part 1): `viewer.layers` and `viewer.tools` panels (`src/panels.ts`) over state held on `ViewerController`, so they survive remounts and work with the shell's shared controller. `LayerStore` (`src/layers.ts`): every overlay layer, including query layers, gets visibility, colour override, opacity and draw order; `OverlayScene.setAppearance` applies it, hidden layers are not picked. Annotations (`src/annotations.ts`): point, label, polyline, polygon, measure kinds, `AnnotationStore` with undo/redo history (200 steps), rendered as overlay layers `ann.points|labels|lines|polygons|measures`. Tools (`src/tools.ts`): `ToolMachine` (select/point/label/polyline/polygon/measure), rubber-band draft, double-click/Enter finishes, Esc cancels, Ctrl+Z / Ctrl+Y / Delete on the canvas. Points land on the first terrain hit (Three raycaster, click only), else on the horizontal plane through the last placed point or the camera target. Tests: bun unit (`test/annotations.test.ts`) and e2e (draw, layer hide/show, undo/redo, measure, delete).
+
 ## In progress
 - (nothing)
 
 ## Next
 - M1 leftover (needs Malcolm's machine): open the real single-tile bundle and confirm >= 30 fps; the viewer loads any manifest via `MapDataService`, so no code change expected.
-- M3: annotation tools, layers panel (`viewer.layers`).
+- M3 remainder: import/export as the contract `AnnotationDocument` (needs contracts), IndexedDB autosave (store the same document), snapping to surface/vertices/features and BVH picking (three-mesh-bvh; click raycast is brute force today and hover preview uses the plane only), vertex editing, multi-select, per-layer lock, text rendering for labels and measure results (shown only in the tools list for now; SDF labels are M7).
 - M2 leftover: confirm 10k points at 60 fps on real hardware (software GL in CI measures ~15 fps for the whole scene, informational only).
 
 ## Blockers / Requests to other modules
+- Contracts: add an `Annotation` / `AnnotationDocument` schema (`schemaVersion`, features with kind point/label/polyline/polygon/measure, world-space `Vec3` points, label text, optional properties). M3 acceptance ("export equals schema-valid document") needs it; the viewer's local `Annotation` type (`src/annotations.ts`) will be replaced by it.
+- Shell: mount `viewer.layers` (`makeLayersPanel(controller)`) and `viewer.tools` (`makeToolsPanel(controller)`) next to `viewer.main`, using the same `ViewerController`. They are already listed in `makeViewerModule(...).panels`; `shell/src/viewer.ts` builds its own module and only lists `viewer.main`.
 - Shell/contracts: `ModuleDefinition.layer` is typed `Layer<never>` and shell provides `MockViewerService` in its base layer, so the real service is not reachable by other modules yet. Shell should create one `ViewerController`, pass it to `makeViewerModule(data, controller)` and provide `makeViewerService(controller)` instead of the mock.
 - Contracts: `ViewerEvent` pick/hover carry only `id`; style has only `color`/`size` (line width is not supported by WebGL lines; fat lines come later). Per-feature styling from columns needs an `OverlayStyle` extension.
 - Shell: confirm the panel `component` handle shape (`{ mount(container): dispose }`) is what the shell mounts; contracts types it as `unknown`.
@@ -36,6 +40,8 @@
 - 2026-10-06 — M2: feature ids are `layerId:index` (stable for a given `setOverlay` call). Lines use 1px `LineSegments` (fat-line shader deferred). Overlays render with depth test off so query results are never hidden by terrain. `ViewerService` is exposed via `makeViewerService(controller)` rather than `ModuleDefinition.layer` (see Blockers).
 
 - 2026-10-06 — Terrain rendered solid black on the dev site: extracted GLBs carry POSITION only (no NORMAL), so `MeshStandardMaterial` lit to black. Fixed with `flatShading: true` (per-fragment derivative normals); e2e smoke now asserts lit terrain pixels.
+
+- 2026-10-06 — M3: selecting an annotation reuses the viewer's single highlight slot, so it replaces any query highlight until cleared. Layer order is the draw order among overlay layers only; draft and highlight always draw above (render order 15 / 20). Annotation layers disappear (and their appearance resets) when their last annotation is deleted.
 
 ## Open questions
 - (see PLAN.md §9)

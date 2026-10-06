@@ -15,6 +15,18 @@ const parseGlb = (bytes: Uint8Array): Promise<THREE.Group> => {
   return new Promise((resolve, reject) => new GLTFLoader().parse(buf, "", (g) => resolve(g.scene), reject))
 }
 
+/** Visible terrain / collision meshes under a scene built by `buildScene` (entity markers excluded). */
+export const surfaceMeshes = (root: THREE.Object3D): THREE.Mesh[] => {
+  const out: THREE.Mesh[] = []
+  root.traverse((o) => {
+    const m = o as THREE.Mesh
+    if (!m.isMesh || o.userData.marker) return
+    for (let p: THREE.Object3D | null = o; p; p = p.parent) if (!p.visible) return
+    out.push(m)
+  })
+  return out
+}
+
 const ENTITY_COLORS: Record<string, number> = { guardian: 0xe8a33d, walker: 0xd45d5d, patron: 0xb04fd0, creepCamp: 0x4fb36b }
 
 /** Builds the Three scene root (already in Three space) from loaded viewer data. */
@@ -52,6 +64,7 @@ export const buildScene = async (data: ViewerData): Promise<THREE.Group> => {
   const geo = new THREE.SphereGeometry(40, 12, 8)
   for (const e of data.entities) {
     const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: ENTITY_COLORS[e.kind ?? ""] ?? 0x8a8f98 }))
+    m.userData.marker = true
     m.position.set(e.position[0], e.position[2], -e.position[1])
     root.add(m)
   }

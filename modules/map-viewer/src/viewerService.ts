@@ -3,12 +3,20 @@ import {
   ViewerService, type OverlayFeature, type OverlayStyle, type Vec3, type ViewerEvent
 } from "@deadlock-query/contracts"
 import { eyeOf, poseFromEye, type CameraPose } from "./camera.ts"
+import {
+  ANNOTATION_LAYER_IDS, AnnotationStore, annotationIdForFeature, annotationLayers, featureIdForAnnotation
+} from "./annotations.ts"
+import { LayerStore, type LayerAppearance } from "./layers.ts"
+import { ToolMachine } from "./tools.ts"
+import { DEFAULT_COLOR } from "./overlays.ts"
 
 /** What a mounted panel gives the controller; absent until a panel mounts. */
 export interface ViewerSurface {
   readonly setOverlay: (layerId: string, features: ReadonlyArray<Vec3> | ReadonlyArray<OverlayFeature>, style?: OverlayStyle) => void
   readonly removeOverlay: (layerId: string) => void
   readonly highlight: (ids: ReadonlyArray<string>) => void
+  readonly setAppearance: (layerId: string, a: LayerAppearance) => void
+  readonly setDraft: (features: ReadonlyArray<OverlayFeature>) => void
   readonly getPose: () => CameraPose
   readonly setPose: (pose: CameraPose) => void
   readonly capture: () => Promise<Uint8Array>
@@ -30,20 +38,83 @@ export class ViewerController {
 
   readonly events: Stream.Stream<ViewerEvent> = Stream.fromPubSub(this.bus)
 
+  /** Layers panel state (visibility, colour, opacity, order) for every overlay layer, annotations included. */
+  readonly layers = new LayerStore()
+  readonly annotations = new AnnotationStore()
+  readonly tools = new ToolMachine((a) => { this.annotations.add(a) })
+  private selectedId: string | undefined
+  private readonly selectionListeners = new Set<() => void>()
+
+  constructor() {
+    this.layers.subscribe(() => {
+      for (const l of this.layers.list()) this.surface?.setAppearance(l.id, this.layers.appearance(l.id))
+    })
+    this.tools.subscribe(() => this.surface?.setDraft(this.tools.draft()))
+    this.annotations.subscribe(() => this.syncAnnotations())
+  }
+
   emit(e: ViewerEvent) { PubSub.publishUnsafe(this.bus, e) }
 
   attach(surface: ViewerSurface): () => void {
     this.surface = surface
+    for (const l of this.layers.list()) surface.setAppearance(l.id, this.layers.appearance(l.id))
     for (const [id, [f, s]] of this.overlays) surface.setOverlay(id, f, s)
+    surface.setDraft(this.tools.draft())
     if (this.highlighted.length) surface.highlight(this.highlighted)
     return () => { if (this.surface === surface) { this.pose = surface.getPose(); this.surface = undefined } }
   }
 
-  setOverlay(id: string, f: ReadonlyArray<Vec3> | ReadonlyArray<OverlayFeature>, s?: OverlayStyle) {
+  setOverlay(id: string, f: ReadonlyArray<Vec3> | ReadonlyArray<OverlayFeature>, s?: OverlayStyle, label?: string) {
     this.overlays.set(id, [f, s])
+    this.layers.ensure(id, { baseColor: s?.color ?? DEFAULT_COLOR, ...(label ? { label } : {}) })
+    // Appearance first so a layer is never drawn once with default look.
+    this.surface?.setAppearance(id, this.layers.appearance(id))
     this.surface?.setOverlay(id, f, s)
   }
-  removeOverlay(id: string) { this.overlays.delete(id); this.surface?.removeOverlay(id) }
+  removeOverlay(id: string) {
+    this.overlays.delete(id)
+    this.surface?.removeOverlay(id)
+    this.layers.drop(id)
+  }
+
+  get selectedAnnotation(): string | undefined { return this.selectedId }
+
+  onSelectionChange(fn: () => void): () => void {
+    this.selectionListeners.add(fn)
+    return () => { this.selectionListeners.delete(fn) }
+  }
+
+  /** Selects an annotation (or clears with `undefined`) and highlights it; shares the viewer's one highlight slot. */
+  selectAnnotation(id: string | undefined) {
+    this.selectedId = id
+    const fid = id ? featureIdForAnnotation(this.annotations.annotations, id) : undefined
+    this.highlight(fid ? [fid] : [])
+    for (const fn of [...this.selectionListeners]) fn()
+  }
+
+  /** Selects the annotation under an overlay feature id; other layers' ids are ignored. */
+  selectFeature(featureId: string) {
+    const id = annotationIdForFeature(this.annotations.annotations, featureId)
+    if (id) this.selectAnnotation(id)
+  }
+
+  deleteSelected(): boolean {
+    const id = this.selectedId
+    if (!id || !this.annotations.remove(id)) return false
+    return true
+  }
+
+  private syncAnnotations() {
+    const doc = this.annotations.annotations
+    const live = annotationLayers(doc)
+    for (const id of ANNOTATION_LAYER_IDS) {
+      const l = live.find((x) => x.id === id)
+      if (l) this.setOverlay(l.id, l.features, l.style, l.label)
+      else if (this.overlays.has(id)) this.removeOverlay(id)
+    }
+    if (this.selectedId && !doc.some((a) => a.id === this.selectedId)) this.selectAnnotation(undefined)
+    else if (this.selectedId) this.selectAnnotation(this.selectedId)
+  }
   highlight(ids: ReadonlyArray<string>) { this.highlighted = ids; this.surface?.highlight(ids) }
   getPose(): CameraPose { return this.surface?.getPose() ?? this.pose }
   setPose(p: CameraPose) { this.pose = p; this.surface?.setPose(p) }
