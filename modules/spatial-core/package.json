@@ -2,12 +2,13 @@
   "name": "@deadlock-query/spatial-core",
   "version": "0.0.0",
   "type": "module",
+  "exports": { ".": "./src/index.ts" },
   "scripts": {
     "typecheck": "tsc -p .",
     "test": "bun test",
     "bench": "bun bench/s5.ts",
     "verify": "bun run typecheck && bun run test"
   },
-  "dependencies": { "three": "^0.170.0", "three-mesh-bvh": "^0.8.3" },
+  "dependencies": { "@deadlock-query/contracts": "workspace:*", "three": "^0.170.0", "three-mesh-bvh": "^0.8.3" },
   "devDependencies": { "@types/three": "^0.170.0" }
 }
