@@ -1,0 +1,320 @@
+{
+  "dialect": "draft-2020-12",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "schemaVersion": {
+        "type": "string"
+      },
+      "mapName": {
+        "type": "string"
+      },
+      "gameBuildId": {
+        "type": "string"
+      },
+      "layers": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "name": {
+              "type": "string"
+            },
+            "visible": {
+              "type": "boolean"
+            },
+            "locked": {
+              "type": "boolean"
+            },
+            "color": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "name"
+          ],
+          "additionalProperties": true
+        }
+      },
+      "annotations": {
+        "type": "array",
+        "items": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "layer": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "color": {
+                  "type": "string"
+                },
+                "properties": {
+                  "type": "object"
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "point"
+                  ]
+                },
+                "points": {
+                  "type": "array",
+                  "items": {
+                    "type": "array",
+                    "prefixItems": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "number"
+                      }
+                    ],
+                    "maxItems": 3,
+                    "minItems": 3
+                  },
+                  "minItems": 1,
+                  "maxItems": 1
+                }
+              },
+              "required": [
+                "id",
+                "kind",
+                "points"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "layer": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "color": {
+                  "type": "string"
+                },
+                "properties": {
+                  "type": "object"
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "label"
+                  ]
+                },
+                "points": {
+                  "type": "array",
+                  "items": {
+                    "type": "array",
+                    "prefixItems": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "number"
+                      }
+                    ],
+                    "maxItems": 3,
+                    "minItems": 3
+                  },
+                  "minItems": 1,
+                  "maxItems": 1
+                },
+                "text": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "kind",
+                "points",
+                "text"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "layer": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "color": {
+                  "type": "string"
+                },
+                "properties": {
+                  "type": "object"
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "polyline"
+                  ]
+                },
+                "points": {
+                  "type": "array",
+                  "items": {
+                    "type": "array",
+                    "prefixItems": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "number"
+                      }
+                    ],
+                    "maxItems": 3,
+                    "minItems": 3
+                  },
+                  "minItems": 2
+                }
+              },
+              "required": [
+                "id",
+                "kind",
+                "points"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "layer": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "color": {
+                  "type": "string"
+                },
+                "properties": {
+                  "type": "object"
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "polygon"
+                  ]
+                },
+                "points": {
+                  "type": "array",
+                  "items": {
+                    "type": "array",
+                    "prefixItems": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "number"
+                      }
+                    ],
+                    "maxItems": 3,
+                    "minItems": 3
+                  },
+                  "minItems": 3
+                }
+              },
+              "required": [
+                "id",
+                "kind",
+                "points"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "layer": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "color": {
+                  "type": "string"
+                },
+                "properties": {
+                  "type": "object"
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "measure"
+                  ]
+                },
+                "points": {
+                  "type": "array",
+                  "items": {
+                    "type": "array",
+                    "prefixItems": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "number"
+                      }
+                    ],
+                    "maxItems": 3,
+                    "minItems": 3
+                  },
+                  "minItems": 2
+                }
+              },
+              "required": [
+                "id",
+                "kind",
+                "points"
+              ],
+              "additionalProperties": true
+            }
+          ]
+        }
+      }
+    },
+    "required": [
+      "schemaVersion",
+      "annotations"
+    ],
+    "additionalProperties": true
+  },
+  "definitions": {}
+}

@@ -35,8 +35,8 @@ import { existsSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import { Schema } from "effect"
 import {
-  EntitiesFile, Manifest, MockMapDataService, MapDataService, QueryResult, UnsupportedSchemaVersion,
-  buildMiniMap, decodeVersioned, exportResult, makeResult, sha256Hex
+  AnnotationDocument, EntitiesFile, Manifest, MockMapDataService, MapDataService, QueryResult, UnsupportedSchemaVersion,
+  buildMiniMap, decodeVersioned, exportResult, makeAnnotationDocument, makeResult, sha256Hex, validateAnnotationDocument
 } from "../src/index.ts"
 
 const fixtureDir = join(import.meta.dir, "..", "fixtures", "mini-map")
@@ -116,4 +116,42 @@ test("mock map data service serves the fixture", async () => {
     }).pipe(Effect.provide(MockMapDataService))
   )
   expect(sha256Hex(out.tile)).toBe(out.m.tiles[0]!.sha256)
+})
+
+test("AnnotationDocument round trips and encodes to JSON", () => {
+  const doc = makeAnnotationDocument(
+    [
+      { id: "a1", kind: "point", points: [[1, 2, 3]] },
+      { id: "a2", kind: "label", points: [[0, 0, 0]], text: "mid boss", layer: "L1", properties: { note: "x" } },
+      { id: "a3", kind: "polyline", points: [[0, 0, 0], [1, 1, 1]] },
+      { id: "a4", kind: "polygon", points: [[0, 0, 0], [1, 0, 0], [0, 1, 0]], color: "#ff0000" },
+      { id: "a5", kind: "measure", points: [[0, 0, 0], [3, 4, 0]] }
+    ],
+    { mapName: "dl_midtown", layers: [{ id: "L1", name: "Notes", visible: true }] }
+  )
+  const json = JSON.parse(JSON.stringify(doc))
+  const back = Schema.decodeUnknownSync(AnnotationDocument)(json)
+  expect(back).toEqual(doc)
+  expect(validateAnnotationDocument(back)).toEqual([])
+})
+
+test("AnnotationDocument rejects bad geometry and reports cross-field errors", () => {
+  const decode = Schema.decodeUnknownSync(AnnotationDocument)
+  const base = { schemaVersion: "1.0.0" }
+  expect(() => decode({ ...base, annotations: [{ id: "a", kind: "polyline", points: [[0, 0, 0]] }] })).toThrow()
+  expect(() => decode({ ...base, annotations: [{ id: "a", kind: "polygon", points: [[0, 0, 0], [1, 1, 1]] }] })).toThrow()
+  expect(() => decode({ ...base, annotations: [{ id: "a", kind: "point", points: [[0, 0, 0], [1, 1, 1]] }] })).toThrow()
+  expect(() => decode({ ...base, annotations: [{ id: "a", kind: "label", points: [[0, 0, 0]] }] })).toThrow()
+  expect(() => decode({ ...base, annotations: [{ id: "a", kind: "circle", points: [[0, 0, 0]] }] })).toThrow()
+  expect(() => decode({ ...base, annotations: [{ id: "a", kind: "point", points: [[0, 0, NaN]] }] })).toThrow()
+  const dup = decode({
+    ...base,
+    annotations: [{ id: "a", kind: "point", points: [[0, 0, 0]], layer: "nope" }, { id: "a", kind: "point", points: [[1, 1, 1]] }]
+  })
+  expect(validateAnnotationDocument(dup)).toEqual(['annotation "a" references unknown layer "nope"', 'duplicate annotation id "a"'])
+})
+
+test("decodeVersioned rejects a newer AnnotationDocument major", async () => {
+  const exit = await Effect.runPromiseExit(decodeVersioned(AnnotationDocument, 1)({ schemaVersion: "2.0.0", annotations: [] }))
+  expect(exit._tag).toBe("Failure")
 })
