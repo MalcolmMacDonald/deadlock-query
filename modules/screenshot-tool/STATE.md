@@ -1,8 +1,8 @@
 # screenshot-tool — state
 
-- **Status:** M0 and M1 done against the fake console; real-game checks pending (Malcolm)
-- **Version:** 0.2.0
-- **Current milestone:** M2 next (see PLAN.md §6)
+- **Status:** M0, M1 and M2 done against the fake console; real-game checks pending (Malcolm)
+- **Version:** 0.3.0
+- **Current milestone:** M3 next (see PLAN.md §6)
 - **Last updated:** 2026-10-06
 
 ## Done
@@ -16,13 +16,15 @@
 
 - M1 `plan` (`src/plan.ts`, `src/planCli.ts`): `grid` (cell centres over xy bounds, centred lattice, N yaws per cell, fixed camera z), `ring` (N yaws, default 8, at each `--at x,y,z`), `from-file` (validate and rewrite canonically). Shot plan = Effect Schema `ShotPlan` (`schemaVersion`, `map`, `gameBuildId?`, `resolution`, `fov`, `hideHud`, `shots[{id, position, angles | lookAt, group?}]`); `parsePlan` reports every problem (exactly one of angles/lookAt, unique ids, filesystem-safe ids, no empty plan). Output is byte-for-byte deterministic (stable ids like `grid-r001c002-y090`, 3-decimal rounding, canonical key order). `lookAtAngles` gives Source angles (positive pitch looks down) for M2. `--bundle <dir>` takes map, build id and xy bounds from `manifest.json`. Hard cap of 5000 shots per plan. 20 tests.
 
+- M2 `shoot` (`src/shoot.ts`, `src/shootCli.ts`, `src/image.ts`): `dlq-shoot shoot <plan.json> [--fake|--offline] [--screenshot-dir|--game-dir] [--out] [--build] [--force] [--settle-ms] [--timeout-ms]`. Session setup once (`fov_desired`, `cl_drawhud`), then per shot `setpos`, `setang`, `getpos` read-back verified against the requested pose (contracts `poseError`, default 8 units / 1 degree), settle wait, `screenshot`, pickup of the new file from the game's screenshot folder, move to `<out>/<id>.<ext>`, append to `index.jsonl`; finally `index.json` is a validated contracts `ScreenshotSet` (`placeholder: true` with `--fake`, `tool` set). Image size, bytes and sha256 come from the file (PNG/JPEG headers parsed). Stops at the first failure with a tagged `ShootError` (`setup` / `pose` / `pickup` / `image` / `output`) carrying a fix hint. Output defaults to `<repo>/data/screenshots/<gameBuildId>/`; an existing run is refused without `--force`. The fake game now writes placeholder PNGs into its screenshot folder (optional delay / drop for tests). 33 tests.
+
 ## In progress
 - (nothing)
 
 ## Next
 - **Malcolm-only, needs the game:** M0 acceptance and spike S3. Start Deadlock offline with `-netconport 2121` (the launch options in `doctor` are guesses), then `bun run dlq-shoot doctor --game-dir <Deadlock install>` and `bun run dlq-shoot console "echo hi"`. Record in this file: which transport works (NetConPort vs RCON), exact launch options, whether `setpos`/`setang`/`getpos`/`screenshot`/`noclip`/`cl_drawhud` exist and are cheat-gated, the real screenshot folder, and whether the reply framing matches `netConSend`. If the game uses RCON instead, add a `SourceRcon` layer next to `NetConPort`.
-- M2 `shoot` core loop (pose verification, file pickup, index; output is the contracts `ScreenshotSet`, `makeScreenshotSet`). Everything except the 20-shot real run can be built and tested against the fake console (`--fake` writes placeholder images, `placeholder: true`).
-- Needs the real game (Malcolm): the exact `setpos`/`setang`/`getpos` reply format (the fake guesses `setpos x y z;setang p y r`), where the game writes screenshots and how they are named, the settle-wait needed after `setpos`, and the 20-shot acceptance run.
+- M3: resume (`--resume` skips ids already in `index.jsonl`; the JSONL is already written per shot for this), per-shot retry (3x) and timeout, game exit/crash detection, structured progress `Stream`. Resume, retry and progress are testable against the fake; "kill the game mid-run, restart, `--resume` completes" needs the real game.
+- **Malcolm-only, M2 acceptance (20-shot real run):** besides the M0 steps, check and record: the real `getpos` reply (the parser accepts `setpos x y z;setang p y r`, the `_exact` variants and extra lines; if it fails, shots are taken with a warning and no `actual` pose), whether `fov_desired` and `cl_drawhud` exist (setup fails loudly on "Unknown command", fix the list in `sessionSetup`), the screenshot folder and file format (PNG/JPEG only; TGA etc. fail with `image`), the settle time needed after `setpos` (default 500 ms; PLAN's double-capture hash-stability check is not built yet), and whether the game's resolution matches the plan (a mismatch is a warning). Run: `bun run dlq-shoot plan ring --map dl_midtown --build <id> --at x,y,z`, then `shoot plan.json --offline --game-dir <install>`.
 - Deferred from M1, needs real data: `grid` places every camera at one fixed `--z`. The PLAN wants "height above the walkable surface" from the baked sample grid/navmesh; that needs `spatial-core` in `module.json` `dependsOn` and a real bake (floor currently describes clip lids, see map-extractor STATE.md), so it waits for the walkable-collision work.
 
 ## Blockers / Requests to other modules
@@ -33,6 +35,7 @@
 - 2026-10-05 — Module scaffolded (rev 2 of IMPLEMENTATION_PLAN.md).
 - 2026-10-06 — M0: `NetConPort` is the first real transport because `-netconport` is what D12 names; RCON is added only if S3 shows Deadlock needs it. Default console port 2121 is arbitrary (override `--port` / `DLQ_CONSOLE_PORT`). `doctor` takes the screenshot folder from `--screenshot-dir` or `<game-dir>/game/citadel/screenshots` **[VERIFY]**.
 - 2026-10-06 — M1: `grid` takes an absolute `--z` for now (see Next). Ring is "N yaws on the spot at each `--at`" (default 8). Yaw 0 is +X, increasing counter-clockwise seen from above (Source convention). Plans never contain results, so a plan can be re-run on another build; `--build` or the bundle's build id is only recorded.
+- 2026-10-06 — M2: file pickup polls the screenshot folder (new or re-written image, size stable across two polls) instead of `fs.watch`, because watching is unreliable on Windows shares and polling is trivial to test. The first failing shot stops the run (retry is M3). The real game needs `--offline` (the tool cannot confirm sandbox mode from the console yet); the fake does not.
 - 2026-10-06 — M1: `from-annotations` / `from-metadata` stay M4; `from-file` only validates and canonicalises.
 
 ## Open questions

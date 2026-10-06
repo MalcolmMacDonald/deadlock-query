@@ -1,6 +1,9 @@
 import { Effect, Layer } from "effect"
 import { GameConsole } from "./console.ts"
 import { ConsoleError } from "./errors.ts"
+import { placeholderPng } from "./image.ts"
+import { mkdirSync, writeFileSync } from "node:fs"
+import { join } from "node:path"
 
 export interface FakeConsoleOptions {
   /** Commands the fake game refuses (as if cheat-gated). */
@@ -9,6 +12,14 @@ export interface FakeConsoleOptions {
   readonly poseDrift?: readonly [number, number, number]
   /** Delay every reply, simulating a busy game. */
   readonly delayMs?: number
+  /** Where `screenshot` writes placeholder PNGs, like the game's screenshot folder. Without it the command only replies. */
+  readonly screenshotDir?: string
+  /** Size of the placeholder images (default 64x36). */
+  readonly imageSize?: { readonly width: number; readonly height: number }
+  /** The file shows up this long after the command replies, like a game that writes the image a frame later. */
+  readonly fileDelayMs?: number
+  /** Reply "Wrote ..." but never write the file (pickup timeout tests). */
+  readonly dropFiles?: boolean
 }
 
 export interface FakeGame {
@@ -52,7 +63,18 @@ export const makeFakeGame = (opts: FakeConsoleOptions = {}): FakeGame => {
         return Effect.succeed("")
       }
       case "getpos": return Effect.succeed(`setpos ${state.pos.join(" ")};setang ${state.ang.join(" ")}`)
-      case "screenshot": state.screenshots += 1; return Effect.succeed(`Wrote screenshot${String(state.screenshots).padStart(4, "0")}.jpg`)
+      case "screenshot": {
+        state.screenshots += 1
+        const name = `screenshot${String(state.screenshots).padStart(4, "0")}.png`
+        if (opts.screenshotDir !== undefined && !opts.dropFiles) {
+          const dir = opts.screenshotDir, size = opts.imageSize ?? { width: 64, height: 36 }
+          const png = placeholderPng(size.width, size.height, (state.screenshots * 37) % 256)
+          const write = () => { mkdirSync(dir, { recursive: true }); writeFileSync(join(dir, name), png) }
+          if (opts.fileDelayMs) setTimeout(write, opts.fileDelayMs); else write()
+        }
+        return Effect.succeed(`Wrote ${name}`)
+      }
+      case "cl_drawhud": case "fov_desired": case "sv_cheats": case "noclip": return Effect.succeed("")
       default: return Effect.succeed(`Unknown command: ${name}`)
     }
   }

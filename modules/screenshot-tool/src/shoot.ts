@@ -1,0 +1,210 @@
+import { makeScreenshotSet, poseError, ScreenshotSet, validateScreenshotSet, type Shot, type Vec3 } from "@deadlock-query/contracts"
+import { Data, Effect, Schema } from "effect"
+import { createHash } from "node:crypto"
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs"
+import { extname, join } from "node:path"
+import pkg from "../package.json" with { type: "json" }
+import { GameConsole } from "./console.ts"
+import type { ConsoleError } from "./errors.ts"
+import { imageSize } from "./image.ts"
+import { shotAngles, type ShotPlan, type ShotSpec } from "./plan.ts"
+
+export class ShootError extends Data.TaggedError("ShootError")<{
+  readonly kind: "setup" | "pose" | "pickup" | "image" | "output"
+  readonly shotId?: string
+  readonly detail: string
+  readonly remediation: string
+}> {}
+
+export type ShootProgress =
+  | { readonly _tag: "start"; readonly total: number; readonly outDir: string }
+  | { readonly _tag: "shot"; readonly index: number; readonly total: number; readonly id: string; readonly file: string }
+  | { readonly _tag: "warning"; readonly shotId?: string; readonly message: string }
+  | { readonly _tag: "done"; readonly total: number; readonly indexFile: string }
+
+export interface ShootOptions {
+  /** Folder the finished set is written to (`index.jsonl`, `index.json`, images). */
+  readonly outDir: string
+  /** Folder the game writes its screenshots to. */
+  readonly screenshotDir: string
+  readonly gameBuildId: string
+  /** Wait after `setpos`/`setang` before capturing, for world streaming and LOD to settle. */
+  readonly settleMs?: number
+  /** How long to wait for a screenshot file to appear after the `screenshot` command. */
+  readonly pickupTimeoutMs?: number
+  readonly positionTolerance?: number
+  readonly angleTolerance?: number
+  /** Commands sent once before the first shot. Defaults to `sessionSetup(plan)`; pass `[]` to skip. */
+  readonly setup?: ReadonlyArray<string>
+  /** Replace an existing run in `outDir` instead of refusing. */
+  readonly force?: boolean
+  readonly placeholder?: boolean
+  readonly onProgress?: (e: ShootProgress) => void
+}
+
+/** One-time session commands. **[VERIFY]** each against the real game (spike S3); the names are Source conventions, not confirmed for Deadlock. */
+export const sessionSetup = (plan: Pick<ShotPlan, "fov" | "hideHud">): string[] => [
+  `fov_desired ${plan.fov}`,
+  `cl_drawhud ${plan.hideHud ? 0 : 1}`
+]
+
+export interface Pose { readonly position: Vec3; readonly angles: Vec3 }
+
+const NUM = String.raw`(-?\d+(?:\.\d+)?(?:e[+-]?\d+)?)`
+const POS = new RegExp(String.raw`setpos(?:_exact)?\s+${NUM}\s+${NUM}\s+${NUM}`, "i")
+const ANG = new RegExp(String.raw`setang(?:_exact)?\s+${NUM}\s+${NUM}(?:\s+${NUM})?`, "i")
+
+/** Parse a `getpos` reply (`setpos x y z;setang p y r`, also the `_exact` variants). **[VERIFY]** the real reply format. */
+export const parseGetpos = (reply: string): Pose | undefined => {
+  const p = POS.exec(reply), a = ANG.exec(reply)
+  if (!p || !a) return undefined
+  return { position: [Number(p[1]), Number(p[2]), Number(p[3])], angles: [Number(a[1]), Number(a[2]), a[3] === undefined ? 0 : Number(a[3])] }
+}
+
+const sleep = (ms: number) => ms > 0 ? Effect.sleep(ms) : Effect.void
+const IMAGE_EXT = new Set([".png", ".jpg", ".jpeg"])
+const listImages = (dir: string): Map<string, number> => {
+  const m = new Map<string, number>()
+  if (!existsSync(dir)) return m
+  for (const f of readdirSync(dir)) if (IMAGE_EXT.has(extname(f).toLowerCase())) m.set(f, statSync(join(dir, f)).mtimeMs)
+  return m
+}
+
+/** Wait for a file that was not in `before` to appear and stop growing. */
+const pickup = (dir: string, before: ReadonlyMap<string, number>, timeoutMs: number, shotId: string): Effect.Effect<string, ShootError> =>
+  Effect.gen(function* () {
+    const deadline = Date.now() + timeoutMs
+    let candidate: { name: string; size: number } | undefined
+    while (Date.now() < deadline) {
+      const now = listImages(dir)
+      const fresh = [...now].filter(([n, t]) => before.get(n) !== t).map(([n]) => n).sort()
+      const name = fresh[fresh.length - 1]
+      if (name !== undefined) {
+        const size = statSync(join(dir, name)).size
+        if (candidate?.name === name && candidate.size === size && size > 0) return name
+        candidate = { name, size }
+      }
+      yield* sleep(25)
+    }
+    return yield* new ShootError({ kind: "pickup", shotId, detail: `no new screenshot appeared in ${dir} within ${timeoutMs} ms`, remediation: "check --screenshot-dir is the folder the game writes to, and that the game window is not paused or minimised" })
+  })
+
+const consoleFail = (shotId: string | undefined, step: string) => (e: ConsoleError) =>
+  new ShootError({ kind: shotId === undefined ? "setup" : "pose", ...(shotId !== undefined ? { shotId } : {}), detail: `${step}: ${e.detail}`, remediation: e.remediation })
+
+const unknownCommand = (reply: string): boolean => /unknown command/i.test(reply)
+
+const sha256 = (b: Uint8Array): string => createHash("sha256").update(b).digest("hex")
+
+/**
+ * Run a plan: session setup once, then per shot `setpos`/`setang` -> read back with `getpos` and verify -> settle ->
+ * `screenshot` -> pick the new file out of the game's screenshot folder -> move it to `<outDir>/<id>.<ext>` -> append the
+ * shot to `index.jsonl`. At the end `index.json` (a contracts `ScreenshotSet`) is written. Stops at the first failure.
+ */
+export const shoot = (plan: ShotPlan, o: ShootOptions): Effect.Effect<ScreenshotSet, ShootError, GameConsole> =>
+  Effect.gen(function* () {
+    const gc = yield* GameConsole
+    const emit = o.onProgress ?? (() => {})
+    const jsonl = join(o.outDir, "index.jsonl")
+    const posTol = o.positionTolerance ?? 8, angTol = o.angleTolerance ?? 1
+
+    yield* Effect.try({
+      try: () => {
+        if (existsSync(jsonl) && statSync(jsonl).size > 0) {
+          if (!o.force) throw new ShootError({ kind: "output", detail: `${o.outDir} already holds a run`, remediation: "pass --force to start over (resuming comes in a later release)" })
+          rmSync(jsonl)
+          rmSync(join(o.outDir, "index.json"), { force: true })
+        }
+        mkdirSync(o.outDir, { recursive: true })
+        mkdirSync(o.screenshotDir, { recursive: true })
+      },
+      catch: (e) => e instanceof ShootError ? e : new ShootError({ kind: "output", detail: `cannot prepare ${o.outDir}: ${(e as Error).message}`, remediation: "check the folder exists and is writable" })
+    })
+
+    emit({ _tag: "start", total: plan.shots.length, outDir: o.outDir })
+    for (const cmd of o.setup ?? sessionSetup(plan)) {
+      const reply = yield* gc.send(cmd).pipe(Effect.mapError(consoleFail(undefined, cmd)))
+      if (unknownCommand(reply)) return yield* new ShootError({ kind: "setup", detail: `${cmd}: ${reply}`, remediation: "this game build does not know the command; see STATE.md for the commands verified so far" })
+    }
+
+    const shots: Shot[] = []
+    for (const [index, spec] of plan.shots.entries()) {
+      shots.push(yield* shootOne(gc, plan, spec, o, { posTol, angTol }, emit))
+      emit({ _tag: "shot", index, total: plan.shots.length, id: spec.id, file: shots[shots.length - 1]!.file })
+    }
+
+    const set = makeScreenshotSet({
+      gameBuildId: o.gameBuildId, mapName: plan.map, fov: plan.fov, hideHud: plan.hideHud,
+      ...(o.placeholder ? { placeholder: true } : {}),
+      tool: { name: "dlq-shoot", version: pkg.version }
+    }, shots)
+    const problems = validateScreenshotSet(set, { positionTolerance: posTol, angleTolerance: angTol })
+    if (problems.length > 0) return yield* new ShootError({ kind: "output", detail: problems.join("; "), remediation: "the run produced an invalid set; this is a bug in dlq-shoot" })
+    const indexFile = join(o.outDir, "index.json")
+    yield* Effect.try({
+      try: () => writeFileSync(indexFile, `${JSON.stringify(Schema.encodeSync(ScreenshotSet)(set), null, 2)}\n`),
+      catch: (e) => new ShootError({ kind: "output", detail: `cannot write ${indexFile}: ${(e as Error).message}`, remediation: "check the folder is writable" })
+    })
+    emit({ _tag: "done", total: shots.length, indexFile })
+    return set
+  })
+
+const shootOne = (
+  gc: GameConsole["Service"], plan: ShotPlan, spec: ShotSpec, o: ShootOptions, tol: { posTol: number; angTol: number }, emit: (e: ShootProgress) => void
+): Effect.Effect<Shot, ShootError> =>
+  Effect.gen(function* () {
+    const angles = shotAngles(spec)
+    const send = (cmd: string) => gc.send(cmd).pipe(Effect.mapError(consoleFail(spec.id, cmd)))
+    yield* send(`setpos ${spec.position.join(" ")}`)
+    yield* send(`setang ${angles.join(" ")}`)
+
+    const reply = yield* send("getpos")
+    const actual = parseGetpos(reply)
+    if (actual === undefined) {
+      emit({ _tag: "warning", shotId: spec.id, message: `cannot read the pose back from getpos reply ${JSON.stringify(reply)}; pose not verified` })
+    } else {
+      const err = poseError({ requested: { position: spec.position, angles }, actual })!
+      if (err.position > tol.posTol || err.angle > tol.angTol) {
+        return yield* new ShootError({
+          kind: "pose", shotId: spec.id,
+          detail: `the game put the camera ${err.position.toFixed(1)} units and ${err.angle.toFixed(1)} degrees away from the requested pose`,
+          remediation: "the game did not honour setpos/setang: enable noclip/cheats in an offline sandbox, or move the shot out of geometry"
+        })
+      }
+    }
+
+    yield* sleep(o.settleMs ?? 500)
+    const before = listImages(o.screenshotDir)
+    yield* send("screenshot")
+    const name = yield* pickup(o.screenshotDir, before, o.pickupTimeoutMs ?? 10_000, spec.id)
+
+    const ext = extname(name).toLowerCase() === ".jpeg" ? ".jpg" : extname(name).toLowerCase()
+    const file = `${spec.id}${ext}`
+    const bytes = yield* Effect.try({
+      try: () => {
+        renameSync(join(o.screenshotDir, name), join(o.outDir, file))
+        return readFileSync(join(o.outDir, file))
+      },
+      catch: (e) => new ShootError({ kind: "output", shotId: spec.id, detail: `cannot move ${name} to ${o.outDir}: ${(e as Error).message}`, remediation: "check both folders are on this machine and writable" })
+    })
+    const size = imageSize(bytes)
+    if (size === undefined) return yield* new ShootError({ kind: "image", shotId: spec.id, detail: `${name} is not a PNG or JPEG`, remediation: "set the game's screenshot format to JPEG or PNG" })
+    if (size.width !== plan.resolution.width || size.height !== plan.resolution.height) {
+      emit({ _tag: "warning", shotId: spec.id, message: `image is ${size.width}x${size.height}, the plan asked for ${plan.resolution.width}x${plan.resolution.height}` })
+    }
+
+    const shot: Shot = {
+      id: spec.id,
+      ...(spec.group !== undefined ? { group: spec.group } : {}),
+      requested: { position: spec.position, angles },
+      ...(actual !== undefined ? { actual } : {}),
+      ...(spec.lookAt !== undefined ? { lookAt: spec.lookAt } : {}),
+      file, bytes: bytes.length, sha256: sha256(bytes), width: size.width, height: size.height,
+      capturedAt: new Date().toISOString()
+    }
+    yield* Effect.try({
+      try: () => appendFileSync(join(o.outDir, "index.jsonl"), `${JSON.stringify(shot)}\n`),
+      catch: (e) => new ShootError({ kind: "output", shotId: spec.id, detail: `cannot append to index.jsonl: ${(e as Error).message}`, remediation: "check the folder is writable" })
+    })
+    return shot
+  })

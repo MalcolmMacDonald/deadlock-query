@@ -18,7 +18,7 @@ test("fake console: echo and pose round-trip", async () => {
   await send("setpos 1 2 3", game.layer)
   await send("setang 10 20", game.layer)
   expect(await send("getpos", game.layer)).toBe("setpos 1 2 3;setang 10 20 0")
-  expect(await send("screenshot", game.layer)).toContain("screenshot0001.jpg")
+  expect(await send("screenshot", game.layer)).toContain("screenshot0001.png")
   expect(game.state.screenshots).toBe(1)
   expect(game.log).toEqual(["echo hi", "setpos 1 2 3", "setang 10 20", "getpos", "screenshot"])
   expect(await send("nope", game.layer)).toBe("Unknown command: nope")
