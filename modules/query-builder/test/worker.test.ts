@@ -53,4 +53,6 @@ test("CSP forbids network and unnonced scripts", () => {
   expect(csp).toContain("connect-src 'none'")
   expect(csp).toContain("'nonce-abc'")
   expect(csp).not.toContain("'unsafe-inline'")
+  expect(csp).toContain("script-src 'nonce-abc' 'unsafe-eval'; worker-src blob:") // blob: only for creating the worker
+  expect(csp).toContain("base-uri 'none'")
 })

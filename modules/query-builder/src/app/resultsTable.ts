@@ -1,5 +1,6 @@
 import { Effect } from "effect"
 import { SelectionBus, type QueryResult } from "@deadlock-query/contracts"
+import { LIMITS } from "../sandbox/limits.ts"
 
 const fmt = (v: unknown): string =>
   v === null || v === undefined ? "" : typeof v === "number" ? String(Math.round(v * 1000) / 1000) : typeof v === "object" ? JSON.stringify(v) : String(v)
@@ -24,6 +25,14 @@ export const renderResults = (doc: Document, result: QueryResult, opts?: Results
     b.textContent = w
     root.append(b)
   }
+  const shown = Math.min(result.rows.length, LIMITS.maxRenderedRows)
+  if (shown < result.rows.length) {
+    const b = doc.createElement("div")
+    b.className = "warning"
+    b.dataset.testid = "render-cap"
+    b.textContent = `Showing the first ${shown} of ${result.rows.length} rows.`
+    root.append(b)
+  }
   const table = doc.createElement("table")
   table.dataset.testid = "results-table"
   const head = table.createTHead().insertRow()
@@ -34,7 +43,7 @@ export const renderResults = (doc: Document, result: QueryResult, opts?: Results
     head.append(th)
   }
   const body = table.createTBody()
-  for (let i = 0; i < result.rows.length; i++) {
+  for (let i = 0; i < shown; i++) {
     const row = result.rows[i]!
     const rowId = result.rowIds[i]!
     const tr = body.insertRow()

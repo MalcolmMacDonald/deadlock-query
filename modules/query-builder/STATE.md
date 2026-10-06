@@ -1,8 +1,8 @@
 # query-builder — state
 
-- **Status:** M2 done
+- **Status:** M3 done
 - **Version:** 0.0.0
-- **Current milestone:** M2 complete; next is M3 (see PLAN.md §6)
+- **Current milestone:** M3 complete; next is M4 (see PLAN.md §6)
 - **Last updated:** 2026-10-06
 
 ## Done
@@ -36,12 +36,19 @@ Also verified: library-class member completions with TSDoc signature, string-lit
   - Pass `onRowSelect` callback to `renderResults` for interactivity
   - Acceptance met: rows are selectable, geometry is projected to overlay features with row-ID-based labels, mocks are in place for shell e2e integration.
 
+- **M3** (`src/sandbox/limits.ts`, `src/sandbox/worker-source.ts`, `src/sandbox/frame.ts`, `src/sandbox/runner.ts`, `src/app/resultsTable.ts`, `test/adversarial.test.ts`, `test/sandbox.e2e.test.ts`). Safety hardening, in layers:
+  - **Iframe/CSP:** `allow=""` and `referrerpolicy="no-referrer"` on the frame; CSP is now `script-src 'nonce-…' 'unsafe-eval'` (no `blob:`, so `import(blobUrl)` is blocked; `blob:` stays in `worker-src` only) plus `base-uri/form-action/frame-src 'none'`.
+  - **Global scrub (worker):** in addition to the S1 list, `Worker`, `SharedWorker`, `BroadcastChannel`, `MessageChannel`, `RTCPeerConnection`, `Notification`, `postMessage`, `close`, `FileReaderSync`, `WebAssembly` and `navigator.{storage,locks,serviceWorker,sendBeacon}`. The worker captures `postMessage` first, so a query cannot forge protocol messages or spawn a child global that escapes the scrub. All non-writable/non-configurable.
+  - **Run isolation:** timers (`setTimeout`/`setInterval`) a query leaves behind are cleared when the run settles; error reporting survives a hostile `toString` (previously a throwing `toString` hung the run until timeout).
+  - **Caps** (`LIMITS`): rows 100 000 (cut inside the worker, real total reported as `totalRows` → warning "Result truncated to … of … rows"), result size 5 M values (strings weighted by length; over it the run fails with "Result is too large"), single allocation 256 MiB (`ArrayBuffer` + typed-array constructors via Proxy, incl. `.constructor`/`.from`, and `String.repeat/padStart/padEnd`; throws `RangeError … exceeds the sandbox limit`), results table renders only the first 2 000 rows (with a notice) until it is virtualised.
+  - **Adversarial corpus:** `test/adversarial.test.ts` (Bun Worker, same worker source: global/constructor/Function escapes, scrub immutability, protocol forgery, loops, huge allocs, row/value caps, circular/DAG/hostile results) and `test/sandbox.e2e.test.ts` (real iframe + CSP in Chromium: opaque origin, no window/DOM/storage/network, `import()` of data:/blob:/https: blocked, nested Worker blocked, timeout + recovery, alloc refusal, row cap, render cap). Verified the Chromium corpus fails when the CSP is loosened.
+  - **Known limits (accepted):** total heap use is not capped (only single allocations, the result, and the 30 s timeout); a query can poison built-in prototypes for later runs until the worker respawns (cancel/timeout); a microtask-flood after the result is posted starves the worker until the next run times out. Revisit with respawn-per-run or frozen intrinsics if needed.
+
 ## In progress
 - (nothing)
 
 ## Next
-- M3: Safety hardening + tests (global scrub, CSP, no network, row/mem caps) per PLAN.md §6.
-  - Expected: adversarial corpus (fetch, import, eval escapes, infinite loop, huge alloc) neutralised; stress tests on row/memory caps.
+- M4: Docs panel from `apiCatalog.json`, gallery with 3 PLAN.md queries, snippets, friendly errors (PLAN.md §6).
 
 ## Blockers / Requests to other modules
 - None at this time. Shell e2e will wire the real `ViewerService` and `SelectionBus` from the module system.
@@ -58,6 +65,8 @@ Also verified: library-class member completions with TSDoc signature, string-lit
 - 2026-10-06 — M1: unit tests build the library JS straight from source into a temp dir and use `Bun.Transpiler` (no type-check) + a plain Worker; type-check paths are covered by the Chromium e2e only (self-skips without Chromium). The e2e needs `modules/query-library/dist` (built on demand by `buildApp`).
 
 - 2026-10-06 — M2: Extended `QueryResult` schema to include `rowIds` field (array of strings, one per row). Row IDs are derived from entity.id if the original item is an entity, otherwise from row index. Feature labels are `{rowId}:{geometryColumnName}` to enable round-trip row selection ↔ feature highlight. Viewer overlay is keyed by `"query-result"` and set on every successful run (failures degrade gracefully with mock services). Selection bus integration is prepared for shell e2e where real services will replace mocks.
+
+- 2026-10-06 — M3: limits live in one place (`LIMITS`) and are enforced in the worker first (cheapest), with `projectResult` and the table as backstops. Allocation guards are per-allocation, not cumulative, to avoid false positives on library churn. The `NEXT.md` row is not updated here: it is outside `modules/query-builder/` and `check:scope` rejects it, so it needs a follow-up infra change.
 
 ## Open questions
 - (see PLAN.md §9)

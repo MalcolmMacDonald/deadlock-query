@@ -1,7 +1,8 @@
 import { makeResult, type ColumnType, type QueryResult } from "@deadlock-query/contracts"
+import { LIMITS } from "../sandbox/limits.ts"
 
-/** Hard cap so a runaway query cannot flood the table; the real caps land in M3. */
-export const MAX_ROWS = 100_000
+/** Hard cap so a runaway query cannot flood the table. The worker already cuts to this; this is the backstop. */
+export const MAX_ROWS = LIMITS.maxRows
 
 const isNum3 = (v: unknown): boolean => Array.isArray(v) && v.length === 3 && v.every((n) => typeof n === "number")
 const isEntity = (v: unknown): v is { id: string } =>

@@ -44,7 +44,7 @@ export const workerRunner = (prelude: string, bundle: unknown): Runner & { dispo
       const m = e.data
       if (m.type === "pong") return resolve()
       if (active && m.runId === active.runId) {
-        if (m.type === "result") active.settle({ ok: true, value: m.value, ms: m.ms })
+        if (m.type === "result") active.settle({ ok: true, value: m.value, ms: m.ms, ...(m.totalRows === undefined ? {} : { totalRows: m.totalRows }) })
         else if (m.type === "error") active.settle({ ok: false, reason: "error", message: m.message })
       }
     }
