@@ -37,7 +37,7 @@
 - To un-publish: delete the Release and the pointer (docs/takedown.md); builds then fail loudly instead of deploying stale data.
 
 ## Publish helper (2026-10-06)
-- `bun tools/publish-data.ts <bundle-dir> [--upload]` (logic in `tools/lib/publish.ts`, 3 tests): zips a bundle without `.work`/`.stage-*`, refuses oversize bundles (site budget), writes the sha256 into `data/current-build.json` (same tag merges assets by `dest`, new tag replaces), and with `--upload` creates/updates Release `data-<buildId>` via `gh`. Documented in `docs/dev-site.md`. The `data.yml` CI workflow is still deferred. Not run against a real bundle or Release.
+- `bun tools/publish-data.ts <bundle-dir> [--upload]` (logic in `tools/lib/publish.ts`, 3 tests): zips a bundle without `.work`/`.stage-*`, refuses oversize bundles (site budget), writes the sha256 into `data/current-build.json` (same tag merges assets by `dest`, new tag replaces), and with `--upload` creates/updates Release `data-<buildId>` via `gh`. Documented in `docs/dev-site.md`. The `data.yml` CI workflow is still deferred. Zipping uses a built-in writer (`tools/lib/zip.ts`, deflate, zip32: files < 2 GB, archive < 4 GB) so no `zip` binary is needed on Windows; tested with `unzip` and a `fetchData` roundtrip. Not run against a real bundle or Release.
 
 ## Next
 - Malcolm creates the fine-grained PAT and sets `GITHUB_TOKEN_PROXY` (see `docs/secrets.md`); then curl the live proxy with a session cookie, confirm the token never appears in a response.
