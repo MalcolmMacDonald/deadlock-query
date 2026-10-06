@@ -1,8 +1,8 @@
 # map-extractor — state
 
 - **Status:** S2 spike complete — **GO** (render, collision, entities, nav all obtainable)
-- **Version:** 0.5.0 (module); `EXTRACTOR_VERSION` stays 0.3.0 so cached extract stages remain valid
-- **Current milestone:** M4 code done (`bake`: collision BVH + sample grid); M3 and M4 pending real-data runs on the dev machine
+- **Version:** 0.6.0 (module); `EXTRACTOR_VERSION` stays 0.3.0 so cached extract stages remain valid
+- **Current milestone:** M5 code done (`bake` also builds the Recast navmesh + QA OBJ); **navmesh human sign-off pending**; M3, M4 and M5 pending real-data runs on the dev machine
 - **Last updated:** 2026-10-06
 
 ## Done
@@ -160,11 +160,24 @@ Other (bulk, likely out of scope): `light_omni2` 1,968, `light_barn` 755, `citad
   - **Not run on real data.** Expected scale: ~104k collision triangles, a 671 x 590 grid at 64 units (~400k cells, ~13M rays). The mini-map bakes 12k cells in ~0.5 s, so a few tens of seconds to a few minutes is likely; unmeasured.
   - **Known limits:** (1) `floorHeight` is spatial-core's built-in topmost-surface ray, so under roofs/bridges the "floor" is the roof and `interior` is 0 there (the mini-map building cell reads 420 / not interior). Needs a spatial-core change (e.g. walkable-surface selection or multi-layer grid) before `interior` is meaningful in buildings. (2) Single-threaded; PLAN §5.8 wants worker threads, deferred until a real run shows it matters. (3) Navmesh is M5, not here.
 
+## M5 (2026-10-06)
+
+- **`bake <bundle-dir>` now runs a second stage, the navmesh** (`src/navmesh.ts`), after the collision BVH + sample grid; `--no-navmesh` skips it. It writes `baked/navmesh.bin` (spatial-core `NavMesh.serialize()` format: convex polygons in Source units, Z up, plus off-mesh links) and an OBJ for visual QA at `<bundle>.qa/navmesh.obj` (a sibling of the bundle dir, so it never counts against the pack-lite budget; `--qa-dir <dir>` / `--no-qa`). The manifest gets `baked.navmesh` (file, sha256, polygon/vertex/tile/link counts, components, `largestComponentShare`, agent + Recast parameters, excluded layers, cache key). The cache key covers collision sha256, `glbToWorld`, layers, agent, Recast params and `entities.json`; an equal key is a no-op, `--force` rebuilds. The collision/grid stage keeps `baked.navmesh` when it re-runs. `inspect` checks the file and prints polygon/component counts.
+- **Recast setup:** `recast-navigation` (WASM, bake only) `generateTiledNavMesh` on the collision soup (same `loadCollisionMesh` as the BVH), Source (x, y, z) mapped to Recast (x, z, -y) (a rotation, so winding and "up" survive) and mapped back. Defaults, all CLI flags: agent radius 16, height 72, climb 18, slope 45 degrees (Source-engine defaults, **not measured from Deadlock heroes**), cell 8 x 4, tile 128 voxels (1024 units), max 6 vertices per polygon. Excluded layers (`--nav-exclude-layers`): `sky`, `Citadel_Skyclip`, `Citadel_Foliage`, `NavIgnore`; `playerclip`, `npcclip`, `window` and `passbullets` stay in (they block movement; npcclip-only nodes are included too, since layer matching is per node and cannot express "only").
+- **Tile borders:** Recast tiles connect by portal overlap, not shared vertices, but spatial-core builds adjacency from shared polygon edges. After welding vertices across tiles (same xy cell, height within the agent climb), `stitchTileBorders` splits boundary edges on tile border lines so both sides share identical sub-edges (only vertices at a matching height count, so bridges over ground are not merged). Counted as `stitchedEdges` in the manifest. The synthetic mini-map has aligned tile borders (0 stitched), so the stitcher is covered by T-junction unit tests; whether real geometry needs it is unmeasured.
+- **Links (unverified):** `entityLinks` turns `zipline` nodes (`target` -> next node's `targetname`, bidirectional) and `jumpPad` entities (`launchTarget` -> entity `targetname`, one way) into `NavLink`s of kind `zipline` / `jumpPad`; endpoints more than 256 units from any navmesh vertex are dropped (`links.dropped`, plus a warning). **These property names are a guess**; the S2 survey recorded classes and counts but not the zipline/catapult key names, so the real run may yield 0 links (it warns in that case). Check the `citadel_zipline_path_node` / `trigger_catapult` records in `entities.json` and fix the keys.
+- **QA/sign-off:** open `<bundle>.qa/navmesh.obj` (one group per connected component, 0 = largest). Things to eyeball: the main lanes and bases are in component 0; stairs/ramps are connected; rooftops and enclosed rooms are separate components only where they should be; no navmesh on the sky lid or inside foliage; zipline/jump pad links where expected. Record the verdict under "Navmesh sign-off" below.
+- Tests (`test/navmesh.test.ts`, 9): weld/stitch/component/OBJ/link helpers on hand-built polygons (T-junction stitched, other-level vertices not), and the Recast bake on the contracts mini-map with 32-voxel tiles: dominant component > 80%, a path across ~15 tile borders along lane 1 (cost 7000..7600), the lane-2 wall forcing a detour (cost 7000..8500, a point with |y| > 300), the ledge unreachable, deterministic bytes, cache hit/miss, agent change re-keys, `inspect` passes, `baked.navmesh` survives a bake re-run, error paths.
+- **Not run on real data.** Expected scale: ~1500 tiles at the default tile size; no progress callback exists inside Recast's tiled generator, so a long real run only logs before and after. Memory/time unmeasured. If it is too slow, drive `generateTileNavMeshData` tile by tile (progress, worker threads) instead of `generateTiledNavMesh`.
+
+## Navmesh sign-off
+- Pending: needs a human to look at the OBJ from a real `bake` (see M5 above).
+
 ## In progress
 - Testing on real data via Remote Control dev machine (pending).
 
 ## Next
-1. On the dev machine: `extract --tier lite`, then `tile <bundle>`, `bake <bundle>`, then `pack-lite <bundle>`; record tile sizes, compression ratio, LOD1 triangle share, bake time, BVH/grid sizes (`pack-lite` counts `baked/`; check the 900 MB budget) and the share of cells with a floor. If LOD1 looks bad, tune `--lod-ratio` or the simplifier error. If bake is slow, add worker threads. Then M5 (Recast navmesh + links, visual QA export).
+1. On the dev machine: `extract --tier lite`, then `tile <bundle>`, `bake <bundle>`, then `pack-lite <bundle>`; record tile sizes, compression ratio, LOD1 triangle share, bake time, BVH/grid sizes (`pack-lite` counts `baked/`; check the 900 MB budget) and the share of cells with a floor. If LOD1 looks bad, tune `--lod-ratio` or the simplifier error. If bake is slow, add worker threads. `bake` now also builds the navmesh (M5): note the polygon count, component share and run time, then open `<bundle>.qa/navmesh.obj`, fix the zipline/jump pad property names if `links` is 0, tune `--agent-*` / `--nav-exclude-layers`, and record the sign-off. Then M6 (caching/resume/`diff`, README, update runbook).
 2. Settle M1 open questions via real-data tests on dev machine: (a) are physics GLB and render glTF in the same coordinate frame; (b) are all hulls exported; (c) per-entity volume models (interior/trigger) export; (d) triangle cut for `lite` impact on size/quality (tune `--tri-budget`).
 3. Check `dl_hideout` / `new_player_basics` only if the owner wants them (not in Slice 1).
 
@@ -172,6 +185,7 @@ Other (bulk, likely out of scope): `light_omni2` 1,968, `light_barn` 755, `citad
 - spatial-core: (a) export a `SEMANTICS_VERSION` (bake currently hashes `semantics/*.ts` at run time); (b) `floorHeight` is the topmost surface, so interior cells under a roof are not detected, and row-range/worker-friendly `SampleGrid.build` would let `bake` parallelise.
 - contracts: `manifest.baked` is `Record<string, unknown>`; bake writes the shape documented under M4. Contracts M3 (baked-data specs) should adopt it (or tell us what to change), including `semanticsVersion` and `placeholder`.
 - contracts: `Tile` has no `lod` (or `lods[]`) field, so LODs are encoded as separate tiles with id `<id>#lod<n>` and a shared `bounds` (see M3). A `Tile.lod` / `Tile.lodOf` field would let the viewer select LODs without parsing ids; map-viewer M4 should read this convention until then.
+- contracts: `manifest.baked.navmesh` shape is documented under M5; the navmesh binary is spatial-core's `NavMesh.serialize()` layout (contracts has no spec yet). Contracts M3 (baked-data specs) should adopt it.
 - root (optional): add `data/` to `.gitignore`; the extractor already self-ignores its output root.
 - contracts: `Tile` has a single `file`; the render export is `n0.gltf` + 3 `.bin` (>1 GB each). Tile `bytes` currently sums the bins and `sha256` covers the `.gltf` only. Consider `Tile.files[]` or a size-limit/tiling note (M3).
 
@@ -189,6 +203,8 @@ Other (bulk, likely out of scope): `light_omni2` 1,968, `light_barn` 755, `citad
 - 2026-10-06 — M3: `tile` is a separate step after `extract --tier lite` (not folded into `extract`) so the 8-minute export stays cached and LOD settings can be re-tried; LODs are separate manifest tiles (`#lod<n>`) because contracts' `Tile` has a single `file`; meshopt (not Draco) so one WASM decoder serves the viewer; lite tier drops textures at this step.
 
 - 2026-10-06 — M4: bake is its own command after `extract`/`tile` (collision is already in the bundle); collision soup excludes `sky` and `Citadel_Skyclip` by default; grid channels are `interior` (u8) and `wallDistance` (f32, saturating at `maxRange`) wired to spatial-core semantics, `floorHeight` built in; cache key in the manifest rather than stage stamps, because bake mutates `manifest.json`; `semanticsVersion` is a source hash until spatial-core exports one.
+
+- 2026-10-06 — M5: navmesh is a second stage of `bake` (default on, `--no-navmesh` to skip) so one command yields all baked data and the manifest keeps one `baked` record; tiled Recast + explicit tile-border stitching rather than a solo mesh, because a solo build of the ~43k x 38k unit map at cell 8 would be a ~25M-column heightfield; agent size defaults are Source-engine values until measured; QA OBJ lives beside the bundle, not in it, so pack-lite never counts or ships it; zipline/jump pad link keys are guesses and flagged.
 
 ## Open questions
 - (see PLAN.md §9, and "Next" item 2 above)

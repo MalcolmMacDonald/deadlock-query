@@ -38,12 +38,19 @@ export const inspectBundle = async (dir: string): Promise<InspectReport> => {
         }
       }
     } else warnings.push("manifest has no collision reference")
-    const baked = manifest.baked as { bvh?: { file: string; bytes: number }; sampleGrid?: { file: string; bytes: number }; placeholder?: boolean; semanticsVersion?: string } | undefined
+    const baked = manifest.baked as { navmesh?: { file: string; bytes: number; polygons?: number; components?: number; largestComponentShare?: number }; bvh?: { file: string; bytes: number }; sampleGrid?: { file: string; bytes: number }; placeholder?: boolean; semanticsVersion?: string } | undefined
     if (baked) {
       for (const [k, f] of [["bvh", baked.bvh], ["sampleGrid", baked.sampleGrid]] as const) {
         if (!f) errors.push(`manifest.baked.${k} missing`)
         else if (!existsSync(join(dir, f.file))) errors.push(`missing baked file ${f.file}`)
         else if (statSync(join(dir, f.file)).size !== f.bytes) errors.push(`baked file ${f.file} size differs from manifest (${statSync(join(dir, f.file)).size} != ${f.bytes}): re-run bake`)
+      }
+      const nav = baked.navmesh
+      if (nav) {
+        const p = join(dir, nav.file)
+        if (!existsSync(p)) errors.push(`missing baked file ${nav.file}`)
+        else if (statSync(p).size !== nav.bytes) errors.push(`baked file ${nav.file} size differs from manifest (${statSync(p).size} != ${nav.bytes}): re-run bake`)
+        info["navmesh"] = { polygons: nav.polygons, components: nav.components, largestComponentShare: nav.largestComponentShare }
       }
       info["baked"] = { semanticsVersion: baked.semanticsVersion, placeholder: baked.placeholder }
       if (baked.placeholder) warnings.push("baked channels were computed with placeholder semantics")

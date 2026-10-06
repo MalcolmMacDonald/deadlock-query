@@ -6,6 +6,7 @@ import { ExportFailed, GameNotFound, ToolMissing } from "./errors.ts"
 import lock from "../tools.lock.json" with { type: "json" }
 import { extract, type Tier } from "./extract.ts"
 import { bakeBundle, DEFAULT_CELL_SIZE, DEFAULT_EXCLUDE_LAYERS } from "./bake.ts"
+import { bakeNavmesh, DEFAULT_NAV_AGENT, DEFAULT_NAV_EXCLUDE_LAYERS, type NavmeshOptions } from "./navmesh.ts"
 import { inspectBundle } from "./inspect.ts"
 import { packLite } from "./packLite.ts"
 import { tileBundle } from "./tiling.ts"
@@ -22,7 +23,9 @@ const USAGE = `dlq-extract <command> [--json] [--game-dir <path>]
   extract    --map <name> [--tier full|lite] [--force] [--out <dir>] [--tri-budget <n>] [--keep-work]   (default map ${lock.game.mainMap}, tier lite, out <repo>/data/bundles)
   inspect    <bundle-dir>   validate manifest/entities against contracts, report sizes and frame sanity
   tile       <bundle-dir> [--lods <n>] [--lod-ratio <r>] [--keep-textures]   lite tier: meshopt-compress tiles, add simplified LODs (<id>#lod<n>), drop textures
-  bake       <bundle-dir> [--cell-size <n>] [--exclude-layers a,b] [--force]   collision BVH + sample grid (floorHeight, interior, wallDistance) into <bundle>/baked, recorded in the manifest (default cell ${DEFAULT_CELL_SIZE}, excludes ${DEFAULT_EXCLUDE_LAYERS.join(",")})
+  bake       <bundle-dir> [--cell-size <n>] [--exclude-layers a,b] [--force]   collision BVH + sample grid (floorHeight, interior, wallDistance) into <bundle>/baked, recorded in the manifest (default cell ${DEFAULT_CELL_SIZE}, excludes ${DEFAULT_EXCLUDE_LAYERS.join(",")}),
+             then the Recast navmesh (baked/navmesh.bin + OBJ in <bundle>.qa/) unless --no-navmesh:
+             [--agent-radius ${DEFAULT_NAV_AGENT.radius}] [--agent-height ${DEFAULT_NAV_AGENT.height}] [--agent-climb ${DEFAULT_NAV_AGENT.climb}] [--agent-slope ${DEFAULT_NAV_AGENT.slopeDegrees}] [--nav-cell-size 8] [--nav-cell-height 4] [--nav-tile-size 128] [--nav-exclude-layers ${DEFAULT_NAV_EXCLUDE_LAYERS.join(",")}] [--qa-dir <dir>|--no-qa]
   pack-lite  <bundle-dir>   validate lite bundle, check for textures, verify budget compliance
 (diff: not implemented yet)`
 
@@ -100,14 +103,37 @@ export const mainAsync = async (argv: ReadonlyArray<string>): Promise<number> =>
     })
     const MB = 1048576
     const b = r.baked
-    emit(r, [...r.errors.map((e) => `✗ ${e}`), ...r.warnings.map((w) => `! ${w}`),
+    let nav: Awaited<ReturnType<typeof bakeNavmesh>> | undefined
+    if (r.ok && !rest.includes("--no-navmesh")) {
+      const num = (n: string) => (flag(rest, n) === undefined ? undefined : Number(flag(rest, n)))
+      const agent = { radius: num("--agent-radius"), height: num("--agent-height"), climb: num("--agent-climb"), slopeDegrees: num("--agent-slope") }
+      const navLayers = flag(rest, "--nav-exclude-layers")
+      const qa = flag(rest, "--qa-dir")
+      const defined = <K extends string>(o: Record<K, number | undefined>) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined)) as { [P in K]?: number }
+      const navOpts: NavmeshOptions = {
+        agent: defined(agent),
+        ...defined({ cellSize: num("--nav-cell-size"), cellHeight: num("--nav-cell-height"), tileSize: num("--nav-tile-size") }),
+        ...(navLayers !== undefined ? { excludeLayers: navLayers.split(",").filter(Boolean) } : {}),
+        ...(rest.includes("--no-qa") ? { qaDir: false as const } : qa !== undefined ? { qaDir: qa } : {}),
+        force: rest.includes("--force"), log: (m) => console.error(m)
+      }
+      nav = await bakeNavmesh(dir, navOpts)
+    }
+    const n = nav?.navmesh
+    const ok = r.ok && (nav?.ok ?? true)
+    emit({ ...r, ...(nav ? { navmeshReport: nav } : {}) }, [...r.errors.map((e) => `✗ ${e}`), ...r.warnings.map((w) => `! ${w}`),
+      ...(nav ? [...nav.errors.map((e) => `✗ navmesh: ${e}`), ...nav.warnings.map((w) => `! navmesh: ${w}`)] : []),
+      ...(n ? [
+        `navmesh: ${n.polygons} polygons, ${n.components} components (largest ${(n.largestComponentShare * 100).toFixed(1)}%), ${n.links.count} links, ${(n.bytes / MB).toFixed(1)} MB${nav?.cached ? " [cached]" : ""}`,
+        ...(nav?.qaFile ? [`navmesh QA export: ${nav.qaFile}`] : [])
+      ] : []),
       ...(b ? [
         `bvh: ${b.bvh.triangles} triangles, ${(b.bvh.bytes / MB).toFixed(1)} MB`,
         `sample grid: ${b.sampleGrid.nx}x${b.sampleGrid.ny} cells of ${b.sampleGrid.cellSize}, channels ${b.sampleGrid.channels.join(", ")}, ${(b.sampleGrid.bytes / MB).toFixed(1)} MB`,
         `semanticsVersion ${b.semanticsVersion}${b.placeholder ? " (placeholder)" : ""}${r.cached ? " [cached]" : ""}`
       ] : []),
-      r.ok ? "bake ok" : "bake failed"].join("\n"))
-    return r.ok ? EXIT.ok : EXIT.problem
+      ok ? "bake ok" : "bake failed"].join("\n"))
+    return ok ? EXIT.ok : EXIT.problem
   }
   if (cmd === "tile") {
     const dir = rest[0]?.startsWith("--") ? undefined : rest[0] // first positional; later args are flags with values
