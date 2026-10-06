@@ -17,13 +17,13 @@ export const LockScreen = ({ login, onUnlocked }: { login: (password: string) =>
   }
 
   return (
-    <main style={{ display: "flex", justifyContent: "center", paddingTop: "20vh" }}>
+    <main className="lock">
       <form onSubmit={submit} data-testid="lock-screen" aria-labelledby="lock-title" style={{ display: "flex", flexDirection: "column", gap: 8, width: "min(320px, 90vw)" }}>
         <h1 id="lock-title" style={{ fontSize: "1.2em", margin: 0 }}>Deadlock Query (dev)</h1>
         <label htmlFor="lock-password">Password</label>
         <input id="lock-password" type="password" autoFocus autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} style={{ font: "inherit" }} />
         <button type="submit" disabled={pending || password === ""} style={{ font: "inherit" }}>{pending ? "Checking…" : "Unlock"}</button>
-        {failed && <p role="alert" style={{ color: "#f88", margin: 0 }}>Wrong password.</p>}
+        {failed && <p role="alert" className="error-text" style={{ margin: 0 }}>Wrong password.</p>}
       </form>
     </main>
   )

@@ -1,6 +1,7 @@
 import type { IDockviewPanelProps } from "dockview"
 import { Component, type ComponentType, type FunctionComponent, type ReactNode, useEffect, useRef } from "react"
 import type { PanelDefinition } from "@deadlock-query/contracts"
+import { notify } from "./toasts.ts"
 
 /** Framework-agnostic panel handle (e.g. map-viewer's `viewer.main`): mount into a container, return dispose. */
 export interface MountHandle {
@@ -11,7 +12,7 @@ const isMountHandle = (c: unknown): c is MountHandle =>
   typeof c === "object" && c !== null && typeof (c as MountHandle).mount === "function"
 
 export const ErrorPanel = ({ moduleId, message }: { moduleId: string; message: string }) => (
-  <div role="alert" data-testid={`error-panel-${moduleId}`} style={{ padding: 12, color: "#f88" }}>
+  <div role="alert" data-testid={`error-panel-${moduleId}`} className="error-text" style={{ padding: 12 }}>
     <h3>Module “{moduleId}” failed</h3>
     <pre style={{ whiteSpace: "pre-wrap" }}>{message}</pre>
   </div>
@@ -21,6 +22,9 @@ class Boundary extends Component<{ moduleId: string; children: ReactNode }, { er
   state: { error?: Error } = {}
   static getDerivedStateFromError(error: Error) {
     return { error }
+  }
+  componentDidCatch(error: Error) {
+    notify("error", `Panel from module “${this.props.moduleId}” crashed: ${error.message}`)
   }
   render() {
     const { error } = this.state
