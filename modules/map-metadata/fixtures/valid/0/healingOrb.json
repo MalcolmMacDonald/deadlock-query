@@ -1,0 +1,28 @@
+{
+  "schemaVersion": "1.0.0",
+  "gameBuildId": "0",
+  "mapName": "mini_map",
+  "records": [
+    {
+      "status": "accepted",
+      "provenance": {
+        "submitter": {
+          "name": "Ada",
+          "github": "ada"
+        },
+        "submissionId": "sub-1",
+        "submittedAt": "2026-10-06T12:00:00Z",
+        "reviewer": "Malcolm",
+        "reviewedAt": "2026-10-06T13:00:00Z"
+      },
+      "id": "orb-1",
+      "kind": "healingOrb",
+      "position": [
+        500,
+        500,
+        20
+      ],
+      "respawnSeconds": 180
+    }
+  ]
+}
