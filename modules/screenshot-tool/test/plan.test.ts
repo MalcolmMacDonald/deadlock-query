@@ -43,6 +43,8 @@ test("grid: bad geometry and runaway sizes are rejected", () => {
   expect(() => gridPlan(meta, { bounds: [0, 0, 100, 100], spacing: 500, z: 0 })).toThrow(/no whole cell/)
   expect(() => gridPlan(meta, { bounds: [100, 0, 0, 100], spacing: 10, z: 0 })).toThrow(PlanError)
   expect(() => gridPlan(meta, { bounds: [0, 0, 100000, 100000], spacing: 100, z: 0 })).toThrow(new RegExp(`max ${MAX_SHOTS}`))
+  // Rejected from the cell count alone: building 1e18 specs first would never finish.
+  expect(() => gridPlan(meta, { bounds: [0, 0, 1e9, 1e9], spacing: 1, z: 0 })).toThrow(new RegExp(`max ${MAX_SHOTS}`))
 })
 
 test("output is deterministic and round-trips through parsePlan", () => {
