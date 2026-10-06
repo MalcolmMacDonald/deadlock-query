@@ -45,6 +45,13 @@
         "playwright-core": "^1.56.1",
       },
     },
+    "modules/query-library": {
+      "name": "@deadlock-query/query-library",
+      "version": "0.0.0",
+      "devDependencies": {
+        "@deadlock-query/contracts": "workspace:*",
+      },
+    },
     "modules/spatial-core": {
       "name": "@deadlock-query/spatial-core",
       "version": "0.0.0",
@@ -65,6 +72,8 @@
     "@deadlock-query/map-extractor": ["@deadlock-query/map-extractor@workspace:modules/map-extractor"],
 
     "@deadlock-query/query-builder": ["@deadlock-query/query-builder@workspace:modules/query-builder"],
+
+    "@deadlock-query/query-library": ["@deadlock-query/query-library@workspace:modules/query-library"],
 
     "@deadlock-query/spatial-core": ["@deadlock-query/spatial-core@workspace:modules/spatial-core"],
 
