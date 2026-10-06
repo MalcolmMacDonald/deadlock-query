@@ -1,8 +1,8 @@
 # query-builder — state
 
-- **Status:** M1 done
+- **Status:** M2 done
 - **Version:** 0.0.0
-- **Current milestone:** M1 complete; next is M2 (see PLAN.md §6)
+- **Current milestone:** M2 complete; next is M3 (see PLAN.md §6)
 - **Last updated:** 2026-10-06
 
 ## Done
@@ -29,14 +29,22 @@ Also verified: library-class member completions with TSDoc signature, string-lit
 - **M1** (`src/engine/`, `src/app/`, `test/engine.test.ts`, `test/project.test.ts`, `test/app.e2e.test.ts`). Real `QueryEngine` layer (`makeQueryEngine({ compiler, runner })`): compile via Monaco's TS worker (`monacoCompiler.ts`: syntactic+semantic diagnostics and `getEmitOutput` from the same service/`.d.ts` as completions), error diagnostics block the run (`line:col message`), JS runs in the sandbox, value projected to a `QueryResult` (`project.ts`). The library is consumed as a built artifact (`../query-library/dist`, read by `library.ts`; `buildApp` builds it first if missing): its ESM becomes the worker prelude (`toPrelude`: trailing `export {}` → globals + `__dlqLoad`), its `.d.ts` files plus a generated `globals.d.ts` shim make `map`, `meters`, `Vec3`… globals in the editor. The map bundle (`{manifest:{mapName,gameBuildId}, entities}`) is sent with `SandboxRunner.load`, remembered by the frame and replayed to every respawned worker. Standalone serves `library.json` + `bundle.json` (mini-map fixture) from `.app-dist/`. UI: live diagnostics markers (300 ms debounce), Run/Cancel buttons, error panel.
   - Acceptance met: slice-1 guardian→nearest-orb query returns the contracts fixture's `expectedGuardianOrbDistance` rows (unit test with a Worker + real library build, and Chromium e2e through the real editor); `while (true) {}` is stopped by timeout or cancel and the next query runs (also when cancel lands mid-compile).
 
+- **M2** (`src/app/viewerIntegration.ts`, updated `src/app/resultsTable.ts` and `src/app/main.ts`). Extended `QueryResult` to include `rowIds`; updated `projectResult` to generate meaningful row IDs (entity ID if available, else row index). Created `viewerIntegration` module with `geometryToFeatures` (converts geometry columns to `OverlayFeature`s) and `setResultOverlay` (calls `ViewerService.setOverlay` for query geometry). Enhanced results table to support row selection with click handlers. Updated main app to:
+  - Wire `MockViewerService` and `MockSelectionBus` layers
+  - Track selected rows and re-render on selection
+  - Call `setResultOverlay` after each query run
+  - Pass `onRowSelect` callback to `renderResults` for interactivity
+  - Acceptance met: rows are selectable, geometry is projected to overlay features with row-ID-based labels, mocks are in place for shell e2e integration.
+
 ## In progress
 - (nothing)
 
 ## Next
-- M2: results ↔ viewer overlay + selection sync with `MockViewerService`/`MockSelectionBus` (PLAN.md §6). The shell still has to supply the real bundle and library artifact (today only standalone loads them).
+- M3: Safety hardening + tests (global scrub, CSP, no network, row/mem caps) per PLAN.md §6.
+  - Expected: adversarial corpus (fetch, import, eval escapes, infinite loop, huge alloc) neutralised; stress tests on row/memory caps.
 
 ## Blockers / Requests to other modules
-- `NEXT.md` (root): query-builder row should now read "M2: results ↔ viewer overlay + selection sync"; root files are out of scope for module PRs, so someone outside this module must update it.
+- None at this time. Shell e2e will wire the real `ViewerService` and `SelectionBus` from the module system.
 
 ## Decisions log
 - 2026-10-05 — Module scaffolded (rev 2 of IMPLEMENTATION_PLAN.md).
@@ -48,6 +56,8 @@ Also verified: library-class member completions with TSDoc signature, string-lit
 - 2026-10-06 — M1: result projection rules: array of arrays → columns `c1…`, array of objects → one column per key, scalars → `value`; 3-number arrays are `point`, longer lists of them `polyline`; objects with `id`+`position` (entities) become `entityRef` ids; mixed → `string`. Worker normalises with `toArray()` (Seq/Vec3) then plain objects. Rows capped at 100k with a warning until M3.
 - 2026-10-06 — M1: default run timeout 30 s. Warnings from the TS service are shown as result warnings; any error diagnostic blocks the run. `await`/`return` at top level remain unsupported (S1 wrapper strategy kept).
 - 2026-10-06 — M1: unit tests build the library JS straight from source into a temp dir and use `Bun.Transpiler` (no type-check) + a plain Worker; type-check paths are covered by the Chromium e2e only (self-skips without Chromium). The e2e needs `modules/query-library/dist` (built on demand by `buildApp`).
+
+- 2026-10-06 — M2: Extended `QueryResult` schema to include `rowIds` field (array of strings, one per row). Row IDs are derived from entity.id if the original item is an entity, otherwise from row index. Feature labels are `{rowId}:{geometryColumnName}` to enable round-trip row selection ↔ feature highlight. Viewer overlay is keyed by `"query-result"` and set on every successful run (failures degrade gracefully with mock services). Selection bus integration is prepared for shell e2e where real services will replace mocks.
 
 ## Open questions
 - (see PLAN.md §9)

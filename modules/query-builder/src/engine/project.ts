@@ -32,6 +32,7 @@ const columnType = (values: ReadonlyArray<unknown>): ColumnType => {
  * Projects the JSON-like value a query returned into a `QueryResult` table.
  * Arrays of arrays → positional columns `c1…`; arrays of objects → one column per key
  * (first-seen order); arrays of scalars and single values → a `value` column.
+ * Row IDs are derived from entityRef cells when present, otherwise from row index.
  */
 export const projectResult = (
   value: unknown,
@@ -48,6 +49,7 @@ export const projectResult = (
 
   let names: string[]
   let rows: unknown[][]
+  let rawItems: unknown[] = list // Keep the original items to extract IDs
   const plainObject = (v: unknown): v is Record<string, unknown> =>
     typeof v === "object" && v !== null && !Array.isArray(v) && !isEntity(v)
   const isTuple = (v: unknown): v is unknown[] => Array.isArray(v) && !isNum3(v) && !(v.length >= 2 && v.every(isNum3))
@@ -68,5 +70,9 @@ export const projectResult = (
 
   const columns = names.map((name, i) => ({ name, type: columnType(rows.map((r) => r[i])) }))
   const cells = rows.map((r) => r.map((v, i) => (columns[i]!.type === "string" && typeof v === "object" && v !== null && !isEntity(v) ? JSON.stringify(v) : cell(v))))
-  return makeResult(columns, cells, { warnings: warns, stats: { rowCount: cells.length, ...stats } })
+
+  // Generate row IDs: use entity ID if the item is an entity, otherwise use row index
+  const rowIds = rawItems.map((item, idx) => isEntity(item) ? item.id : String(idx))
+
+  return makeResult(columns, cells, rowIds, { warnings: warns, stats: { rowCount: cells.length, ...stats } })
 }
