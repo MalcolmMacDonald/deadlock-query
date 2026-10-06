@@ -27,7 +27,8 @@ test("findPath matches the hand-computed corridor route", () => {
   const p = nm.findPath([5, 5, 0], [45, 5, 0], walk)!
   expect(p.polys).toEqual([0, 1, 2, 3, 4])
   expect(p.cost).toBeCloseTo(4) // 40 units at 10 u/s
-  expect(p.points.map((q) => q[0])).toEqual([5, 10, 20, 30, 40, 45])
+  expect(p.points).toEqual([[5, 5, 0], [45, 5, 0]]) // funnel-smoothed: a straight corridor is a straight line
+  expect(nm.findPath([5, 5, 0], [45, 5, 0], walk, { smooth: false })!.points.map((q) => q[0])).toEqual([5, 10, 20, 30, 40, 45])
   expect(nm.withOverrides({ blockedPolys: [2] }).findPath([5, 5, 0], [45, 5, 0], walk)).toBeNull()
 })
 
@@ -109,4 +110,59 @@ test("nearestPoint maxDist, empty meshes and shared index across overrides", () 
   expect(nm.withOverrides({ blockedPolys: [2] }).nearestPoint([25, 5, 30])!.poly).toBe(2) // blocking does not hide polygons from snapping
   const empty = NavMesh.fromPolygons({ vertices: new Float32Array(0), offsets: new Uint32Array([0]), indices: new Uint32Array(0) })
   expect(empty.nearestPoint([0, 0, 0])).toBeNull()
+})
+
+/** Squares of side 10 placed at the given integer cells (x, y); CCW, vertices shared by position. */
+const cells = (at: ReadonlyArray<readonly [number, number]>, flip = false): NavMeshData => {
+  const vid = new Map<string, number>(), vertices: number[] = [], indices: number[] = [], offsets = [0]
+  const v = (x: number, y: number) => {
+    const k = `${x},${y}`
+    if (!vid.has(k)) { vid.set(k, vertices.length / 3); vertices.push(x * 10, y * 10, 0) }
+    return vid.get(k)!
+  }
+  for (const [x, y] of at) {
+    const q = [v(x, y), v(x + 1, y), v(x + 1, y + 1), v(x, y + 1)]
+    indices.push(...(flip ? q.reverse() : q)); offsets.push(indices.length)
+  }
+  return { vertices: new Float32Array(vertices), offsets: new Uint32Array(offsets), indices: new Uint32Array(indices) }
+}
+
+test("funnel bends at the inner corner of an L-shaped corridor, for either winding", () => {
+  for (const flip of [false, true]) {
+    const nm = NavMesh.fromPolygons(cells([[0, 0], [1, 0], [1, 1]], flip))
+    const p = nm.findPath([2, 2, 0], [12, 18, 0], walk)!
+    expect(p.polys).toEqual([0, 1, 2])
+    expect(p.points).toEqual([[2, 2, 0], [10, 10, 0], [12, 18, 0]])
+    expect(nm.findPath([12, 18, 0], [2, 2, 0], walk)!.points).toEqual([[12, 18, 0], [10, 10, 0], [2, 2, 0]])
+  }
+})
+
+test("funnel path routes through a link's end points", () => {
+  const zip = { from: [8, 2, 0] as const, to: [42, 8, 0] as const, kind: "zipline" }
+  const nm = NavMesh.fromPolygons(corridor(5), [zip])
+  const p = nm.findPath([5, 5, 0], [45, 5, 0], { speed: 10, linkSpeeds: { zipline: 40 } })!
+  expect(p.polys).toEqual([0, 4])
+  expect(p.points).toEqual([[5, 5, 0], [8, 2, 0], [42, 8, 0], [45, 5, 0]])
+})
+
+test("smoothed paths are never longer than midpoint paths and stay on the mesh", () => {
+  // 16x16 flat grid with a comb of walls, so shortest paths have to bend around several corners.
+  const open: [number, number][] = []
+  for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) if (!(x % 4 === 2 && y < 12) && !(x === 9 && y > 3)) open.push([x, y])
+  const nm = NavMesh.fromPolygons(cells(open))
+  const len = (pts: readonly (readonly number[])[]) => pts.slice(1).reduce((s, q, i) => s + Math.hypot(q[0]! - pts[i]![0]!, q[1]! - pts[i]![1]!), 0)
+  let seed = 99, bends = 0
+  const rnd = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 2 ** 32)
+  for (let i = 0; i < 60; i++) {
+    const a = nm.nearestPoint([rnd() * 160, rnd() * 160, 0])!.point, b = nm.nearestPoint([rnd() * 160, rnd() * 160, 0])!.point
+    const smooth = nm.findPath(a, b, walk), mid = nm.findPath(a, b, walk, { smooth: false })
+    if (!smooth || !mid) { expect(smooth).toBe(mid); continue }
+    expect(len(smooth.points)).toBeLessThanOrEqual(len(mid.points) + 1e-3)
+    if (smooth.points.length > 2) bends++
+    for (let s = 0; s + 1 < smooth.points.length; s++) for (let t = 0; t <= 10; t++) {
+      const u = smooth.points[s]!, w = smooth.points[s + 1]!, f = t / 10
+      expect(nm.nearestPoint([u[0] + (w[0] - u[0]) * f, u[1] + (w[1] - u[1]) * f, 0])!.distance).toBeLessThan(1e-3)
+    }
+  }
+  expect(bends).toBeGreaterThan(10)
 })
