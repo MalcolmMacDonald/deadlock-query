@@ -1,8 +1,8 @@
 # screenshot-tool — state
 
-- **Status:** M0 to M4 built against the fake console (M4 line of sight needs a real baked bundle); real-game checks pending (Malcolm)
-- **Version:** 0.5.1
-- **Current milestone:** M5 next (see PLAN.md §6)
+- **Status:** M0 to M5 built against the fake console; every milestone's real-game acceptance check is a Malcolm-only step (see Next)
+- **Version:** 0.6.0
+- **Current milestone:** none left to build; waiting on the real-game checks (see PLAN.md §6)
 - **Last updated:** 2026-10-06
 
 ## Done
@@ -24,12 +24,14 @@
 
 - M4 line of sight (`src/occlusion.ts`): `plan from-annotations|from-metadata --bundle <dir>` loads `manifest.baked.bvh` (size and sha256 checked against the manifest) with `spatial-core`'s `Raycaster.deserialize` and passes `Raycaster.occluded` to `standoffPlan` as the `Occlusion`. The sight line ends 32 units above the target (`sightLift`) so a point lying on the floor does not block itself. `--no-los` skips it; a bundle without baked collision, or no `--bundle`, keeps the "lines of sight were not checked" warning. Tested on a synthetic one-wall bundle. `spatial-core` is now in `module.json` `dependsOn` (optional edge, approved as a default by the coordinator; the allowed-edges line in IMPLEMENTATION_PLAN §3 is updated in a separate `[infra]` PR). 54 tests.
 
+- M5 (`src/verify.ts`, `src/setCli.ts`, `src/thumbs.ts`, `README.md`): `verify <set-dir>` checks `index.json` (schema 1.x, contracts `validateScreenshotSet`: unique ids/files, build and map via `--build`/`--map`, read-back poses within tolerance) and per shot the file exists, size, sha256 and pixel size match, paths stay inside the folder; missing thumbnails, unrecorded poses and stray files are warnings. Exit 2 on any error, `--json` for machines. `thumbs <set-dir> [--size] [--force]` makes JPEG thumbnails (`thumbs/<id>.jpg`, longer edge 320, area-averaged) and records them in `index.json`; `shoot` writes them as it goes (`--no-thumbnails` skips). New dependencies `jpeg-js` and `pngjs` (pure JS, no native build) decode PNG/JPEG. README with the safe-use warning, quick start, commands, exit codes and output layout. 63 tests.
+
 ## In progress
 - (nothing)
 
 ## Next
 - **Malcolm-only, needs the game:** M0 acceptance and spike S3. Start Deadlock offline with `-netconport 2121` (the launch options in `doctor` are guesses), then `bun run dlq-shoot doctor --game-dir <Deadlock install>` and `bun run dlq-shoot console "echo hi"`. Record in this file: which transport works (NetConPort vs RCON), exact launch options, whether `setpos`/`setang`/`getpos`/`screenshot`/`noclip`/`cl_drawhud` exist and are cheat-gated, the real screenshot folder, and whether the reply framing matches `netConSend`. If the game uses RCON instead, add a `SourceRcon` layer next to `NetConPort`.
-- M5: `verify <set-dir>` (files exist, sha256/bytes match, poses within tolerance, build id matches), thumbnails, README with the safe-use warning. All doable against the fake; `verify` flagging tampered/missing images can be tested with fake sets. Thumbnails need an image resizer (PNG/JPEG decode); pick a small dependency or a Bun-native approach when starting M5.
+- (no build work left in PLAN.md §6; `launch` from the §3 command table is not implemented: it only needs the confirmed launch options from S3, then it is a few lines that start Steam with them.)
 - M4 line of sight on the real map, needs real data: the real baked BVH holds only clip volumes today (see map-extractor STATE.md "Collision finding"), so lines of sight against it are not trustworthy until walkable collision exists. Try `plan from-annotations ... --bundle data/bundles/dl_midtown` after that and eyeball the shots.
 - **Malcolm-only, M3 acceptance:** kill the game mid-run, restart it with the same launch options and re-run with `--resume`; it should finish the set. Check that the `deadlock` process name used by crash detection matches Task Manager (`doctor` uses the same list).
 - **Malcolm-only, M2 acceptance (20-shot real run):** besides the M0 steps, check and record: the real `getpos` reply (the parser accepts `setpos x y z;setang p y r`, the `_exact` variants and extra lines; if it fails, shots are taken with a warning and no `actual` pose), whether `fov_desired` and `cl_drawhud` exist (setup fails loudly on "Unknown command", fix the list in `sessionSetup`), the screenshot folder and file format (PNG/JPEG only; TGA etc. fail with `image`), the settle time needed after `setpos` (default 500 ms; PLAN's double-capture hash-stability check is not built yet), and whether the game's resolution matches the plan (a mismatch is a warning). Run: `bun run dlq-shoot plan ring --map dl_midtown --build <id> --at x,y,z`, then `shoot plan.json --offline --game-dir <install>`.
@@ -49,6 +51,7 @@
 - 2026-10-06 — M3: retries only cover failures a second attempt can plausibly fix; everything else stops the run so a wrong setup is not repeated 3x per shot. `--resume` refuses a plan whose poses differ from the recorded ones instead of silently mixing sets. `--resume` and `--force` are mutually exclusive.
 - 2026-10-06 — M4: shots from these generators use `lookAt` (not angles), so the plan states what the picture is of. Standoff bearings start on +X and go counter-clockwise; ids are `<target>-s<k>` with the target id made filesystem safe. Polylines/polygons are skipped rather than guessed (a centroid can be inside a wall).
 - 2026-10-06 — M4 line of sight: `spatial-core` added to `dependsOn` as an optional dependency (coordinator default; Malcolm not asked, easy to revert by deleting `src/occlusion.ts` and the dependency). The check runs only when `--bundle` points at a baked bundle.
+- 2026-10-06 — M5: thumbnails use `jpeg-js` and `pngjs` (pure JS, widely used) rather than a native image library, so `bun install` stays portable on Windows; decoding a 1920x1080 JPEG takes a few hundred ms, fine for a CLI. `verify` treats a missing thumbnail as a warning (it is derived data) and a changed image as an error. A `verify` of a `--fake` set always passes with a "placeholder set" note.
 
 ## Open questions
 - (see PLAN.md §9; transport, command availability and screenshot folder await S3)

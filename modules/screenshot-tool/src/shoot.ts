@@ -7,6 +7,7 @@ import pkg from "../package.json" with { type: "json" }
 import { GameConsole } from "./console.ts"
 import type { ConsoleError } from "./errors.ts"
 import { imageSize } from "./image.ts"
+import { DEFAULT_THUMB_EDGE, makeThumbnail, thumbFile } from "./thumbs.ts"
 import { shotAngles, type ShotPlan, type ShotSpec } from "./plan.ts"
 
 export class ShootError extends Data.TaggedError("ShootError")<{
@@ -38,6 +39,10 @@ export interface ShootOptions {
   readonly angleTolerance?: number
   /** Commands sent once before the first shot. Defaults to `sessionSetup(plan)`; pass `[]` to skip. */
   readonly setup?: ReadonlyArray<string>
+  /** Write a JPEG thumbnail per shot to `<outDir>/thumbs/<id>.jpg` (default true). A thumbnail that cannot be made is a warning, not a failure. */
+  readonly thumbnails?: boolean
+  /** Longer edge of the thumbnails in pixels (default 320). */
+  readonly thumbnailEdge?: number
   /** Replace an existing run in `outDir` instead of refusing. */
   readonly force?: boolean
   /** Continue the run in `outDir`: shots already in `index.jsonl` are kept and skipped. */
@@ -303,13 +308,26 @@ const shootOne = (
       emit({ _tag: "warning", shotId: spec.id, message: `image is ${size.width}x${size.height}, the plan asked for ${plan.resolution.width}x${plan.resolution.height}` })
     }
 
+    let thumbnail: string | undefined
+    if (o.thumbnails !== false) {
+      const thumb = makeThumbnail(bytes, o.thumbnailEdge ?? DEFAULT_THUMB_EDGE)
+      if (thumb === undefined) emit({ _tag: "warning", shotId: spec.id, message: "could not make a thumbnail (image not decodable)" })
+      else {
+        thumbnail = thumbFile(spec.id)
+        yield* Effect.try({
+          try: () => { mkdirSync(join(o.outDir, "thumbs"), { recursive: true }); writeFileSync(join(o.outDir, thumbnail!), thumb) },
+          catch: (e) => new ShootError({ kind: "output", shotId: spec.id, detail: `cannot write the thumbnail: ${(e as Error).message}`, remediation: "check the folder is writable" })
+        })
+      }
+    }
+
     const shot: Shot = {
       id: spec.id,
       ...(spec.group !== undefined ? { group: spec.group } : {}),
       requested: { position: spec.position, angles },
       ...(actual !== undefined ? { actual } : {}),
       ...(spec.lookAt !== undefined ? { lookAt: spec.lookAt } : {}),
-      file, bytes: bytes.length, sha256: sha256(bytes), width: size.width, height: size.height,
+      file, ...(thumbnail !== undefined ? { thumbnail } : {}), bytes: bytes.length, sha256: sha256(bytes), width: size.width, height: size.height,
       capturedAt: new Date().toISOString()
     }
     yield* Effect.try({

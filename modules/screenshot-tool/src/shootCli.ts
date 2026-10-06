@@ -19,6 +19,7 @@ export const SHOOT_USAGE = `dlq-shoot shoot <plan.json> [options]   run a plan a
   --screenshot-dir <dir>    folder the game writes screenshots to (or --game-dir <Deadlock install>, or DEADLOCK_DIR)
   --out <dir>               output folder (default <repo>/data/screenshots/<gameBuildId>)
   --build <gameBuildId>     overrides the plan's gameBuildId
+  --no-thumbnails           skip the JPEG thumbnails (thumbs/<id>.jpg)
   --force                   replace an existing run in the output folder
   --resume                  continue the run in the output folder: shots already taken are kept (use after a crash or Ctrl-C)
   --json                    print progress as one JSON event per line on stdout instead of text on stderr
@@ -38,7 +39,7 @@ export const shootMain = async (argv: ReadonlyArray<string>, env: Record<string,
       args: [...argv],
       allowPositionals: true,
       options: {
-        offline: { type: "boolean" }, fake: { type: "boolean" }, force: { type: "boolean" }, resume: { type: "boolean" }, json: { type: "boolean" },
+        offline: { type: "boolean" }, fake: { type: "boolean" }, force: { type: "boolean" }, resume: { type: "boolean" }, "no-thumbnails": { type: "boolean" }, json: { type: "boolean" },
         "screenshot-dir": { type: "string" }, "game-dir": { type: "string" }, out: { type: "string" }, build: { type: "string" },
         "settle-ms": { type: "string" }, "timeout-ms": { type: "string" }, attempts: { type: "string" }, "retry-delay-ms": { type: "string" }, host: { type: "string" }, port: { type: "string" }
       }
@@ -82,7 +83,7 @@ export const shootMain = async (argv: ReadonlyArray<string>, env: Record<string,
       screenshotDir, gameBuildId,
       settleMs: int(values["settle-ms"], fake ? 0 : 500, "settle-ms"),
       pickupTimeoutMs: int(values["timeout-ms"], 10_000, "timeout-ms"),
-      force: values.force === true, resume: values.resume === true, placeholder: fake, onProgress,
+      thumbnails: values["no-thumbnails"] !== true, force: values.force === true, resume: values.resume === true, placeholder: fake, onProgress,
       attempts: int(values.attempts, 3, "attempts"), retryDelayMs: int(values["retry-delay-ms"], 1000, "retry-delay-ms"),
       ...(fake ? {} : { gameRunning: () => gameRunning() })
     }).pipe(Effect.provide(layer), Effect.result))
