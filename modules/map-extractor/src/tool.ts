@@ -34,7 +34,7 @@ export const findTool = (env?: Record<string, string | undefined>, run: (path: s
     })
   }
   const version = parseVersion(run(path))
-  return { path, version, pinnedVersion: pinned.version, matchesPin: version === pinned.version }
+  return { path, version, pinnedVersion: pinned.version, matchesPin: version !== undefined && (version === pinned.version || version.startsWith(`${pinned.version}.`)) }
 }
 
 function defaultRun(path: string): string {

@@ -1,8 +1,8 @@
 # map-extractor — state
 
 - **Status:** S2 spike complete — **GO** (render, collision, entities, nav all obtainable)
-- **Version:** 0.0.0
-- **Current milestone:** M0 code done (unit-tested; not yet run on the dev machine); next is M1
+- **Version:** 0.1.0
+- **Current milestone:** M1 code done (unit-tested with a fake S2V runner); real-install run pending
 - **Last updated:** 2026-10-05
 
 ## Done
@@ -110,8 +110,18 @@ Other (bulk, likely out of scope): `light_omni2` 1,968, `light_barn` 755, `citad
   - **Not verified on a real install:** the `Source2Viewer-CLI --version` output format (`parseVersion` takes the first `N.N` found) and `doctor` on Malcolm's machine. Run `bun run dlq-extract doctor` there; the tool is found via `S2V_CLI` or `~/tools/s2v`.
   - **Deferred:** `doctor --fix` / tool download with sha check (lock file has url+sha; `sha256File` exists, download not wired).
 
+- **M1 code** (2026-10-06): `dlq-extract extract --map <m> [--tier full|lite] [--force] [--out dir]` and `inspect <bundle-dir>`. Stages (entities, collision, render for `full`) are cached by `(buildId, stage, s2vVersion, extractorVersion, map)` stamps; `S2VRunner` is injectable (tests use a fake). `vents.ts` parses the text lump, `entityKinds.ts` maps classes to contracts `kind` (guardian = `info_super_trooper_spawn` + `boss_*_t1_*`; healingOrb = pickup spawner with `citadel_pickup_floating_health`). `fileGlbToWorld` = inverse of the common node matrix per file (undoes the loader-applied 0.0254 swap so positions land in Source units); `inspect` warns if collision bounds after `glbToWorld` do not overlap entity bounds.
+  - Tests: 13 unit tests, incl. extract+inspect+cache against the contracts mini-map GLB.
+
+## M1 real-run findings (2026-10-05, PR #32, this machine, build 25712201)
+- `doctor`: passes after a fix. The CLI reports `20.0.6980+<sha>` and the pin was `20.0`, so `matchesPin` failed; it now accepts `20.0.x`.
+- **lite extract** of dl_midtown: 6 s. Bundle is 36 MB on disk (8.7 MB `entities.json`, 6.9 MB `collision/physics.glb`, 21 MB `.work` scratch that can be deleted). `inspect` passes: 6,075 entities (369 with a mapped kind), collision bounds in Source units X -17356..25600, Y -16384..21344, Z -1620..13824 overlap entity bounds.
+- **full extract: failed here, out of disk.** The `n0.gltf` export writes 3 bins (about 1.07 + 1.07 + 0.75 GB) and died with `IOException: not enough space` on the second bin; C: had only 7-9 GB free and shrinking. Nothing was published or uploaded. Rerun on a drive with 15+ GB free (S2 measured ~7 min and ~6 GB RAM). The CLI surfaces this as `export failed at render: expected output missing`; the real cause (the first `Exception` line) should be shown instead (follow-up).
+- **Frame question settled (physics vs render): same frame.** Physics nodes carry a 0.0254 scale + axis permutation matrix: loaded = (y, z, x) * 0.0254, i.e. metres, glTF Y-up. A render aggregate (`n0_lr0_agg_merge_hideout_vertex_color_3.vmdl_c`, 179 MB glb, 1.10 M tris) has an identity node matrix and raw extents of about +/-290 m, which is metres. Physics loaded bounds [-416,-41,-441]..[542,351,650] sit inside the earlier n0 render bounds [-512,-92,-904]..[799,367,837]. So render is in the same metres/Y-up frame but with identity node matrices. Bug fixed: `extract` previously gave render `glbToWorld` = identity (wrongly "Source units"); it now reuses the physics file's matrix.
+- Open: hull completeness (b), per-entity volume models (c), triangle cut for `lite` (d) are unchanged.
+
 ## In progress
-- (nothing)
+- Real-install run on the dev machine (see "Next" 1).
 
 ## Next
 1. Run `doctor` on the dev machine and fix `parseVersion` if needed; optionally wire `doctor --fix` download.
@@ -119,7 +129,8 @@ Other (bulk, likely out of scope): `light_omni2` 1,968, `light_barn` 755, `citad
 3. Check `dl_hideout` / `new_player_basics` only if the owner wants them (not in Slice 1).
 
 ## Blockers / Requests to other modules
-- (none)
+- root: add `data/` to `.gitignore` (bundles are written to `data/bundles/`; not ignored today).
+- contracts: `Tile` has a single `file`; the render export is `n0.gltf` + 3 `.bin` (>1 GB each). Tile `bytes` currently sums the bins and `sha256` covers the `.gltf` only. Consider `Tile.files[]` or a size-limit/tiling note (M3).
 
 ## Decisions log
 - 2026-10-05 — Module scaffolded (rev 2 of IMPLEMENTATION_PLAN.md).
@@ -127,6 +138,8 @@ Other (bulk, likely out of scope): `light_omni2` 1,968, `light_barn` 755, `citad
 - 2026-10-05 — S2: main map is `dl_midtown` (not `dl_*` generic); Source2Viewer-CLI 20.0 pinned as the first tested version; render export must be `.gltf` (+bins), not `.glb`, because of the 2 GiB limit.
 
 - 2026-10-05 — M0: no `@effect/cli` yet (two commands); hand-rolled parser, swap when `extract` flags grow. Tool path via `S2V_CLI` or `~/tools/s2v`.
+
+- 2026-10-06 — M1: lite tier omits render geometry for now (collision + entities only) rather than guess a decimation; full tier exports `n0.vwnod_c` as `.gltf`. Hand-rolled argv kept.
 
 ## Open questions
 - (see PLAN.md §9, and "Next" item 2 above)
