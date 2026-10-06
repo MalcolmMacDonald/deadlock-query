@@ -1,8 +1,8 @@
 # map-viewer — state
 
-- **Status:** M6 entity layers done (fixture); screenshot markers wait on contracts; M5 viewer side done (the `ViewerService` tag still lacks `registerTool`, contracts request below); M4 done; real-hardware perf checks pending
-- **Version:** 0.9.0
-- **Current milestone:** M6 (screenshot markers pending contracts)
+- **Status:** M6 done (entity layers, screenshot markers and popups); M5 done (`registerTool` is on the `ViewerService` layer); M4 done; real-hardware perf checks pending
+- **Version:** 0.10.0
+- **Current milestone:** M7 (SDF labels, performance pass)
 - **Last updated:** 2026-10-06
 
 ## Done
@@ -32,6 +32,8 @@
 
 - 2026-10-06 — M6 (entity layers, fixture part): entities are overlay layers, not scene spheres. `src/entities.ts` (`entityLayers`: one layer per `EntityKind` present with its own colour and size, `entities.other` for entities without a kind, which is hidden by default because a real map has ~5.7k of those; labels (`Guardian (team 2, lane 1)`) only on the sparse kinds: guardian, walker, patron, barracks, baseSentry, shop, capturePoint, powerup, spawn). `ViewerController.setEntities(entities)` registers them (the panel calls it with the map's entities on mount and after `loadBundle`; layers the new map lacks are removed, a layer the user already toggled keeps its state), so each kind gets a visible/colour/opacity/order row in the Layers panel (labelled `Guardians (6)`), is picked and hovered like any overlay, and `controller.entityForFeature(featureId)` turns a `pick`/`hover` id back into the `Entity`. Label declutter now ranks by layer order (the layer drawn on top keeps its label), so an annotation or query label beats an entity name. Tests: bun unit (`test/entities.test.ts`: the contracts fixture yields a layer per kind) and e2e (a layer row per kind, guardians drawn and toggled, `other` starts hidden). Screenshot markers/popups are still to do (contracts `ScreenshotSet` is M4 there).
 
+- 2026-10-06 — M5 (service side) and M6 (screenshots): `makeViewerService` now implements the contracts' optional `registerTool` (`Effect.sync` over `ViewerController.registerTool`; a duplicate or built-in id is a defect, the effect's value unregisters), and `ExternalTool` / `ToolContext` are the contracts' types (the viewer's own copies are gone; `src/tools.ts` re-exports them). The parity test now compares the real service with `makeMockViewerServiceWithTools()`. Screenshot markers: `src/screenshots.ts` (`screenshotLayers`: overlay layer `screenshots` = one point per shot at its read-back pose (else the requested one), `screenshots.view` = a frustum glyph per shot, a far rectangle plus four edges, sized from the set's `fov` and the image aspect, 150 world units long, so it shows once you zoom in; `viewAxes` turns Source angles (pitch down positive, yaw CCW from +X) into camera axes; `parseScreenshotSet` = schema + major 1 + `validateScreenshotSet`, a set for another map/build or with duplicate ids/files is rejected, read-back poses off by more than the tolerance are kept and returned as warnings; placeholder sets draw grey). `ViewerController`: `setScreenshots({ set, imageUrl })`, `loadScreenshots(indexUrl)` (fetch + parse against the loaded map/build, images resolve beside the index), `shotForFeature`, `selectedShot` / `selectShot` / `onShotChange`, `lookThroughShot` (camera to the shot's pose); clicking a marker or cone (`selectFeature`) selects the shot. `src/shotPopup.ts`: a popup over the canvas with the thumbnail (falls back to the full file; click opens the full image in a tab), size and pose, a drift warning, a placeholder note, "Look through this shot" and Close. `ViewerData.screenshots` shows a set on mount; `ViewerData.screenshotsUrl` makes `loadBundle` fetch a set (relative to the manifest) and clear the old one when the map changes; nothing is fetched by default. Tests: bun unit (`test/screenshots.test.ts`: axes, glyph geometry, layers and id mapping, parsing, controller flow, `loadScreenshots` with a stubbed fetch, `registerTool` through the service) and e2e (click a marker, popup shows the image, look-through moves the camera, close).
+
 ## In progress
 - (nothing)
 
@@ -39,14 +41,15 @@
 - M1 leftover (needs Malcolm's machine): open the real single-tile bundle and confirm >= 30 fps; the viewer loads any manifest via `MapDataService`, so no code change expected.
 - Real-bundle check (Malcolm's machine): load the published dl_midtown bundle (126 tile files, LOD0 + `#lod1`, meshopt) and confirm tiles stream, `data-tile-bytes` stays under the budget, and fps. Only the unit/e2e synthetic map was exercised here; the real tiles use EXT_meshopt_compression + KHR_mesh_quantization, which `decodeTileGlb` handles through GLTFLoader but is only covered by plain float GLBs in tests.
 - Tile fetches are not cancelled when the camera moves on (the tile still lands in the cache, and is evicted first when it is not wanted); fine for LAN-sized tiles, revisit with an `AbortSignal` if bandwidth matters. No tile prefetch ahead of the camera or cross-fade between LODs yet.
-- SDF/outlined labels with collision avoidance are M7; M3 labels are plain canvas sprites (overlap when crowded).
+- SDF/outlined labels are M7; labels are plain canvas sprites with per-frame declutter.
+- Screenshots: where the shell publishes a set (`data/screenshots/<gameBuildId>/index.json`) is undecided, so `loadBundle` only fetches one when `ViewerData.screenshotsUrl` is set; once the publish path is fixed, point the shell at it. Check on the real map with a real `dlq-shoot` set (poses, cone size, thumbnails).
 - No UI to rename or delete a document layer yet (deleting would need undo to restore it).
 - Real-bundle check (Malcolm's machine): load a baked bundle and confirm `canvas.dataset.picker === "baked"` and that clicks land on the collision surface; the e2e only covers the mesh-built BVH because the fixture is not baked.
 - M2 leftover: confirm 10k points at 60 fps on real hardware (software GL in CI measures ~15 fps for the whole scene, informational only).
 
 ## Blockers / Requests to other modules
 - Map-extractor: write `lod` / `lodOf` on LOD tiles (the viewer already reads them; the `#lod<n>` ids keep working).
-- Contracts: add `registerTool` (and optional `captureImage` options `{ scale, transparent }`) to the `ViewerService` tag so map-metadata can reach them through the service layer; until then they are on `ViewerController` (`registerTool`, `capture(opts)`), which the shell shares. Suggested shape: `registerTool(tool: ExternalTool): Effect<() => void>`; `ExternalTool`/`ToolContext` are exported from `modules/map-viewer/src/tools.ts` and could move to contracts as plain types.
+- Contracts: `registerTool` is on the tag now and the viewer implements it, so it can become required in the next bump. Still open: optional `captureImage` options `{ scale, transparent }` (the viewer has them on `ViewerController.capture(opts)`, which the shell shares).
 - Shell: `loadViewerData(MockMapDataService)` still hands the viewer every tile eagerly, which is right for the fixture; the published bundle goes through `loadBundle(url)` and now streams, so no shell change is needed.
 - Spatial-core: expose triangle vertices (e.g. `Raycaster.triangle(triIndex)`); vertex snapping reads them from the serialized BVH layout (`bakedTriangles` in `src/picking.ts`, guarded by `test/picking.test.ts`), which would break silently if `serialize()` changed.
 - Contracts: `MapDataService` has no accessor for baked data, so the shell's `loadViewerData(MockMapDataService)` path cannot hand the baked BVH to the viewer; it only arrives through `loadBundle(url)` (which the shell calls for the published bundle). A `bakedBytes(name)` accessor would fix that.

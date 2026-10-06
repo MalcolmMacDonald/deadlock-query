@@ -1,8 +1,11 @@
 import { Effect, Layer, PubSub, Stream } from "effect"
 import {
-  ViewerService, type Entity, type OverlayFeature, type OverlayStyle, type Vec3, type ViewerEvent
+  ViewerService, type Entity, type OverlayFeature, type OverlayStyle, type Shot, type Vec3, type ViewerEvent
 } from "@deadlock-query/contracts"
 import { entityLayers } from "./entities.ts"
+import {
+  parseScreenshotSet, screenshotLayers, shotIndexForFeature, shotPose, viewAxes, SHOT_LAYER, SHOT_VIEW_LAYER, type ScreenshotSource
+} from "./screenshots.ts"
 import { eyeOf, poseFromEye, type CameraPose } from "./camera.ts"
 import {
   AnnotationStore, annotationIdForFeature, annotationLayers, featureIdForAnnotation, isHidden, isLocked, type Annotation
@@ -216,6 +219,71 @@ export class ViewerController {
     return i < 0 ? undefined : this.entityByLayer.get(featureId.slice(0, i))?.[Number(featureId.slice(i + 1))]
   }
 
+  private shots: ScreenshotSource | undefined
+  private selectedShotId: string | undefined
+  private readonly shotListeners = new Set<() => void>()
+
+  /** The map's screenshot set (markers and view cones are overlay layers `screenshots` / `screenshots.view`). */
+  get screenshots(): ScreenshotSource | undefined { return this.shots }
+
+  /** Shows a screenshot set on the map, replacing the previous one; `undefined` removes it. */
+  setScreenshots(source: ScreenshotSource | undefined) {
+    this.shots = source
+    if (!source) {
+      this.removeOverlay(SHOT_LAYER)
+      this.removeOverlay(SHOT_VIEW_LAYER)
+    } else {
+      const { markers, view } = screenshotLayers(source.set)
+      this.setOverlay(markers.id, markers.features, markers.style, markers.label)
+      this.setOverlay(view.id, view.features, view.style, view.label)
+    }
+    if (this.selectedShotId !== undefined && !source?.set.shots.some((s) => s.id === this.selectedShotId)) this.selectedShotId = undefined
+    for (const fn of this.shotListeners) fn()
+  }
+
+  /**
+   * Fetches and shows a screenshot set from its `index.json` (images resolve relative to it). The set must match the
+   * loaded map and game build when those are known. Rejects with the reason when the file is unusable; resolves to
+   * the warnings otherwise.
+   */
+  async loadScreenshots(indexUrl: string): Promise<ReadonlyArray<string>> {
+    const url = new URL(indexUrl, globalThis.location?.href)
+    const res = await fetch(url)
+    if (!res.ok) throw new Error(`${url.pathname}: HTTP ${res.status}`)
+    const parsed = parseScreenshotSet(await res.text(), this.map)
+    if (!parsed.ok) throw new Error(parsed.error)
+    this.setScreenshots({ set: parsed.set, imageUrl: (file) => new URL(file, url).href })
+    return parsed.warnings
+  }
+
+  /** Shot behind an overlay feature id (`screenshots:3`), from a `pick` / `hover` event. */
+  shotForFeature(featureId: string): Shot | undefined {
+    const i = shotIndexForFeature(featureId)
+    return i === undefined ? undefined : this.shots?.set.shots[i]
+  }
+
+  get selectedShot(): Shot | undefined { return this.shots?.set.shots.find((s) => s.id === this.selectedShotId) }
+
+  /** Opens a shot's image popup (`undefined` closes it). */
+  selectShot(id: string | undefined) {
+    if (id === this.selectedShotId) return
+    this.selectedShotId = id
+    for (const fn of this.shotListeners) fn()
+  }
+
+  /** Called when the set or the selected shot changes. */
+  onShotChange(fn: () => void): () => void {
+    this.shotListeners.add(fn)
+    return () => { this.shotListeners.delete(fn) }
+  }
+
+  /** Moves the camera to where the shot was taken, looking the way it looked. */
+  lookThroughShot(shot: Shot, distance = 200) {
+    const pose = shotPose(shot)
+    const { forward } = viewAxes(pose.angles)
+    this.setPose(poseFromEye(pose.position, [0, 1, 2].map((i) => pose.position[i]! + forward[i]! * distance) as unknown as Vec3))
+  }
+
   get selectedAnnotation(): string | undefined { return this.selectedIds[this.selectedIds.length - 1] }
 
   /** Every selected annotation id, in selection order. */
@@ -263,6 +331,8 @@ export class ViewerController {
 
   /** Selects the annotation under an overlay feature id (`additive`: toggle it in the selection); other layers' ids are ignored. */
   selectFeature(featureId: string, additive = false) {
+    const shot = this.shotForFeature(featureId)
+    if (shot) { this.selectShot(shot.id); return }
     const id = annotationIdForFeature(this.annotations.annotations, featureId, this.annotations.layers)
     if (!id) return
     if (additive) this.toggleAnnotation(id)
@@ -394,5 +464,6 @@ export const makeViewerService = (c: ViewerController): Layer.Layer<ViewerServic
     removeOverlay: (id) => Effect.sync(() => c.removeOverlay(id)),
     highlight: (ids) => Effect.sync(() => c.highlight(ids)),
     events: c.events,
-    captureImage: Effect.tryPromise({ try: () => c.capture(), catch: (e) => e instanceof Error ? e : new Error(String(e)) })
+    captureImage: Effect.tryPromise({ try: () => c.capture(), catch: (e) => e instanceof Error ? e : new Error(String(e)) }),
+    registerTool: (tool) => Effect.sync(() => c.registerTool(tool))
   })

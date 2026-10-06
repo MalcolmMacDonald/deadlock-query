@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import { Effect, Fiber, Layer, Stream } from "effect"
-import { MockViewerService, ViewerService, type OverlayFeature, type Vec3 } from "@deadlock-query/contracts"
+import { MockViewerService, makeMockViewerServiceWithTools, ViewerService, type OverlayFeature, type Vec3 } from "@deadlock-query/contracts"
 import {
   OverlayScene, ViewerController, featureId, makeViewerService, normalizeFeatures, parseFeatureId, pickFeature,
   type OverlayLayerData, type Project
@@ -87,7 +87,7 @@ test("ViewerService: unmounted capture/loadBundle fail with a clear error", asyn
 
 test("parity with MockViewerService: same members, and mutating calls succeed on both", async () => {
   const keys = (layer: Layer.Layer<ViewerService>) => Effect.runPromise(Effect.gen(function* () { return Object.keys(yield* ViewerService).sort() }).pipe(Effect.provide(layer)))
-  expect(await keys(makeViewerService(new ViewerController()))).toEqual(await keys(MockViewerService))
+  expect(await keys(makeViewerService(new ViewerController()))).toEqual(await keys(makeMockViewerServiceWithTools().layer))
   for (const layer of [makeViewerService(new ViewerController()), MockViewerService] as const) {
     await Effect.runPromise(Effect.gen(function* () {
       const v = yield* ViewerService

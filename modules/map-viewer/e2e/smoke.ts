@@ -371,6 +371,38 @@ try {
   })
   await page.evaluate(() => (globalThis as any).__viewer.setEntities([])) // entity name plates would skew the dark-pixel count
   await settle()
+  // M6: screenshot markers: click one, see its image in the popup, look through it, close it.
+  await page.evaluate(() => {
+    const v = (globalThis as any).__viewer
+    v.setPose({ target: [0, 0, 0], yaw: Math.PI / 2, pitch: -1.55, distance: 9000 })
+    const c = document.createElement("canvas"); c.width = 16; c.height = 9
+    const g = c.getContext("2d")!; g.fillStyle = "#3a7"; g.fillRect(0, 0, 16, 9)
+    const url = c.toDataURL("image/png")
+    const shot = { id: "s1", group: "mid", requested: { position: [0, 0, 100], angles: [10, 90, 0] }, file: "s1.png", bytes: 1, sha256: "0".repeat(64), width: 1600, height: 900, capturedAt: "2026-10-06T12:00:00Z" }
+    v.setScreenshots({ set: { schemaVersion: "1.0.0", gameBuildId: "b", mapName: "m", fov: 90, hideHud: true, shots: [shot] }, imageUrl: () => url })
+  })
+  await settle()
+  const popup = page.locator('[data-testid="viewer-shot-popup"]')
+  if (await popup.isVisible()) fail("shot popup should start closed")
+  if (!(await page.locator('[data-testid="viewer-layers"] [data-layer="screenshots"]').textContent())?.includes("Screenshots (1)")) fail("screenshots layer row")
+  const box = (await page.locator('[data-testid="viewer-canvas"]').boundingBox())!
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2)
+  await popup.waitFor({ state: "visible", timeout: 3000 }).catch(() => fail("clicking a screenshot marker did not open the popup"))
+  if (!(await popup.locator('[data-testid="shot-title"]').textContent())?.includes("s1")) fail("popup title")
+  await page.waitForFunction(() => (document.querySelector('[data-testid="shot-image"]') as HTMLImageElement | null)?.naturalWidth === 16, null, { timeout: 3000 }).catch(() => fail("popup image did not load"))
+  // The harness's fixed side panels sit over the popup, so click through the DOM.
+  await popup.locator('[data-testid="shot-look"]').evaluate((b) => (b as HTMLButtonElement).click())
+  const look = await page.evaluate(() => (globalThis as any).__viewer.getPose())
+  if (Math.abs(look.distance - 200) > 1 || Math.abs(look.target[1] - 197) > 5) fail(`look through shot: ${JSON.stringify(look)}`)
+  await popup.locator('[data-testid="shot-close"]').evaluate((b) => (b as HTMLButtonElement).click())
+  if (await popup.isVisible()) fail("shot popup did not close")
+  await page.evaluate(() => {
+    const v = (globalThis as any).__viewer
+    v.setScreenshots(undefined)
+    v.setPose({ target: [0, 0, 0], yaw: Math.PI / 2, pitch: -1.55, distance: 9000 })
+  })
+  if (await page.locator('[data-testid="viewer-layers"] [data-layer="screenshots"]').count()) fail("screenshots layer should be gone")
+  await settle()
   const cyanBefore = await cyan()
   await page.evaluate(() => (globalThis as any).__viewer.annotations.add({ kind: "label", points: [[0, 0, 0]], text: "Mid lane ambush" }))
   await settle()
