@@ -6,13 +6,15 @@ import { doctor } from "./doctor.ts"
 import { EXIT } from "./errors.ts"
 import { makeFakeGame } from "./fake.ts"
 import { planMain } from "./planCli.ts"
+import { shootMain } from "./shootCli.ts"
 
 const USAGE = `dlq-shoot <command> [--json] [--fake] [--host <h>] [--port <n>]
   doctor     [--game-dir <dir>] [--screenshot-dir <dir>]   check the game process, console and screenshot folder; print launch options
   console    ["<command>"]   send one console command and print the reply (no argument: read commands from stdin)
   --fake     use the in-memory fake console instead of the game (tests, CI, dry runs)
 plan       grid | ring | from-file   make or validate a shot plan (run dlq-shoot plan for options)
-(shoot, launch, verify: not implemented yet; port defaults to ${DEFAULT_NETCON.port}, set it with --port or DLQ_CONSOLE_PORT)`
+shoot      <plan.json>   run a plan against the game (run dlq-shoot shoot for options)
+(launch, verify: not implemented yet; port defaults to ${DEFAULT_NETCON.port}, set it with --port or DLQ_CONSOLE_PORT)`
 
 const flag = (a: ReadonlyArray<string>, name: string): string | undefined => {
   const i = a.indexOf(name)
@@ -30,6 +32,7 @@ export const main = async (argv: ReadonlyArray<string>, env: Record<string, stri
   const json = rest.includes("--json")
   const emit = (data: unknown, text: string) => console.log(json ? JSON.stringify(data, null, 2) : text)
   if (cmd === "plan") return planMain(rest)
+  if (cmd === "shoot") return shootMain(rest, env)
   if (cmd !== "doctor" && cmd !== "console") {
     console.error(USAGE)
     return cmd === undefined || cmd === "--help" ? EXIT.ok : EXIT.usage
