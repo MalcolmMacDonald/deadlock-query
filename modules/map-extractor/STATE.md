@@ -1,8 +1,8 @@
 # map-extractor — state
 
 - **Status:** S2 spike complete — **GO** (render, collision, entities, nav all obtainable)
-- **Version:** 0.4.0 (module); `EXTRACTOR_VERSION` stays 0.3.0 so cached extract stages remain valid
-- **Current milestone:** M3 code done (`tile` command: meshopt + quantisation + LODs); pending real-data run on dev machine
+- **Version:** 0.5.0 (module); `EXTRACTOR_VERSION` stays 0.3.0 so cached extract stages remain valid
+- **Current milestone:** M4 code done (`bake`: collision BVH + sample grid); M3 and M4 pending real-data runs on the dev machine
 - **Last updated:** 2026-10-06
 
 ## Done
@@ -149,15 +149,28 @@ Other (bulk, likely out of scope): `light_omni2` 1,968, `light_barn` 755, `citad
   - Tests: 5 for `tile` on synthetic grid tiles (LOD triangle counts, manifest ids/bytes/sha256, quantised bounds survive meshopt decode, texture stripping, budget error, rejection paths), 1 for the `pack-lite` manifest check.
   - **Not run on real data.** Real tiles are the 18 MB cell tiles from `extract --tier lite`; compression time and the final size against the 900 MB site budget are unknown.
 
+## M4 (2026-10-06)
+
+- **`dlq-extract bake <bundle-dir> [--cell-size 64] [--exclude-layers a,b] [--force]`** (`src/bake.ts`), run on any bundle that has a collision reference (lite or full, before or after `tile`). Writes `<bundle>/baked/collision.bvh` and `<bundle>/baked/sample-grid.bin`, then adds a `baked` record to `manifest.json` (other manifest fields are untouched).
+  - **Collision BVH:** every triangle mesh in `collision/physics.glb` merged into one soup in Source units (`collision.glbToWorld` x node world matrix, winding flipped if the transform mirrors), nodes whose `InteractAs` contains an excluded layer skipped, then `Raycaster.fromGeometry(...).serialize()` from spatial-core. Default excluded layers: `sky`, `Citadel_Skyclip` (a sky lid would make every cell interior). Everything else (foliage, playerclip, npcclip, window, solid ...) stays; layer-aware rays are a spatial-core/semantics question.
+  - **Sample grid:** `SampleGrid.build` over the collision bounds, XY snapped outwards to multiples of the cell size (BVH bounds carry an epsilon; aligned cells compare across builds). Channels: built-in `floorHeight`, plus `interior` (u8, `isInterior` at the floor point, 0 where there is no floor) and `wallDistance` (f32, `nearestWall` distance, saturating at `maxRange` when no wall is in range, NaN where there is no floor). Cost is about `1 + 1 + wallRays` rays per cell: ~34 with the defaults.
+  - **Manifest `baked`:** `{ bakeVersion, semanticsVersion, placeholder, inputKey, bvh{file,bytes,sha256,triangles,vertices,excludedLayers,skippedNodes}, sampleGrid{file,bytes,sha256,cellSize,nx,ny,origin,channels,params} }`. `placeholder` mirrors spatial-core's `PLACEHOLDER_SEMANTICS`; `semanticsVersion` is a content hash of `spatial-core/src/semantics/*.ts` plus the params, so editing the owner functions changes it. `inputKey` covers collision sha256, glbToWorld, layers, cell size, semantics hash, placeholder flag and bake version: an equal key with the files present makes `bake` a no-op ("cached"); `--force` rebuilds. Output is byte-deterministic (tested).
+  - `inspect` now checks that the baked files exist and match the manifest sizes, and warns when channels were computed with placeholder semantics.
+  - Tests (`test/bake.test.ts`, on the contracts mini-map): BVH and grid round-trip via spatial-core with hand-computed goldens (lane floor 0, ledge 600, roof 420, wall distance 12, no floor outside), channels equal direct semantics calls, determinism, cache hit/miss, layer exclusion, `glbToWorld` applied, error paths.
+  - **Not run on real data.** Expected scale: ~104k collision triangles, a 671 x 590 grid at 64 units (~400k cells, ~13M rays). The mini-map bakes 12k cells in ~0.5 s, so a few tens of seconds to a few minutes is likely; unmeasured.
+  - **Known limits:** (1) `floorHeight` is spatial-core's built-in topmost-surface ray, so under roofs/bridges the "floor" is the roof and `interior` is 0 there (the mini-map building cell reads 420 / not interior). Needs a spatial-core change (e.g. walkable-surface selection or multi-layer grid) before `interior` is meaningful in buildings. (2) Single-threaded; PLAN §5.8 wants worker threads, deferred until a real run shows it matters. (3) Navmesh is M5, not here.
+
 ## In progress
 - Testing on real data via Remote Control dev machine (pending).
 
 ## Next
-1. On the dev machine: `extract --tier lite`, then `tile <bundle>`, then `pack-lite <bundle>`; record tile sizes, compression ratio, LOD1 triangle share and the total size here. If LOD1 looks bad, tune `--lod-ratio` or the simplifier error. Then M4 (`bake`: collision BVH + sample grid) is unblocked (spatial-core M5 is merged).
+1. On the dev machine: `extract --tier lite`, then `tile <bundle>`, `bake <bundle>`, then `pack-lite <bundle>`; record tile sizes, compression ratio, LOD1 triangle share, bake time, BVH/grid sizes (`pack-lite` counts `baked/`; check the 900 MB budget) and the share of cells with a floor. If LOD1 looks bad, tune `--lod-ratio` or the simplifier error. If bake is slow, add worker threads. Then M5 (Recast navmesh + links, visual QA export).
 2. Settle M1 open questions via real-data tests on dev machine: (a) are physics GLB and render glTF in the same coordinate frame; (b) are all hulls exported; (c) per-entity volume models (interior/trigger) export; (d) triangle cut for `lite` impact on size/quality (tune `--tri-budget`).
 3. Check `dl_hideout` / `new_player_basics` only if the owner wants them (not in Slice 1).
 
 ## Blockers / Requests to other modules
+- spatial-core: (a) export a `SEMANTICS_VERSION` (bake currently hashes `semantics/*.ts` at run time); (b) `floorHeight` is the topmost surface, so interior cells under a roof are not detected, and row-range/worker-friendly `SampleGrid.build` would let `bake` parallelise.
+- contracts: `manifest.baked` is `Record<string, unknown>`; bake writes the shape documented under M4. Contracts M3 (baked-data specs) should adopt it (or tell us what to change), including `semanticsVersion` and `placeholder`.
 - contracts: `Tile` has no `lod` (or `lods[]`) field, so LODs are encoded as separate tiles with id `<id>#lod<n>` and a shared `bounds` (see M3). A `Tile.lod` / `Tile.lodOf` field would let the viewer select LODs without parsing ids; map-viewer M4 should read this convention until then.
 - root (optional): add `data/` to `.gitignore`; the extractor already self-ignores its output root.
 - contracts: `Tile` has a single `file`; the render export is `n0.gltf` + 3 `.bin` (>1 GB each). Tile `bytes` currently sums the bins and `sha256` covers the `.gltf` only. Consider `Tile.files[]` or a size-limit/tiling note (M3).
@@ -174,6 +187,8 @@ Other (bulk, likely out of scope): `light_omni2` 1,968, `light_barn` 755, `citad
 - 2026-10-06 — M2: `pack-lite` validates lite-tier bundles for publishing (tier check, texture verification, budget compliance). No real-data testing yet; unit tests pass. Not yet integrated with the publish workflow (that lives in infra/tools/publish-data.ts).
 
 - 2026-10-06 — M3: `tile` is a separate step after `extract --tier lite` (not folded into `extract`) so the 8-minute export stays cached and LOD settings can be re-tried; LODs are separate manifest tiles (`#lod<n>`) because contracts' `Tile` has a single `file`; meshopt (not Draco) so one WASM decoder serves the viewer; lite tier drops textures at this step.
+
+- 2026-10-06 — M4: bake is its own command after `extract`/`tile` (collision is already in the bundle); collision soup excludes `sky` and `Citadel_Skyclip` by default; grid channels are `interior` (u8) and `wallDistance` (f32, saturating at `maxRange`) wired to spatial-core semantics, `floorHeight` built in; cache key in the manifest rather than stage stamps, because bake mutates `manifest.json`; `semanticsVersion` is a source hash until spatial-core exports one.
 
 ## Open questions
 - (see PLAN.md §9, and "Next" item 2 above)

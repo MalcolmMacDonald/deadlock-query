@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@deadlock-query/contracts": "workspace:*",
+    "@deadlock-query/spatial-core": "workspace:*",
     "@gltf-transform/core": "^4.5.1",
     "@gltf-transform/extensions": "^4.5.1",
     "@gltf-transform/functions": "^4.5.1",
