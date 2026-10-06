@@ -34,5 +34,7 @@
 
 - 2026-10-06 — M2: feature ids are `layerId:index` (stable for a given `setOverlay` call). Lines use 1px `LineSegments` (fat-line shader deferred). Overlays render with depth test off so query results are never hidden by terrain. `ViewerService` is exposed via `makeViewerService(controller)` rather than `ModuleDefinition.layer` (see Blockers).
 
+- 2026-10-06 — Terrain rendered solid black on the dev site: extracted GLBs carry POSITION only (no NORMAL), so `MeshStandardMaterial` lit to black. Fixed with `flatShading: true` (per-fragment derivative normals); e2e smoke now asserts lit terrain pixels.
+
 ## Open questions
 - (see PLAN.md §9)

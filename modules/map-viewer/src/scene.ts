@@ -20,7 +20,9 @@ const ENTITY_COLORS: Record<string, number> = { guardian: 0xe8a33d, walker: 0xd4
 /** Builds the Three scene root (already in Three space) from loaded viewer data. */
 export const buildScene = async (data: ViewerData): Promise<THREE.Group> => {
   const root = new THREE.Group()
-  const baseMat = new THREE.MeshStandardMaterial({ color: 0x9aa3ad, roughness: 0.9, side: THREE.DoubleSide })
+  // flatShading derives normals per-fragment: extracted GLBs carry POSITION only (no NORMAL), and without
+  // normals a lit material renders solid black.
+  const baseMat = new THREE.MeshStandardMaterial({ color: 0x9aa3ad, roughness: 0.9, side: THREE.DoubleSide, flatShading: true })
   for (const tile of data.manifest.tiles) {
     const bytes = data.tiles.get(tile.id)
     if (!bytes) continue

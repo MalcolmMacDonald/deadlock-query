@@ -75,6 +75,17 @@ try {
     return false
   })
   if (!nonBlank) fail("canvas is blank")
+  // Regression: extracted GLBs have no normals; terrain must be lit (not black). Clear colour is 0x14161a and entity dots are saturated.
+  const lit = await page.evaluate(() => {
+    const c = document.querySelector("canvas")!
+    const d = document.createElement("canvas"); d.width = c.width; d.height = c.height
+    const ctx = d.getContext("2d")!; ctx.drawImage(c, 0, 0)
+    const px = ctx.getImageData(0, 0, d.width, d.height).data
+    let n = 0
+    for (let i = 0; i < px.length; i += 4) if (px[i]! > 50 && Math.abs(px[i]! - px[i + 2]!) < 40) n++
+    return n
+  })
+  if (lit < 1000) fail(`terrain renders black (${lit} lit px)`)
   await page.goto(url + h4)
   await page.reload()
   await page.waitForSelector('[data-testid="viewer-canvas"][data-loaded="true"]')
