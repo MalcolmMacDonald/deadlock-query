@@ -4,14 +4,14 @@ Single source for "what should I do next?". Prompt Claude with: **"Do the next t
 
 | Module | Next task | Blocked on |
 |---|---|---|
-| infra | M5 live (set `GITHUB_TOKEN_PROXY`, redeploy, verify). M3, M4, M6 done; M5 code done | M5 live: PAT secret from Malcolm |
-| contracts | M1 MapBundle/QueryResult/fixtures | S2 findings (human, local) |
-| map-extractor | M1: settle the open questions in STATE.md "Next" (frame agreement, hulls, volume models, lite triangle cut, `.vents` parser). M0 code done; run `dlq-extract doctor` on the dev machine | Human: game install (local runs) |
-| query-builder | M0: editor panel with fixture `.d.ts`, `MockQueryEngine`, results table (S1 done, GO) | none |
-| spatial-core | M0: math, `Raycaster` interface + three-mesh-bvh impl, deterministic serialise tests (S5 done, GO) | none |
-| query-library | M2: API snapshot test, example files with `@example` (M0+M1 done); M3 needs spatial-core | none |
-| map-viewer | M1: Three.js scene, mini-map GLBs, Map/Orbit/Fly cameras, URL-hash state, Playwright smoke (M0 done) | none |
-| shell | M1: layer composition, per-module error panels, contracts mocks (M0 done) | none |
+| infra | M5 live (set `GITHUB_TOKEN_PROXY`, redeploy, verify). M0–M4, M6 done; M5 code done; data publish helper (`tools/publish-data.ts`) not yet run on a real bundle | M5 live: PAT secret from Malcolm |
+| contracts | M2: run `check:real` on the first real bundle and adjust schemas (M0, M1 done; `rowIds` added to `QueryResult`). M3 follows | Real bundle from extractor (dev machine) |
+| map-extractor | Real-data run on the dev machine: `extract --tier lite`, `tile`, `pack-lite`; record sizes in STATE.md. Then M4 `bake` (collision BVH + sample grid; spatial-core M5 is merged). M0–M3 code done; M1 open questions (b) hulls, (c) volume models, (d) triangle cut remain | Human: game install (local runs) |
+| query-builder | M3: safety hardening + adversarial corpus, row/memory caps (M0–M2 done; Results ↔ viewer overlay wired to mocks) | none |
+| spatial-core | Owner-written semantics (placeholders in `src/semantics/**`, Malcolm only). M0–M5 done; leftovers: navmesh funnel smoothing, spatial index for `NavMesh.nearestPoint`, Dijkstra benchmark, SampleGrid cost report on a real map | Malcolm (semantics); real bake (benchmarks) |
+| query-library | M6: metadata merge (camps/sacrifices/nav overrides) with provenance (M0–M5 done). Leftover: golden results for queries 1–3 and query 2 < 30 s on the real map | map-metadata / contracts shape for M6; real bake for goldens |
+| map-viewer | M3: annotation tools, layers panel (M0–M2 done; collision GLB drawn). Leftovers: >= 30 fps on the real bundle and 10k points at 60 fps on real hardware (Malcolm's machine) | none |
+| shell | M2 (rest): rows highlight on the map; then swap fixture for the published bundle. M0, M1 done; viewer wired, Query preset, lazy editor | query-builder: embeddable editor panel (`makeQueryEditorPanel`) or an iframe postMessage protocol |
 | kanban | wait for infra M5 live (`GITHUB_TOKEN_PROXY`) | infra |
 | screenshot-tool, map-metadata | Phase 3 | — |
 
