@@ -9,7 +9,7 @@ Single source for "what should I do next?". Prompt Claude with: **"Do the next t
 | map-extractor | M1: settle the open questions in STATE.md "Next" (frame agreement, hulls, volume models, lite triangle cut, `.vents` parser). M0 code done; run `dlq-extract doctor` on the dev machine | Human: game install (local runs) |
 | query-builder | M0: editor panel with fixture `.d.ts`, `MockQueryEngine`, results table (S1 done, GO) | none |
 | spatial-core | M0: math, `Raycaster` interface + three-mesh-bvh impl, deterministic serialise tests (S5 done, GO) | none |
-| query-library | M2: API snapshot test, example files with `@example` (M0+M1 done); M3 needs spatial-core | none |
+| query-library | M6: metadata merge (camps/sacrifices/nav overrides) with provenance (M0-M5 done) | map-metadata shape (check) |
 | map-viewer | M1: Three.js scene, mini-map GLBs, Map/Orbit/Fly cameras, URL-hash state, Playwright smoke (M0 done) | none |
 | shell | M1: layer composition, per-module error panels, contracts mocks (M0 done) | none |
 | kanban | wait for infra M5 live (`GITHUB_TOKEN_PROXY`) | infra |

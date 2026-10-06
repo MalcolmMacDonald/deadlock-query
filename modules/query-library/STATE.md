@@ -1,8 +1,8 @@
 # query-library — state
 
-- **Status:** M0 + M1 + M2 + M3 + M4 done
+- **Status:** M0 + M1 + M2 + M3 + M4 + M5 done
 - **Version:** 0.1.0
-- **Current milestone:** M5
+- **Current milestone:** M6
 - **Last updated:** 2026-10-06
 
 ## Done
@@ -17,12 +17,15 @@
 
 - M4 (2026-10-06): navigation over spatial-core's `NavMesh` via structural `NavMeshLike`/`NavInput` (`spatial: {raycaster, nav: {mesh, heroSpeed?, linkSpeeds?, maxSnap?}}`). `Vec3.travelTimeTo/travelDistanceTo` (Infinity if unreachable/off-mesh), `EntityList.withinTravelTime(seconds(n), of)` (one multi-source field), `map.nav.path/timeFrom`, `seconds()`; `pairs()` was already in M1. Distance fields are memoised per (mode, source set) in a 256-entry LRU, so `a.travelDistanceTo(b)` over pairs costs one Dijkstra per distinct `a`. Distance mode is the same Dijkstra with unit speeds. Tests use a hand-computable 9x9 grid navmesh (`test/navFixture.ts`) and assert hop lengths, zipline shortcuts, caching, determinism; examples `orbs-within-10s` (query 1) and `orb-detours` (query 2 shape).
 
+- M5 (2026-10-06): headline query 3 as `examples/camps-visible-from-high-ground.ts` (`map.creepCamps.visibleFrom(map.sample.grid(400).where(p => p.height() >= 800))`). Golden test on a hand-computable plateau fixture (`test/plateauFixture.ts`: floor z=0 plus a 2000x2000 plateau at z=1000, stub semantics "visible if < 1500 units apart in XY") expects `["camp-1","camp-2"]`. Helpers: `EntityList.closestN`, `EntityList.groupByRegion(cell)`, `regionOf(p, cell)` / `Region`, `map.sample.density(points, cell)` (`HeatCell`; non-empty cells only, ordered by `ix` then `iy`), example `camp-density`. `EntityList.highGround(h)` now uses `height()` when a spatial backend is loaded (absolute z otherwise). Examples tagged `@requires spatial` run on the plateau map. API snapshot gained symbols only (no version bump).
+
 ## In progress
 - (nothing)
 
 ## Next
-- M5 (query 3 + helpers). Not yet verified: query 2 on the real map in < 30 s (needs the real bake; `nearestPoint` in spatial-core is a linear scan, so field lookups per polygon are slow at 50k polygons: request a spatial index, below). Golden results for queries 1 & 2 on the real bundle once it exists. Owner semantics (spatial-core M2) are not in yet: `isInterior`/`nearestWall`/`visibleFrom`/`sample.walls` throw until a `semantics` is passed.
-- Not yet verified on a real bundle (real data is local-only; run via `contracts` `check:real` style script once extractor output exists).
+- M6: metadata merge (camps/sacrifices/nav overrides) with provenance (needs map-metadata / contracts shape; check blockers there first).
+- Still open from M4/M5: query 2 on the real map in < 30 s (needs the real bake and a spatial index for `NavMesh.nearestPoint`, below); golden results for queries 1-3 on the real bundle; owner semantics (spatial-core M2) are not in yet, so query 3 is provisional (`map.provisional`).
+- Real data is local-only; run via a `contracts` `check:real`-style script once extractor output exists.
 
 ## Blockers / Requests to other modules
 - spatial-core: grid/spatial index for `NavMesh.nearestPoint` (used by `distanceField().costAt` for every lookup) before the real-map benchmark; the bundle's navmesh must be loaded via `NavMesh.load` by the builder worker and passed as `spatial.nav.mesh`.

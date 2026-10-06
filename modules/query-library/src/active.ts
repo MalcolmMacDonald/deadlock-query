@@ -14,3 +14,5 @@ export const requireSemantics = (what: string): { s: SpatialInput; sem: Semantic
 }
 /** True when results depend on placeholder (non-final) semantics. */
 export const isProvisional = (): boolean => active?.semantics?.placeholder === true
+/** True when a spatial backend is active. */
+export const hasSpatial = (): boolean => active !== undefined
