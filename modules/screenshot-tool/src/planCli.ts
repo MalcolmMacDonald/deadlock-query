@@ -1,11 +1,10 @@
-import { Manifest, type Vec3 } from "@deadlock-query/contracts"
-import { Schema } from "effect"
+import type { Manifest, Vec3 } from "@deadlock-query/contracts"
 import { readFileSync, writeFileSync } from "node:fs"
-import { join } from "node:path"
 import { parseArgs } from "node:util"
 import { EXIT } from "./errors.ts"
+import { loadBundle } from "./occlusion.ts"
 import { DEFAULT_FOV, DEFAULT_RESOLUTION, gridPlan, parsePlan, PlanError, ringPlan, serializePlan, type PlanMeta, type ShotPlan } from "./plan.ts"
-import { standoffPlan, targetsFromAnnotations, targetsFromMetadata, type Extracted } from "./targets.ts"
+import { standoffPlan, type Occlusion, targetsFromAnnotations, targetsFromMetadata, type Extracted } from "./targets.ts"
 
 export const PLAN_USAGE = `dlq-shoot plan <generator> [options]   (prints the plan JSON, or writes it with --out)
   common     [--map <name>] [--build <gameBuildId>] [--bundle <dir>] [--fov ${DEFAULT_FOV}] [--resolution ${DEFAULT_RESOLUTION.width}x${DEFAULT_RESOLUTION.height}] [--show-hud] [--out <file>]
@@ -16,7 +15,8 @@ export const PLAN_USAGE = `dlq-shoot plan <generator> [options]   (prints the pl
   from-annotations  <annotations.json> [--layer <id>]   look at each point/label annotation from several sides
   from-metadata     <metadata.bundle.json> [--all-status]   same for accepted creep camps, Sinner's Sacrifice, healing orbs (--all-status adds proposed ones)
              both: [--standoffs 3] [--distance 600] [--eye-height 64] [--bearing-offset 0]; map and build id come from the file unless --map/--build/--bundle say otherwise;
-             --bundle also keeps cameras inside the map bounds. Line of sight is not checked yet (no collision data): see STATE.md`
+             --bundle also keeps cameras inside the map bounds and, if the bundle has a baked collision BVH, drops or moves cameras whose view of the target is blocked (--no-los skips that);
+             without a baked bundle line of sight is not checked`
 
 const nums = (s: string, n: number, what: string): number[] => {
   const v = s.split(",").map((x) => Number(x.trim()))
@@ -40,7 +40,7 @@ export const planMain = (argv: ReadonlyArray<string>, write: (text: string) => v
         fov: { type: "string" }, resolution: { type: "string" }, "show-hud": { type: "boolean" },
         bounds: { type: "string" }, spacing: { type: "string" }, z: { type: "string" }, yaws: { type: "string" }, pitch: { type: "string" },
         at: { type: "string", multiple: true },
-        layer: { type: "string" }, "all-status": { type: "boolean" }, standoffs: { type: "string" }, distance: { type: "string" }, "eye-height": { type: "string" }, "bearing-offset": { type: "string" }
+        layer: { type: "string" }, "all-status": { type: "boolean" }, "no-los": { type: "boolean" }, standoffs: { type: "string" }, distance: { type: "string" }, "eye-height": { type: "string" }, "bearing-offset": { type: "string" }
       }
     })
     const [generator, file] = positionals
@@ -64,9 +64,14 @@ export const planMain = (argv: ReadonlyArray<string>, write: (text: string) => v
         extracted = generator === "from-annotations" ? targetsFromAnnotations(raw, { layer: values.layer }) : targetsFromMetadata(raw, { allStatuses: values["all-status"] === true })
       }
       let manifest: Manifest | undefined
+      let occlusion: Occlusion | undefined
       if (values.bundle) {
-        try { manifest = Schema.decodeUnknownSync(Manifest)(JSON.parse(readFileSync(join(values.bundle, "manifest.json"), "utf8"))) }
-        catch (e) { throw new PlanError([`cannot read a bundle manifest in ${values.bundle}: ${(e as Error).message.split("\n")[0]}`]) }
+        const b = loadBundle(values.bundle)
+        manifest = b.manifest
+        if (extracted !== undefined && values["no-los"] !== true) {
+          occlusion = b.occlusion
+          if (occlusion === undefined) console.error(`! ${values.bundle} has no baked collision (run dlq-extract bake): lines of sight are not checked`)
+        }
       }
       const map = values.map ?? extracted?.mapName ?? manifest?.mapName
       if (!map) throw new PlanError(["pass --map <name> or --bundle <dir>"])
@@ -87,7 +92,7 @@ export const planMain = (argv: ReadonlyArray<string>, write: (text: string) => v
         const r = standoffPlan(meta, extracted.targets, {
           ...(standoffs !== undefined ? { standoffs } : {}), ...(distance !== undefined ? { distance } : {}),
           ...(eyeHeight !== undefined ? { eyeHeight } : {}), ...(bearingOffset !== undefined ? { bearingOffset } : {}),
-          ...(manifest ? { bounds: manifest.bounds } : {})
+          ...(manifest ? { bounds: manifest.bounds } : {}), ...(occlusion ? { occlusion } : {})
         })
         for (const sk of [...extracted.skipped, ...r.skipped]) console.error(`! skipped ${sk.id}: ${sk.reason}`)
         for (const w of r.warnings) console.error(`! ${w}`)
