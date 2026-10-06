@@ -5,7 +5,7 @@ import { SCHEMA_VERSION, type Aabb, type EntitiesFile, type Manifest, type Mat4,
 import { ExportFailed } from "./errors.ts"
 import { gltfInfo, readGltfJson, type GltfInfo } from "./gltfInfo.ts"
 import { invertAffine } from "./mat4.ts"
-import { args, run, type S2VRunner } from "./s2v.ts"
+import { args, firstExceptionLine, lastRunOutput, run, type S2VRunner } from "./s2v.ts"
 import { toEntities, parseVents } from "./vents.ts"
 
 export const EXTRACTOR_VERSION = "0.1.0"
@@ -37,7 +37,11 @@ const stage = async (o: ExtractOptions, dir: string, name: string, outputs: stri
   o.log?.(`${name}: running`)
   await fn()
   const missing = outputs.filter((f) => !existsSync(f))
-  if (missing.length) throw new ExportFailed({ stage: name, stderr: `expected output missing: ${missing.map((m) => basename(m)).join(", ")}` })
+  if (missing.length) {
+    const last = lastRunOutput.get(name)
+    const cause = last && firstExceptionLine(last)
+    throw new ExportFailed({ stage: name, stderr: `expected output missing: ${missing.map((m) => basename(m)).join(", ")}${cause ? `; tool reported: ${cause} (check free disk space)` : ""}` })
+  }
   writeFileSync(stamp, key)
 }
 
