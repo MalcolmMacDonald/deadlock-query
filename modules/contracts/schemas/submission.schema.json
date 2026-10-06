@@ -1,0 +1,855 @@
+{
+  "dialect": "draft-2020-12",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "schemaVersion": {
+        "type": "string"
+      },
+      "id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "gameBuildId": {
+        "type": "string"
+      },
+      "mapName": {
+        "type": "string"
+      },
+      "createdAt": {
+        "type": "string"
+      },
+      "submitter": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 80,
+            "minLength": 1
+          },
+          "github": {
+            "type": "string",
+            "maxLength": 39
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "additionalProperties": true
+      },
+      "note": {
+        "type": "string",
+        "maxLength": 1000
+      },
+      "records": {
+        "type": "array",
+        "items": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "proposed",
+                    "accepted",
+                    "rejected",
+                    "stale"
+                  ]
+                },
+                "provenance": {
+                  "type": "object",
+                  "properties": {
+                    "submitter": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "maxLength": 80,
+                          "minLength": 1
+                        },
+                        "github": {
+                          "type": "string",
+                          "maxLength": 39
+                        }
+                      },
+                      "required": [
+                        "name"
+                      ],
+                      "additionalProperties": true
+                    },
+                    "submissionId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128
+                    },
+                    "submittedAt": {
+                      "type": "string"
+                    },
+                    "reviewer": {
+                      "type": "string",
+                      "maxLength": 80
+                    },
+                    "reviewedAt": {
+                      "type": "string"
+                    },
+                    "comment": {
+                      "type": "string",
+                      "maxLength": 1000
+                    }
+                  },
+                  "additionalProperties": true
+                },
+                "name": {
+                  "type": "string",
+                  "maxLength": 120
+                },
+                "note": {
+                  "type": "string",
+                  "maxLength": 1000
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "walkableRegion"
+                  ]
+                },
+                "ring": {
+                  "type": "array",
+                  "items": {
+                    "type": "array",
+                    "prefixItems": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "number"
+                      }
+                    ],
+                    "maxItems": 3,
+                    "minItems": 3
+                  },
+                  "minItems": 3,
+                  "maxItems": 512
+                },
+                "floorZ": {
+                  "type": "number"
+                },
+                "flag": {
+                  "type": "string",
+                  "enum": [
+                    "walkable",
+                    "noGo",
+                    "interior",
+                    "water"
+                  ]
+                },
+                "costMultiplier": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                }
+              },
+              "required": [
+                "id",
+                "status",
+                "provenance",
+                "kind",
+                "ring",
+                "floorZ",
+                "flag"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "proposed",
+                    "accepted",
+                    "rejected",
+                    "stale"
+                  ]
+                },
+                "provenance": {
+                  "type": "object",
+                  "properties": {
+                    "submitter": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "maxLength": 80,
+                          "minLength": 1
+                        },
+                        "github": {
+                          "type": "string",
+                          "maxLength": 39
+                        }
+                      },
+                      "required": [
+                        "name"
+                      ],
+                      "additionalProperties": true
+                    },
+                    "submissionId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128
+                    },
+                    "submittedAt": {
+                      "type": "string"
+                    },
+                    "reviewer": {
+                      "type": "string",
+                      "maxLength": 80
+                    },
+                    "reviewedAt": {
+                      "type": "string"
+                    },
+                    "comment": {
+                      "type": "string",
+                      "maxLength": 1000
+                    }
+                  },
+                  "additionalProperties": true
+                },
+                "name": {
+                  "type": "string",
+                  "maxLength": 120
+                },
+                "note": {
+                  "type": "string",
+                  "maxLength": 1000
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "creepCamp"
+                  ]
+                },
+                "position": {
+                  "type": "array",
+                  "prefixItems": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    }
+                  ],
+                  "maxItems": 3,
+                  "minItems": 3
+                },
+                "tier": {
+                  "type": "string",
+                  "enum": [
+                    "weak",
+                    "medium",
+                    "strong"
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "status",
+                "provenance",
+                "kind",
+                "position"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "proposed",
+                    "accepted",
+                    "rejected",
+                    "stale"
+                  ]
+                },
+                "provenance": {
+                  "type": "object",
+                  "properties": {
+                    "submitter": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "maxLength": 80,
+                          "minLength": 1
+                        },
+                        "github": {
+                          "type": "string",
+                          "maxLength": 39
+                        }
+                      },
+                      "required": [
+                        "name"
+                      ],
+                      "additionalProperties": true
+                    },
+                    "submissionId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128
+                    },
+                    "submittedAt": {
+                      "type": "string"
+                    },
+                    "reviewer": {
+                      "type": "string",
+                      "maxLength": 80
+                    },
+                    "reviewedAt": {
+                      "type": "string"
+                    },
+                    "comment": {
+                      "type": "string",
+                      "maxLength": 1000
+                    }
+                  },
+                  "additionalProperties": true
+                },
+                "name": {
+                  "type": "string",
+                  "maxLength": 120
+                },
+                "note": {
+                  "type": "string",
+                  "maxLength": 1000
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "sinnersSacrifice"
+                  ]
+                },
+                "position": {
+                  "type": "array",
+                  "prefixItems": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    }
+                  ],
+                  "maxItems": 3,
+                  "minItems": 3
+                }
+              },
+              "required": [
+                "id",
+                "status",
+                "provenance",
+                "kind",
+                "position"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "proposed",
+                    "accepted",
+                    "rejected",
+                    "stale"
+                  ]
+                },
+                "provenance": {
+                  "type": "object",
+                  "properties": {
+                    "submitter": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "maxLength": 80,
+                          "minLength": 1
+                        },
+                        "github": {
+                          "type": "string",
+                          "maxLength": 39
+                        }
+                      },
+                      "required": [
+                        "name"
+                      ],
+                      "additionalProperties": true
+                    },
+                    "submissionId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128
+                    },
+                    "submittedAt": {
+                      "type": "string"
+                    },
+                    "reviewer": {
+                      "type": "string",
+                      "maxLength": 80
+                    },
+                    "reviewedAt": {
+                      "type": "string"
+                    },
+                    "comment": {
+                      "type": "string",
+                      "maxLength": 1000
+                    }
+                  },
+                  "additionalProperties": true
+                },
+                "name": {
+                  "type": "string",
+                  "maxLength": 120
+                },
+                "note": {
+                  "type": "string",
+                  "maxLength": 1000
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "healingOrb"
+                  ]
+                },
+                "position": {
+                  "type": "array",
+                  "prefixItems": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    }
+                  ],
+                  "maxItems": 3,
+                  "minItems": 3
+                },
+                "respawnSeconds": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                }
+              },
+              "required": [
+                "id",
+                "status",
+                "provenance",
+                "kind",
+                "position"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "proposed",
+                    "accepted",
+                    "rejected",
+                    "stale"
+                  ]
+                },
+                "provenance": {
+                  "type": "object",
+                  "properties": {
+                    "submitter": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "maxLength": 80,
+                          "minLength": 1
+                        },
+                        "github": {
+                          "type": "string",
+                          "maxLength": 39
+                        }
+                      },
+                      "required": [
+                        "name"
+                      ],
+                      "additionalProperties": true
+                    },
+                    "submissionId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128
+                    },
+                    "submittedAt": {
+                      "type": "string"
+                    },
+                    "reviewer": {
+                      "type": "string",
+                      "maxLength": 80
+                    },
+                    "reviewedAt": {
+                      "type": "string"
+                    },
+                    "comment": {
+                      "type": "string",
+                      "maxLength": 1000
+                    }
+                  },
+                  "additionalProperties": true
+                },
+                "name": {
+                  "type": "string",
+                  "maxLength": 120
+                },
+                "note": {
+                  "type": "string",
+                  "maxLength": 1000
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "navLink"
+                  ]
+                },
+                "from": {
+                  "type": "array",
+                  "prefixItems": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    }
+                  ],
+                  "maxItems": 3,
+                  "minItems": 3
+                },
+                "to": {
+                  "type": "array",
+                  "prefixItems": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    }
+                  ],
+                  "maxItems": 3,
+                  "minItems": 3
+                },
+                "linkKind": {
+                  "type": "string",
+                  "enum": [
+                    "zipline",
+                    "jumpPad",
+                    "climb",
+                    "teleport",
+                    "custom"
+                  ]
+                },
+                "bidirectional": {
+                  "type": "boolean"
+                },
+                "cost": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                }
+              },
+              "required": [
+                "id",
+                "status",
+                "provenance",
+                "kind",
+                "from",
+                "to",
+                "linkKind",
+                "bidirectional"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "proposed",
+                    "accepted",
+                    "rejected",
+                    "stale"
+                  ]
+                },
+                "provenance": {
+                  "type": "object",
+                  "properties": {
+                    "submitter": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "maxLength": 80,
+                          "minLength": 1
+                        },
+                        "github": {
+                          "type": "string",
+                          "maxLength": 39
+                        }
+                      },
+                      "required": [
+                        "name"
+                      ],
+                      "additionalProperties": true
+                    },
+                    "submissionId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128
+                    },
+                    "submittedAt": {
+                      "type": "string"
+                    },
+                    "reviewer": {
+                      "type": "string",
+                      "maxLength": 80
+                    },
+                    "reviewedAt": {
+                      "type": "string"
+                    },
+                    "comment": {
+                      "type": "string",
+                      "maxLength": 1000
+                    }
+                  },
+                  "additionalProperties": true
+                },
+                "name": {
+                  "type": "string",
+                  "maxLength": 120
+                },
+                "note": {
+                  "type": "string",
+                  "maxLength": 1000
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "custom"
+                  ]
+                },
+                "label": {
+                  "type": "string",
+                  "maxLength": 60,
+                  "minLength": 1
+                },
+                "geometry": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "point"
+                          ]
+                        },
+                        "at": {
+                          "type": "array",
+                          "prefixItems": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "number"
+                            }
+                          ],
+                          "maxItems": 3,
+                          "minItems": 3
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "at"
+                      ],
+                      "additionalProperties": true
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "polyline"
+                          ]
+                        },
+                        "points": {
+                          "type": "array",
+                          "items": {
+                            "type": "array",
+                            "prefixItems": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "number"
+                              }
+                            ],
+                            "maxItems": 3,
+                            "minItems": 3
+                          },
+                          "minItems": 2,
+                          "maxItems": 512
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "points"
+                      ],
+                      "additionalProperties": true
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "polygon"
+                          ]
+                        },
+                        "ring": {
+                          "type": "array",
+                          "items": {
+                            "type": "array",
+                            "prefixItems": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "number"
+                              }
+                            ],
+                            "maxItems": 3,
+                            "minItems": 3
+                          },
+                          "minItems": 3,
+                          "maxItems": 512
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "ring"
+                      ],
+                      "additionalProperties": true
+                    }
+                  ]
+                },
+                "properties": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "maxLength": 200
+                      },
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "boolean"
+                      }
+                    ]
+                  }
+                }
+              },
+              "required": [
+                "id",
+                "status",
+                "provenance",
+                "kind",
+                "label",
+                "geometry"
+              ],
+              "additionalProperties": true
+            }
+          ]
+        },
+        "minItems": 1,
+        "maxItems": 500
+      }
+    },
+    "required": [
+      "schemaVersion",
+      "id",
+      "gameBuildId",
+      "mapName",
+      "createdAt",
+      "submitter",
+      "records"
+    ],
+    "additionalProperties": true
+  },
+  "definitions": {}
+}
