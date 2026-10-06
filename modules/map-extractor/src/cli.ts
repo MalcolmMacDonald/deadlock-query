@@ -5,6 +5,7 @@ import { listMaps, locateGame } from "./steam.ts"
 import { ExportFailed, GameNotFound, ToolMissing } from "./errors.ts"
 import lock from "../tools.lock.json" with { type: "json" }
 import { extract, type Tier } from "./extract.ts"
+import { bakeBundle, DEFAULT_CELL_SIZE, DEFAULT_EXCLUDE_LAYERS } from "./bake.ts"
 import { inspectBundle } from "./inspect.ts"
 import { packLite } from "./packLite.ts"
 import { tileBundle } from "./tiling.ts"
@@ -21,8 +22,9 @@ const USAGE = `dlq-extract <command> [--json] [--game-dir <path>]
   extract    --map <name> [--tier full|lite] [--force] [--out <dir>] [--tri-budget <n>] [--keep-work]   (default map ${lock.game.mainMap}, tier lite, out <repo>/data/bundles)
   inspect    <bundle-dir>   validate manifest/entities against contracts, report sizes and frame sanity
   tile       <bundle-dir> [--lods <n>] [--lod-ratio <r>] [--keep-textures]   lite tier: meshopt-compress tiles, add simplified LODs (<id>#lod<n>), drop textures
+  bake       <bundle-dir> [--cell-size <n>] [--exclude-layers a,b] [--force]   collision BVH + sample grid (floorHeight, interior, wallDistance) into <bundle>/baked, recorded in the manifest (default cell ${DEFAULT_CELL_SIZE}, excludes ${DEFAULT_EXCLUDE_LAYERS.join(",")})
   pack-lite  <bundle-dir>   validate lite bundle, check for textures, verify budget compliance
-(bake, diff: not implemented yet)`
+(diff: not implemented yet)`
 
 export const main = (argv: ReadonlyArray<string>): number => {
   const [cmd, ...rest] = argv
@@ -84,6 +86,27 @@ export const mainAsync = async (argv: ReadonlyArray<string>): Promise<number> =>
       r.ok ? "pack-lite ok" : "pack-lite failed"
     ]
     emit(r, lines.join("\n"))
+    return r.ok ? EXIT.ok : EXIT.problem
+  }
+  if (cmd === "bake") {
+    const dir = rest[0]?.startsWith("--") ? undefined : rest[0]
+    if (!dir) { console.error(USAGE); return EXIT.usage }
+    const cell = flag(rest, "--cell-size")
+    const layers = flag(rest, "--exclude-layers")
+    const r = await bakeBundle(dir, {
+      ...(cell !== undefined ? { cellSize: Number(cell) } : {}),
+      ...(layers !== undefined ? { excludeLayers: layers.split(",").filter(Boolean) } : {}),
+      force: rest.includes("--force"), log: (m) => console.error(m)
+    })
+    const MB = 1048576
+    const b = r.baked
+    emit(r, [...r.errors.map((e) => `✗ ${e}`), ...r.warnings.map((w) => `! ${w}`),
+      ...(b ? [
+        `bvh: ${b.bvh.triangles} triangles, ${(b.bvh.bytes / MB).toFixed(1)} MB`,
+        `sample grid: ${b.sampleGrid.nx}x${b.sampleGrid.ny} cells of ${b.sampleGrid.cellSize}, channels ${b.sampleGrid.channels.join(", ")}, ${(b.sampleGrid.bytes / MB).toFixed(1)} MB`,
+        `semanticsVersion ${b.semanticsVersion}${b.placeholder ? " (placeholder)" : ""}${r.cached ? " [cached]" : ""}`
+      ] : []),
+      r.ok ? "bake ok" : "bake failed"].join("\n"))
     return r.ok ? EXIT.ok : EXIT.problem
   }
   if (cmd === "tile") {
