@@ -109,3 +109,21 @@ test("pack-lite catches missing manifest", async () => {
   expect(result.ok).toBe(false)
   expect(result.errors[0]).toBe("manifest.json not found")
 })
+
+test("pack-lite checks every tile file named in the manifest, including nested LOD files", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "dlq-bundle-"))
+  const mat = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]
+  const b = { min: [0, 0, 0], max: [1, 1, 1] }
+  const tile = (id: string, file: string) => ({ id, file, bytes: 1, bounds: b, sha256: "x" })
+  writeFileSync(join(dir, "manifest.json"), JSON.stringify({
+    schemaVersion: "1.0.0", gameBuildId: "1", mapName: "m", tier: "lite", coordinateSystem: { up: "Z", unit: "source", glbToWorld: mat },
+    bounds: b, tiles: [tile("a", "render/tiles/a.glb"), tile("a#lod1", "render/tiles/a.lod1.glb")], entitiesFile: "entities.json",
+    provenance: { extractorVersion: "0.3.0", s2vVersion: "20.0" }
+  }))
+  mkdirSync(join(dir, "render", "tiles"), { recursive: true })
+  writeFileSync(join(dir, "render", "tiles", "a.glb"), Buffer.alloc(21 * 1024 * 1024))
+  const r = await packLite(dir)
+  expect(r.ok).toBe(false)
+  expect(r.errors.some((e) => e.startsWith("tile a is 21.0 MB"))).toBe(true)
+  expect(r.errors.some((e) => e.includes("a#lod1 references missing file"))).toBe(true)
+})

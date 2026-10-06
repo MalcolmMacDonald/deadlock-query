@@ -2,7 +2,9 @@
   "name": "@deadlock-query/map-extractor",
   "version": "0.0.0",
   "type": "module",
-  "bin": { "dlq-extract": "./src/cli.ts" },
+  "bin": {
+    "dlq-extract": "./src/cli.ts"
+  },
   "scripts": {
     "typecheck": "tsc -p .",
     "test": "bun test",
@@ -11,6 +13,10 @@
   },
   "dependencies": {
     "@deadlock-query/contracts": "workspace:*",
-    "effect": "4.0.1"
+    "@gltf-transform/core": "^4.5.1",
+    "@gltf-transform/extensions": "^4.5.1",
+    "@gltf-transform/functions": "^4.5.1",
+    "effect": "4.0.1",
+    "meshoptimizer": "^1.3.0"
   }
 }

@@ -109,15 +109,19 @@ export const packLite = async (dir: string): Promise<PackLiteReport> => {
     errors.push(`bundle is ${(totalBytes / MB).toFixed(1)} MB, exceeds site budget of ${(SITE_BUDGET / MB).toFixed(0)} MB`)
   }
 
-  // Check individual tile sizes (tiles/* files)
-  if (existsSync(join(dir, "render"))) {
-    const tiles = readdirSync(join(dir, "render")).filter((f) => f.endsWith(".glb") || f.endsWith(".gltf") || f.endsWith(".bin"))
-    for (const tile of tiles) {
-      const tileSize = statSync(join(dir, "render", tile)).size
+  // Check individual tile sizes (every tile and LOD file in the manifest)
+  try {
+    const manifest = JSON.parse(readFileSync(join(dir, "manifest.json"), "utf8")) as { tiles?: Array<{ id: string; file: string }> }
+    for (const t of manifest.tiles ?? []) {
+      const p = join(dir, t.file)
+      if (!existsSync(p)) { errors.push(`tile ${t.id} references missing file ${t.file}`); continue }
+      const tileSize = statSync(p).size
       if (tileSize > TILE_BUDGET) {
-        errors.push(`tile ${tile} is ${(tileSize / MB).toFixed(1)} MB, exceeds per-tile budget of ${(TILE_BUDGET / MB).toFixed(0)} MB`)
+        errors.push(`tile ${t.id} is ${(tileSize / MB).toFixed(1)} MB, exceeds per-tile budget of ${(TILE_BUDGET / MB).toFixed(0)} MB`)
       }
     }
+  } catch (e) {
+    errors.push(`tile check failed: ${e instanceof Error ? e.message : String(e)}`)
   }
 
   // Texture files are an error in lite bundles
