@@ -2,14 +2,15 @@ import * as monaco from "monaco-editor/esm/vs/editor/editor.api.js"
 import "monaco-editor/esm/vs/basic-languages/typescript/typescript.contribution.js"
 import "monaco-editor/esm/vs/language/typescript/monaco.contribution.js"
 import "monaco-editor/esm/vs/editor/editor.all.js"
-import { Effect } from "effect"
-import { QueryEngine } from "@deadlock-query/contracts"
+import { Effect, Layer } from "effect"
+import { QueryEngine, MockViewerService, MockSelectionBus, type QueryResult } from "@deadlock-query/contracts"
 import { runQuery } from "./engine.ts"
 import { renderResults } from "./resultsTable.ts"
 import { monacoCompiler } from "./monacoCompiler.ts"
 import { makeQueryEngine } from "../engine/engine.ts"
 import { globalsShim, toPrelude, type LibraryArtifact } from "../engine/library.ts"
 import { SandboxRunner } from "../sandbox/runner.ts"
+import { setResultOverlay } from "./viewerIntegration.ts"
 
 ;(self as any).MonacoEnvironment = {
   getWorkerUrl: (_: string, label: string) => (label === "typescript" || label === "javascript" ? "ts.worker.js" : "editor.worker.js"),
@@ -42,25 +43,53 @@ const editor = monaco.editor.create(document.getElementById("editor")!, { model,
 const runner = new SandboxRunner(document, toPrelude(lib.js))
 await runner.load(bundle)
 const compiler = monacoCompiler(monaco)
-const layer = makeQueryEngine({ compiler, runner })
+const queryEngineLayer = makeQueryEngine({ compiler, runner })
+
+// Standalone layer with mocks for viewer and selection
+const standaloneLayer = Layer.mergeAll(queryEngineLayer, MockViewerService, MockSelectionBus)
 
 // Live diagnostics as markers on the visible model (same service the engine uses).
 let checkTimer: ReturnType<typeof setTimeout> | undefined
 const check = () =>
-  Effect.runPromise(Effect.gen(function* () { return yield* (yield* QueryEngine).check(model.getValue()) }).pipe(Effect.provide(layer))).then((ds) =>
+  Effect.runPromise(Effect.gen(function* () { return yield* (yield* QueryEngine).check(model.getValue()) }).pipe(Effect.provide(queryEngineLayer))).then((ds) =>
     monaco.editor.setModelMarkers(model, "query", ds.map((d) => ({
       message: d.message, startLineNumber: d.line, startColumn: d.column, endLineNumber: d.line, endColumn: d.column + 1,
       severity: d.severity === "error" ? monaco.MarkerSeverity.Error : monaco.MarkerSeverity.Warning
     }))))
 model.onDidChangeContent(() => { clearTimeout(checkTimer); checkTimer = setTimeout(() => void check(), 300) })
 
+let currentResult: QueryResult | null = null
+let selectedRowIds: Set<string> = new Set()
+
+const renderResultsWithSelection = () => {
+  if (currentResult) {
+    out.replaceChildren(renderResults(document, currentResult, {
+      selectedRows: selectedRowIds,
+      onRowSelect: (rowId: string) => {
+        selectedRowIds = new Set([rowId])
+        renderResultsWithSelection()
+      }
+    }))
+  }
+}
+
 const run = async () => {
   runBtn.disabled = true
   cancelBtn.disabled = false
   status.textContent = "running…"
   try {
-    const { result } = await runQuery(layer, model.getValue())
-    out.replaceChildren(renderResults(document, result))
+    const { result } = await runQuery(queryEngineLayer, model.getValue())
+    currentResult = result
+
+    // Set overlay on the map viewer
+    await Effect.runPromise(
+      setResultOverlay("query-result", result).pipe(Effect.provide(standaloneLayer))
+    ).catch(() => {
+      // Silently fail if viewer is not available (in standalone mode with mocks)
+    })
+
+    selectedRowIds = new Set()
+    renderResultsWithSelection()
     status.textContent = "done"
   } catch (e) {
     const err = document.createElement("pre")
@@ -69,12 +98,13 @@ const run = async () => {
     err.textContent = e instanceof Error ? e.message : String(e)
     out.replaceChildren(err)
     status.textContent = "error"
+    currentResult = null
   } finally {
     runBtn.disabled = false
     cancelBtn.disabled = true
   }
 }
-const cancel = () => void Effect.runPromise(Effect.gen(function* () { yield* (yield* QueryEngine).cancel }).pipe(Effect.provide(layer)))
+const cancel = () => void Effect.runPromise(Effect.gen(function* () { yield* (yield* QueryEngine).cancel }).pipe(Effect.provide(queryEngineLayer)))
 runBtn.addEventListener("click", () => void run())
 cancelBtn.addEventListener("click", cancel)
 editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => void run())
