@@ -1,0 +1,17 @@
+{
+  "name": "@deadlock-query/map-viewer",
+  "version": "0.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p .",
+    "test": "bun test --pass-with-no-tests",
+    "verify": "bun run typecheck && bun run test"
+  },
+  "dependencies": {
+    "@deadlock-query/contracts": "workspace:*",
+    "effect": "4.0.1"
+  }
+}
