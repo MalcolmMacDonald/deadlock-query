@@ -10,6 +10,7 @@ import { SnapState } from "./snapping.ts"
 import { insertVertex, moveVertex, removeVertex } from "./vertexEdit.ts"
 import { LayerStore, type LayerAppearance } from "./layers.ts"
 import { ToolMachine } from "./tools.ts"
+import type { StreamStats } from "./tileStreamer.ts"
 import { DEFAULT_COLOR } from "./overlays.ts"
 import {
   autosaveKey, indexedDbStorage, parseDocument, serializeDocument, toDocument, type AnnotationStorage, type MapIdentity, type ParsedDocument
@@ -46,6 +47,14 @@ export class ViewerController {
   private readonly bus = Effect.runSync(PubSub.sliding<ViewerEvent>(256))
 
   readonly events: Stream.Stream<ViewerEvent> = Stream.fromPubSub(this.bus)
+
+  private readonly progressBus = Effect.runSync(PubSub.sliding<StreamStats>(64))
+  private latestStats: StreamStats | undefined
+  /** Tile streaming progress: one value whenever loading, residency or eviction changes (none for eagerly loaded maps). */
+  readonly progress: Stream.Stream<StreamStats> = Stream.fromPubSub(this.progressBus)
+  /** Latest streaming stats, if the map is streamed. */
+  get tileStats(): StreamStats | undefined { return this.latestStats }
+  emitProgress(s: StreamStats) { this.latestStats = s; PubSub.publishUnsafe(this.progressBus, s) }
 
   /** Layers panel state (visibility, colour, opacity, order) for every overlay layer, annotations included. */
   readonly layers = new LayerStore()
