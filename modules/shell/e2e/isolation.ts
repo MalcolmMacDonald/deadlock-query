@@ -11,7 +11,7 @@ try {
     try { await page.goto(`http://localhost:${port}/?demoFailure`); break } catch { await Bun.sleep(200) }
   }
   await page.getByTestId("error-panel-dummy-broken").waitFor({ timeout: 10000 })
-  await page.getByText("Placeholder panel from a dummy module.").first().waitFor({ timeout: 5000 })
+  await page.locator("canvas").first().waitFor({ timeout: 20000 }) // the map panel stays live
   if (!(await page.getByText("dummy-broken failed to start").count())) throw new Error("error message missing")
   console.log("e2e ok: failing module isolated, others live")
 } finally {

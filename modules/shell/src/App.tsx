@@ -1,24 +1,22 @@
-import type { PanelDefinition } from "@deadlock-query/contracts"
 import { DockviewReact, type DockviewReadyEvent, type IDockviewPanelProps } from "dockview"
 import "dockview/dist/styles/dockview.css"
 import { type FunctionComponent, useCallback, useEffect, useMemo, useState } from "react"
 import { loadLayout, resetLayout, saveLayout } from "./layout.ts"
 import { modules } from "./modules.ts"
+import { queryPreset } from "./presets.ts"
+import type { PresetPanel } from "./presets.ts"
 import { ErrorPanel, toDockviewComponent } from "./panels.tsx"
 import { appBaseLayer, composeModules, type Composition } from "./runtime.ts"
 
-const directions = { left: "left", right: "right", top: "above", bottom: "below", float: "within" } as const
-
-const addDefaults = (e: DockviewReadyEvent, panels: ReadonlyArray<PanelDefinition>) => {
-  let prev: string | undefined
-  for (const p of panels) {
-    const position =
-      prev === undefined || p.defaultPlacement === "center"
-        ? undefined
-        : { referencePanel: prev, direction: directions[p.defaultPlacement] }
-    e.api.addPanel({ id: p.id, title: p.title, component: p.id, ...(position ? { position } : {}) })
-    prev = p.id
-  }
+const addPreset = (e: DockviewReadyEvent, preset: ReadonlyArray<PresetPanel>) => {
+  for (const p of preset)
+    e.api.addPanel({
+      id: p.id,
+      title: p.title,
+      component: p.id,
+      ...(p.position ? { position: p.position } : {}),
+      ...(p.initialWidth ? { initialWidth: p.initialWidth } : {}),
+    })
 }
 
 export const App = () => {
@@ -58,7 +56,7 @@ const Shell = ({ composition }: { composition: Composition }) => {
         e.api.clear()
       }
     }
-    if (!restored) addDefaults(e, panels)
+    if (!restored) addPreset(e, queryPreset(panels))
     e.api.onDidLayoutChange(() => saveLayout(localStorage, e.api.toJSON()))
     ;(window as unknown as { __dockview: unknown }).__dockview = e.api
   }, [panels])

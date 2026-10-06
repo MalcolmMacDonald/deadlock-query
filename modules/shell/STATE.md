@@ -1,6 +1,6 @@
 # shell — state
 
-- **Status:** M2 viewer wiring done
+- **Status:** M2 partly done (viewer wired, Query preset, lazy editor; viewer↔editor wiring blocked on query-builder)
 - **Version:** 0.1.0
 - **Current milestone:** M1 complete; M2 next (needs real viewer/editor/results modules)
 - **Last updated:** 2026-10-06
@@ -16,13 +16,16 @@
 
 - 2026-10-06 — Map panel loads the published bundle (`./data/dl_midtown/manifest.json`, unzipped by `tools/fetch-data.ts` at deploy) via `ViewerController.loadBundle`, falling back to the fixture if absent. Note: the lite bundle has `tiles: []` (collision GLB only), so only entities render until the viewer draws collision/tiles.
 
+- 2026-10-06 — M2 (layout): default "Query" preset (`src/presets.ts`: viewer left, editor docked right at 520 px, extras below) replaces the ad-hoc default placement; the editor iframe mounts lazily on first visibility (`src/LazyPanel.tsx`). New `e2e/slice.ts` builds the site (shell + editor + library) and checks: map canvas renders, a query runs in the editor panel, rows appear. Repaired stale `e2e/layout.ts` / `e2e/isolation.ts` (they still referenced the removed dummy Alpha/Beta panels); `bun run e2e` passes all three.
+
 ## In progress
 - (nothing yet)
 
 ## Next
-- M2 (remaining; viewer wiring done): swap fixture/mock for published data-25712201 bundle once extractor emits MapBundles; real QueryEngine; wire viewer + query editor + results panels, default Query preset, lazy loading (add real modules to `src/modules.ts`).
+- M2 (remaining): rows highlight on the map. Blocked on query-builder (see Requests). After that: slice e2e asserts overlay + selection sync, swap fixture for the published MapBundle once the extractor emits it.
 
 ## Blockers / Requests to other modules
+- **query-builder (blocks M2 rest):** the editor runs as a standalone app in an iframe with its own mock `ViewerService`/`SelectionBus`, so query results cannot reach the shell's real viewer. Needs a package entry (`index.ts`) exporting an embeddable panel, e.g. `makeQueryEditorPanel({ library, bundle }) => { mount(container) => dispose }` whose layer requirements (`ViewerService`, `SelectionBus`) the shell provides; `check:deps` forbids deep imports into `query-builder/src`, so the shell cannot reuse `main.ts` pieces itself. A postMessage protocol (result overlay + selection) on the iframe would also work if query-builder prefers to keep Monaco out of the shell bundle.
 - map-viewer: confirmed — shell mounts a panel `component` that is `{ mount(container) => dispose }` (see `src/panels.tsx`); React components also work. `viewer.main` can use the handle as-is.
 - infra: optionally run `bun run --filter @deadlock-query/shell e2e` in CI (needs Chromium); `tools/build.ts` already picks up `modules/shell/dist` (run `bun run --filter @deadlock-query/shell build` first).
 
@@ -33,6 +36,8 @@
 - 2026-10-06 — Vite `base` defaults to `./`; override with `SHELL_BASE` for prod subpath.
 
 - 2026-10-06 — M1: base services use contracts mocks until real layers exist; `MockMapDataService`/`MockQueryEngine` get added to the base in M2 when panels need them.
+
+- 2026-10-06 — M2: unrelated extra panels (e.g. `?demoFailure`) are split below the viewer rather than tabbed, so the map stays visible.
 
 ## Open questions
 - (see PLAN.md §9)
