@@ -12,6 +12,7 @@ export * from "./overlays.ts"
 export * from "./layers.ts"
 export * from "./labels.ts"
 export * from "./entities.ts"
+export * from "./screenshots.ts"
 export * from "./annotations.ts"
 export * from "./tools.ts"
 export * from "./picking.ts"
@@ -36,3 +37,4 @@ export const makeViewerModule = (data: ViewerData, controller = new ViewerContro
     { id: VIEWER_TOOLS_PANEL_ID, title: "Tools", component: makeToolsPanel(controller), defaultPlacement: "left" }
   ]
 })
+export * from "./shotPopup.ts"

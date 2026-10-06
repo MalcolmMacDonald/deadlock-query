@@ -1,4 +1,4 @@
-import type { OverlayFeature, Vec3 } from "@deadlock-query/contracts"
+import type { ExternalTool, OverlayFeature, ToolContext, Vec3 } from "@deadlock-query/contracts"
 import type { Annotation, NewAnnotation } from "./annotations.ts"
 
 export type BuiltinToolId = "select" | "point" | "label" | "polyline" | "polygon" | "measure"
@@ -7,40 +7,7 @@ export type ToolId = BuiltinToolId | (string & {})
 
 export const TOOL_IDS: ReadonlyArray<BuiltinToolId> = ["select", "point", "label", "polyline", "polygon", "measure"]
 
-/** What the viewer hands a registered tool: the only ways it can change the viewer. */
-export interface ToolContext {
-  /** Adds an annotation (into the active layer) as one undo step. */
-  readonly commit: (a: NewAnnotation) => Annotation
-  /** Preview geometry drawn while the tool works; replaces the previous preview, `[]` clears it. */
-  readonly setDraft: (features: ReadonlyArray<OverlayFeature>) => void
-  /** One-line message shown in the Tools panel next to the tool's hint (`undefined` clears it). */
-  readonly setStatus: (text: string | undefined) => void
-  /** The tool is finished: go back to the Select tool. */
-  readonly done: () => void
-}
-
-/**
- * A tool contributed by another module (map-metadata, screenshot markers, ...). The viewer feeds it snapped
- * world-space points exactly like a built-in drawing tool; it draws through `ToolContext` only.
- */
-export interface ExternalTool {
-  /** Unique, not one of the built-in ids. */
-  readonly id: string
-  readonly label: string
-  readonly hint?: string
-  /** The tool became the active one. */
-  readonly activate?: (ctx: ToolContext) => void
-  /** The tool stopped being the active one (another tool picked, unregistered); clear any state here. */
-  readonly deactivate?: () => void
-  /** A click (not a drag) on the map, with the snapped world point. */
-  readonly click?: (p: Vec3) => void
-  /** Pointer hover with no button down. */
-  readonly move?: (p: Vec3) => void
-  /** Enter / double-click / the panel's Finish button. */
-  readonly finish?: () => void
-  /** Escape. */
-  readonly cancel?: () => void
-}
+export type { ExternalTool, ToolContext }
 
 export const DRAFT_COLOR = "#4fc3ff"
 

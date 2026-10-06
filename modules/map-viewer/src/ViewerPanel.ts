@@ -17,6 +17,8 @@ import { buildTileIndex, type ManifestTile } from "./tiles.ts"
 import { TileStreamer, type StreamStats } from "./tileStreamer.ts"
 import { defaultDecoder } from "./defaultDecoder.ts"
 import type { TileDecoder } from "./tileDecode.ts"
+import { mountShotPopup } from "./shotPopup.ts"
+import type { ScreenshotSource } from "./screenshots.ts"
 
 export const VIEWER_PANEL_ID = "viewer.main"
 
@@ -51,6 +53,10 @@ export interface ViewerData {
   readonly collision?: Uint8Array | undefined
   /** Bytes of the bundle's `baked/collision.bvh` (spatial-core `Raycaster.serialize()`); picking builds its own BVH without it. */
   readonly bakedBvh?: Uint8Array | undefined
+  /** Reference screenshots of the map (markers, view cones, image popups). */
+  readonly screenshots?: ScreenshotSource | undefined
+  /** Where `loadBundle` finds a screenshot set's `index.json` (relative to the manifest URL); none is fetched when unset. */
+  readonly screenshotsUrl?: string | undefined
 }
 
 /** Path of the baked collision BVH in a manifest (`baked.bvh.file`), if the bundle was baked. */
@@ -365,6 +371,8 @@ export const makeViewerPanel = (data: ViewerData, controller: ViewerController =
 
     controller.setMap({ mapName: data.manifest.mapName, gameBuildId: data.manifest.gameBuildId })
     controller.setEntities(data.entities)
+    if (data.screenshots) controller.setScreenshots(data.screenshots)
+    const unmountShotPopup = mountShotPopup(root, controller)
     controller.useDefaultStorage()
     const detach = controller.attach({
       setOverlay: (id, f, s) => overlays.set(id, f, s),
@@ -416,9 +424,14 @@ export const makeViewerPanel = (data: ViewerData, controller: ViewerController =
           bakedBvh = bvh
           controller.setMap({ mapName: manifest.mapName, gameBuildId: manifest.gameBuildId })
           controller.setEntities(entities)
+          controller.setScreenshots(undefined)
           setWorld(g)
           startStreaming(loaded)
           controls.setPose(frameBounds(manifest.bounds.min, manifest.bounds.max, FOV_DEG))
+          if (data.screenshotsUrl) {
+            const url = new URL(data.screenshotsUrl, base).href
+            void controller.loadScreenshots(url).then((ws) => { for (const w of ws) console.warn("screenshots:", w) }, (err) => console.warn("screenshots not loaded:", err))
+          }
         }
       }
     })
@@ -432,6 +445,7 @@ export const makeViewerPanel = (data: ViewerData, controller: ViewerController =
       canvas.removeEventListener("keydown", onKey)
       canvas.removeEventListener("dblclick", onDblClick)
       unsubTool()
+      unmountShotPopup()
       overlays.dispose()
       streamer?.dispose()
       cancelAnimationFrame(frame)
