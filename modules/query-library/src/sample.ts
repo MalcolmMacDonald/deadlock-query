@@ -1,3 +1,4 @@
+import { MapEntity, regionOf, type Locatable, type Region } from "./entities.ts"
 import { Seq } from "./Seq.ts"
 import { Vec3 } from "./Vec3.ts"
 import { requireSemantics, requireSpatial } from "./active.ts"
@@ -8,6 +9,13 @@ export interface GridOpts {
   readonly region?: { readonly min: readonly [number, number]; readonly max: readonly [number, number] }
   /** Minimum surface normal z to count as walkable floor. Default 0.7 (about 45 degrees). */
   readonly minNormalZ?: number
+}
+
+/** One non-empty cell of a {@link SampleApi.density} grid. @category Sampling */
+export interface HeatCell {
+  readonly region: Region
+  /** Number of points that fall in the cell. */
+  readonly count: number
 }
 
 /**
@@ -61,6 +69,29 @@ export class SampleApi {
           seen.add(key)
           yield new Vec3(w.point[0], w.point[1], w.point[2])
         }
+      },
+    })
+  }
+
+  /**
+   * Heat/density map: how many of the given points or entities fall in each XY cell of side
+   * `cellSize` Source units. Only non-empty cells are returned, ordered by `ix` then `iy`
+   * (needs no spatial backend). O(points).
+   * @example map.sample.density(map.healingOrbs, meters(100)).orderByDescending(c => c.count).first()
+   * @category Sampling
+   */
+  density(points: Locatable | Iterable<Locatable>, cellSize: number): Seq<HeatCell> {
+    if (!(cellSize > 0)) throw new Error("density(cellSize): cellSize must be > 0")
+    return new Seq({
+      *[Symbol.iterator]() {
+        const cells = new Map<string, { region: Region; count: number }>()
+        for (const p of points instanceof Vec3 || points instanceof MapEntity ? [points] : points) {
+          const region = regionOf(p, cellSize)
+          const c = cells.get(region.key)
+          if (c) c.count++
+          else cells.set(region.key, { region, count: 1 })
+        }
+        yield* [...cells.values()].sort((a, b) => a.region.ix - b.region.ix || a.region.iy - b.region.iy)
       },
     })
   }

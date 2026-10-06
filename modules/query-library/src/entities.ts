@@ -1,3 +1,4 @@
+import { hasSpatial } from "./active.ts"
 import { Seq } from "./Seq.ts"
 import { timeField } from "./nav.ts"
 import { Vec3 } from "./Vec3.ts"
@@ -67,6 +68,31 @@ export type Locatable = MapEntity | Vec3
 const where = (x: Locatable): Vec3 => (x instanceof Vec3 ? x : x.position)
 
 /**
+ * A square XY cell of a regular grid anchored at the origin (`ix = floor(x / cell)`).
+ * @category Entities
+ */
+export interface Region {
+  readonly ix: number
+  readonly iy: number
+  /** Cell centre at z = 0. */
+  readonly center: Vec3
+  /** Stable text key, e.g. `"-1,2"`. */
+  readonly key: string
+}
+
+/**
+ * The grid cell containing a point or entity.
+ * @example regionOf(vec(1250, -300, 0), meters(50)).key
+ * @category Entities
+ */
+export const regionOf = (at: Locatable, cellSize: number): Region => {
+  if (!(cellSize > 0)) throw new Error("regionOf(cellSize): cellSize must be > 0")
+  const p = where(at)
+  const ix = Math.floor(p.x / cellSize), iy = Math.floor(p.y / cellSize)
+  return { ix, iy, center: new Vec3((ix + 0.5) * cellSize, (iy + 0.5) * cellSize, 0), key: `${ix},${iy}` }
+}
+
+/**
  * A lazy collection of entities with spatial filters. `where`, `take`, `skip` and `distinct`
  * keep the entity helpers available.
  * @example map.healingOrbs.within(meters(40), map.guardians)
@@ -134,13 +160,13 @@ export class EntityList extends Seq<MapEntity> {
   }
 
   /**
-   * Entities at least `minHeight` Source units above the ground plane (z).
-   * Placeholder: absolute z; terrain-relative height arrives with spatial-core wiring (M3).
-   * @example map.creepCamps.highGround(300)
+   * Entities at least `minHeight` Source units high: elevation above the map bounds' minimum
+   * z ({@link Vec3.height}) when a spatial backend is loaded, absolute z otherwise.
+   * @example map.creepCamps.highGround(800)
    * @category Entities
    */
   highGround(minHeight: number): EntityList {
-    return this.where((e) => e.position.z >= minHeight)
+    return this.where(hasSpatial() ? (e) => e.position.height() >= minHeight : (e) => e.position.z >= minHeight)
   }
 
   /**
@@ -162,5 +188,37 @@ export class EntityList extends Seq<MapEntity> {
   closest(to: Locatable): MapEntity | undefined {
     const p = where(to)
     return this.min((e) => e.position.distanceTo(p))
+  }
+
+  /**
+   * The `n` entities nearest to a point or entity, nearest first (ties keep list order).
+   * @example map.healingOrbs.closestN(map.guardians.first()!, 3)
+   * @category Entities
+   */
+  closestN(to: Locatable, n: number): MapEntity[] {
+    const p = where(to)
+    return this.orderBy((e) => e.position.distanceTo(p)).take(n).toArray()
+  }
+
+  /**
+   * Group entities by the XY grid cell (side `cellSize` Source units) they sit in.
+   * Groups are ordered by `ix` then `iy`, so output is deterministic.
+   * @example map.creepCamps.groupByRegion(meters(100)).select(g => [g.region.key, g.items.length])
+   * @category Entities
+   */
+  groupByRegion(cellSize: number): Seq<{ readonly region: Region; readonly items: MapEntity[] }> {
+    const src = this
+    return new Seq({
+      *[Symbol.iterator]() {
+        const cells = new Map<string, { region: Region; items: MapEntity[] }>()
+        for (const e of src) {
+          const region = regionOf(e, cellSize)
+          const g = cells.get(region.key)
+          if (g) g.items.push(e)
+          else cells.set(region.key, { region, items: [e] })
+        }
+        yield* [...cells.values()].sort((a, b) => a.region.ix - b.region.ix || a.region.iy - b.region.iy)
+      },
+    })
   }
 }
