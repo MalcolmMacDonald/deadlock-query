@@ -101,7 +101,9 @@ export const makeToolsPanel = (controller: ViewerController): PanelComponent => 
     const files = el("div", "display:flex;gap:4px;margin-bottom:6px")
     const status = el("div", "margin-bottom:6px;min-height:1.4em")
     status.dataset.role = "status"
-    root.append(toolBar, actions, files, hint, status, list)
+    const snaps = el("div", "display:flex;gap:8px;margin-bottom:6px;flex-wrap:wrap")
+    snaps.title = "Snapping"
+    root.append(toolBar, actions, files, snaps, hint, status, list)
     container.appendChild(root)
 
     const toolButtons = TOOL_IDS.map((t) => {
@@ -151,8 +153,18 @@ export const makeToolsPanel = (controller: ViewerController): PanelComponent => 
     fileButton("import", "Import", () => fileInput.click())
     files.appendChild(fileInput)
 
+    const snapBoxes = (["surface", "vertices", "features"] as const).map((k) => {
+      const label = el("label", "display:flex;align-items:center;gap:3px")
+      const box = el("input", "", { type: "checkbox" })
+      box.dataset.snap = k
+      box.onchange = () => controller.snapping.set({ [k]: box.checked })
+      label.append(box, document.createTextNode(`Snap ${k}`))
+      snaps.appendChild(label)
+      return [k, box] as const
+    })
+
     const HINTS: Record<ToolId, string> = {
-      select: "Click an annotation to select it.",
+      select: "Click an annotation to select it; drag a blue handle to move a vertex, double-click an edge to add one, Delete removes the vertex (or the annotation).",
       point: "Click the map to drop a point.",
       label: "Click the map, then type the label text.",
       polyline: "Click to add vertices; double-click or Enter to finish, Esc to cancel.",
@@ -162,6 +174,7 @@ export const makeToolsPanel = (controller: ViewerController): PanelComponent => 
     const render = () => {
       const tool = controller.tools.tool
       for (const b of toolButtons) b.style.fontWeight = b.dataset.tool === tool ? "700" : "400"
+      for (const [k, box] of snapBoxes) box.checked = controller.snapping.settings[k]
       hint.textContent = controller.tools.pending ? `${HINTS[tool]} (${controller.tools.pending} placed)` : HINTS[tool]
       undo.disabled = !controller.annotations.canUndo
       redo.disabled = !controller.annotations.canRedo
@@ -178,7 +191,8 @@ export const makeToolsPanel = (controller: ViewerController): PanelComponent => 
     const unsubs = [
       controller.tools.subscribe(render),
       controller.annotations.subscribe(render),
-      controller.onSelectionChange(render)
+      controller.onSelectionChange(render),
+      controller.snapping.subscribe(render)
     ]
     return () => { for (const u of unsubs) u(); root.remove() }
   }

@@ -1,3 +1,4 @@
+import * as THREE from "three"
 import type {
   Annotation, AnnotationDocument, AnnotationKind, OverlayFeature, OverlayStyle, Vec3
 } from "@deadlock-query/contracts"
@@ -22,6 +23,8 @@ export class AnnotationStore {
   private past: Array<ReadonlyArray<Annotation>> = []
   private future: Array<ReadonlyArray<Annotation>> = []
   private nextId = 1
+  /** Document before a live edit began; set while a drag is in progress. */
+  private editBase: ReadonlyArray<Annotation> | undefined
   private readonly listeners = new Set<() => void>()
 
   get annotations(): ReadonlyArray<Annotation> { return this.doc }
@@ -35,7 +38,52 @@ export class AnnotationStore {
     return () => { this.listeners.delete(fn) }
   }
 
+  /** True between the first `edit` and its `commitEdit` / `cancelEdit`. */
+  get editing(): boolean { return this.editBase !== undefined }
+
+  /**
+   * Live edit (a vertex drag): replaces annotation `next.id` without touching history. The whole gesture becomes one
+   * undo step on `commitEdit`; `cancelEdit` puts the document back.
+   */
+  edit(next: Annotation): boolean {
+    const i = this.doc.findIndex((a) => a.id === next.id)
+    if (i < 0) return false
+    this.editBase ??= this.doc
+    this.doc = this.doc.map((a, k) => (k === i ? next : a))
+    this.emit()
+    return true
+  }
+
+  commitEdit() {
+    const base = this.editBase
+    if (!base) return
+    this.editBase = undefined
+    if (this.doc === base) return
+    this.past.push(base)
+    if (this.past.length > MAX_HISTORY) this.past.shift()
+    this.future = []
+    this.emit()
+  }
+
+  cancelEdit() {
+    const base = this.editBase
+    if (!base) return
+    this.editBase = undefined
+    this.doc = base
+    this.emit()
+  }
+
+  /** One-step replacement of a single annotation (insert / delete vertex, recolour). */
+  update(next: Annotation): boolean {
+    this.commitEdit()
+    const i = this.doc.findIndex((a) => a.id === next.id)
+    if (i < 0) return false
+    this.commit(this.doc.map((a, k) => (k === i ? next : a)))
+    return true
+  }
+
   add(a: NewAnnotation): Annotation {
+    this.commitEdit()
     const made = { ...a, id: this.freshId() } as Annotation
     this.commit([...this.doc, made])
     return made
@@ -43,6 +91,7 @@ export class AnnotationStore {
 
   /** Replaces the whole document as one undoable step (import). */
   replace(annotations: ReadonlyArray<Annotation>, layers?: AnnotationDocument["layers"]) {
+    this.commitEdit()
     this.docLayers = layers
     this.commit(annotations)
     this.bumpIds(annotations)
@@ -50,6 +99,7 @@ export class AnnotationStore {
 
   /** Replaces the document and forgets history (restoring autosave, where there is nothing to undo back to). */
   reset(annotations: ReadonlyArray<Annotation>, layers?: AnnotationDocument["layers"]) {
+    this.editBase = undefined
     this.docLayers = layers
     this.past = []
     this.future = []
@@ -74,12 +124,14 @@ export class AnnotationStore {
   }
 
   remove(id: string): boolean {
+    this.commitEdit()
     if (!this.doc.some((a) => a.id === id)) return false
     this.commit(this.doc.filter((a) => a.id !== id))
     return true
   }
 
   undo(): boolean {
+    this.commitEdit()
     const prev = this.past.pop()
     if (!prev) return false
     this.future.push(this.doc)
@@ -89,6 +141,7 @@ export class AnnotationStore {
   }
 
   redo(): boolean {
+    this.commitEdit()
     const next = this.future.pop()
     if (!next) return false
     this.past.push(this.doc)
@@ -160,7 +213,30 @@ const KIND_LAYER: Record<AnnotationKind, { readonly id: string; readonly label: 
   measure: { id: "ann.measures", label: "Measurements", style: { color: "#ffffff", size: 7 } }
 }
 
-export const ANNOTATION_LAYER_IDS: ReadonlyArray<string> = Object.values(KIND_LAYER).map((l) => l.id)
+/** Overlay layers made from annotations all have ids under this prefix. */
+export const isAnnotationLayerId = (id: string): boolean => id.startsWith("ann.")
+
+/**
+ * Normalises a CSS colour string (`#rgb`, `#rrggbb`, a CSS colour name, `rgb()`/`hsl()`) to `#rrggbb`; undefined when
+ * it is not a colour, so a bad `Annotation.color` falls back to the kind's default instead of drawing black.
+ */
+export const normalizeColor = (css: string | undefined): string | undefined => {
+  if (css === undefined) return undefined
+  const s = css.trim().toLowerCase()
+  const hex = /^#([0-9a-f]{3}|[0-9a-f]{6})$/.exec(s)
+  if (hex) {
+    const h = hex[1]!
+    return h.length === 3 ? `#${h[0]}${h[0]}${h[1]}${h[1]}${h[2]}${h[2]}` : `#${h}`
+  }
+  const named = (THREE.Color.NAMES as Record<string, number>)[s]
+  if (named !== undefined) return `#${named.toString(16).padStart(6, "0")}`
+  if (/^(rgb|hsl)a?\([^)]*\)$/.test(s)) return `#${new THREE.Color().setStyle(s).getHexString()}`
+  return undefined
+}
+
+/** Colour an annotation is drawn in: its own `color`, else its document layer's, else the kind's default (undefined). */
+export const annotationColor = (a: Annotation, layers: AnnotationDocument["layers"]): string | undefined =>
+  normalizeColor(a.color) ?? normalizeColor(layers?.find((l) => l.id === a.layer)?.color)
 
 const toFeature = (a: Annotation): OverlayFeature => {
   switch (a.kind) {
@@ -172,27 +248,55 @@ const toFeature = (a: Annotation): OverlayFeature => {
   }
 }
 
-/** One overlay layer per annotation kind that has entries; feature ids are `<layerId>:<index>`. */
-export const annotationLayers = (doc: ReadonlyArray<Annotation>): ReadonlyArray<AnnotationLayer> => {
+const KINDS = Object.keys(KIND_LAYER) as AnnotationKind[]
+
+/**
+ * Overlay layers for the annotations: one per kind and colour. Annotations without a colour share the kind's layer
+ * (`ann.lines`); each distinct colour gets `ann.lines.<rrggbb>`, so ids stay stable as annotations come and go.
+ * Feature ids are `<layerId>:<index>`. Pass the document's `layers` so layer colours are honoured.
+ */
+export const annotationLayers = (
+  doc: ReadonlyArray<Annotation>, layers?: AnnotationDocument["layers"]
+): ReadonlyArray<AnnotationLayer> => {
   const out: AnnotationLayer[] = []
-  for (const spec of Object.values(KIND_LAYER)) {
-    const kind = (Object.keys(KIND_LAYER) as AnnotationKind[]).find((k) => KIND_LAYER[k] === spec)!
-    const items = doc.filter((a) => a.kind === kind)
-    if (items.length) out.push({ ...spec, features: items.map(toFeature), annotationIds: items.map((a) => a.id) })
+  for (const kind of KINDS) {
+    const spec = KIND_LAYER[kind]
+    const groups = new Map<string | undefined, Annotation[]>()
+    for (const a of doc) {
+      if (a.kind !== kind) continue
+      const c = annotationColor(a, layers)
+      groups.set(c, [...(groups.get(c) ?? []), a])
+    }
+    // Default colour first, then colours in order of first use.
+    const keys = [...(groups.has(undefined) ? [undefined] : []), ...[...groups.keys()].filter((k) => k !== undefined)]
+    for (const color of keys) {
+      const items = groups.get(color)!
+      out.push({
+        id: color === undefined ? spec.id : `${spec.id}.${color.slice(1)}`,
+        label: color === undefined ? spec.label : `${spec.label} ${color}`,
+        style: color === undefined ? spec.style : { ...spec.style, color },
+        features: items.map(toFeature),
+        annotationIds: items.map((a) => a.id)
+      })
+    }
   }
   return out
 }
 
 /** Annotation behind an overlay feature id (`ann.lines:2`), if the id belongs to an annotation layer. */
-export const annotationIdForFeature = (doc: ReadonlyArray<Annotation>, featureId: string): string | undefined => {
+export const annotationIdForFeature = (
+  doc: ReadonlyArray<Annotation>, featureId: string, layers?: AnnotationDocument["layers"]
+): string | undefined => {
   const i = featureId.lastIndexOf(":")
   if (i < 0) return undefined
-  const layer = annotationLayers(doc).find((l) => l.id === featureId.slice(0, i))
+  const layer = annotationLayers(doc, layers).find((l) => l.id === featureId.slice(0, i))
   return layer?.annotationIds[Number(featureId.slice(i + 1))]
 }
 
-export const featureIdForAnnotation = (doc: ReadonlyArray<Annotation>, annotationId: string): string | undefined => {
-  for (const l of annotationLayers(doc)) {
+export const featureIdForAnnotation = (
+  doc: ReadonlyArray<Annotation>, annotationId: string, layers?: AnnotationDocument["layers"]
+): string | undefined => {
+  for (const l of annotationLayers(doc, layers)) {
     const i = l.annotationIds.indexOf(annotationId)
     if (i >= 0) return `${l.id}:${i}`
   }

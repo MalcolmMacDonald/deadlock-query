@@ -32,6 +32,8 @@ export class ToolMachine {
   get tool(): ToolId { return this.current }
   /** Points placed so far for the shape in progress. */
   get pending(): number { return this.points.length }
+  /** The placed points themselves, so the next click can snap to them (closing a polygon on its first vertex). */
+  get placed(): ReadonlyArray<Vec3> { return this.points }
 
   subscribe(fn: () => void): () => void {
     this.listeners.add(fn)

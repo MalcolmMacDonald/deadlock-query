@@ -1,8 +1,8 @@
 # map-viewer — state
 
-- **Status:** M3 core done (layers panel, annotation tools, undo/redo, import/export, autosave); snapping/BVH/vertex editing remain; M1 real-bundle perf check pending
-- **Version:** 0.4.0
-- **Current milestone:** M3 (finish)
+- **Status:** M3 done except multi-select, per-layer lock and label text rendering; M1/M2 real-hardware perf checks pending
+- **Version:** 0.5.0
+- **Current milestone:** M3 (leftovers) / M4
 - **Last updated:** 2026-10-06
 
 ## Done
@@ -18,15 +18,20 @@
 
 - 2026-10-06 — M3 (part 2): the viewer's local `Annotation` type is gone; `AnnotationStore` holds the contracts `Annotation` (and carries the document's `layers` through). `src/persistence.ts`: `toDocument`/`serializeDocument`, `parseDocument` (schema + `decodeVersioned` major 1 + `validateAnnotationDocument`; a different `mapName`/`gameBuildId` only warns), `AnnotationStorage` with `indexedDbStorage()` and `memoryStorage()`. `ViewerController`: `setMap`, `exportJson`, `importJson` (replaces the annotations as one undoable step; a rejected file changes nothing), `useStorage`/`useDefaultStorage`, `flushAutosave`. Autosave is debounced (400 ms), one document per map under key `annotations:<mapName>`, restored on mount when nothing has been drawn yet (restore resets history). Tools panel has Export (downloads `annotations-<map>.json`) and Import (file picker, result shown in the panel). Tests: bun unit (round trip, bad documents, autosave/restore) and e2e (draw, reload restores, export is schema-valid, import replaces, bad import rejected).
 
+- 2026-10-06 — M3 (part 3): BVH picking, snapping, vertex editing, annotation colour. `module.json` now lists `spatial-core` in `dependsOn` (the plan's "map-viewer optional" edge). `src/picking.ts`: `SurfacePicker` over spatial-core's `Raycaster`; `ViewerData.bakedBvh` / `loadBundle` read `manifest.baked.bvh.file` (`baked/collision.bvh`, world space) and `SurfacePicker.fromBaked` uses it, otherwise a BVH is built lazily from the visible scene meshes (`worldTriangleSoup`, Three space -> world); `canvas.dataset.picker` says which (`baked`/`meshes`). Terrain clicks and tool hover now use it (hover previously used the plane only). `src/snapping.ts`: `snap()` priority is existing vertex (annotations, overlay layers, points already placed in the shape) > corner of the hit triangle > surface hit > plane, radius 12 px in screen space; `SnapState` on `ViewerController.snapping` with three switches in the Tools panel (surface / vertices / features); a magenta/green marker shows feature/vertex snaps. `src/vertexEdit.ts` + `ViewerController`: with the Select tool, the selected annotation shows blue vertex handles; drag moves a vertex (snapping applies, own vertices excluded, camera does not pan: `ViewerControls.intercept`), the whole drag is one undo step (`AnnotationStore.edit/commitEdit/cancelEdit`), double-click an edge of a polyline/polygon inserts a vertex, Delete removes the selected vertex (or the annotation when it is already at its minimum), Esc cancels a drag. Annotation `color` (and the colour of the document layer named by `Annotation.layer`) is drawn: annotations become one overlay layer per kind and colour (`ann.lines`, `ann.lines.ff8800`), so each shows in the layers panel; invalid colours fall back to the kind default (`normalizeColor`). Tests: bun unit (`picking`, `snapping`, `editing`) and e2e (snap to a vertex and off, handle drag does not move the camera, undo/redo, insert/delete vertex, red polyline renders).
+
 ## In progress
 - (nothing)
 
 ## Next
 - M1 leftover (needs Malcolm's machine): open the real single-tile bundle and confirm >= 30 fps; the viewer loads any manifest via `MapDataService`, so no code change expected.
-- M3 remainder: snapping to surface/vertices/features and BVH picking (three-mesh-bvh; click raycast is brute force today and hover preview uses the plane only), vertex editing, multi-select, per-layer lock, text rendering for labels and measure results (shown only in the tools list for now; SDF labels are M7).
+- M3 remainder: multi-select, per-layer lock (needs a place for the lock flag: contracts `AnnotationLayer.locked` already exists, the viewer ignores it), text rendering for labels and measure results (shown only in the tools list for now; SDF labels are M7). Document layers' `visible`/`locked` are still round-tripped but not applied; only their `color` is.
+- Real-bundle check (Malcolm's machine): load a baked bundle and confirm `canvas.dataset.picker === "baked"` and that clicks land on the collision surface; the e2e only covers the mesh-built BVH because the fixture is not baked.
 - M2 leftover: confirm 10k points at 60 fps on real hardware (software GL in CI measures ~15 fps for the whole scene, informational only).
 
 ## Blockers / Requests to other modules
+- Spatial-core: expose triangle vertices (e.g. `Raycaster.triangle(triIndex)`); vertex snapping reads them from the serialized BVH layout (`bakedTriangles` in `src/picking.ts`, guarded by `test/picking.test.ts`), which would break silently if `serialize()` changed.
+- Contracts: `MapDataService` has no accessor for baked data, so the shell's `loadViewerData(MockMapDataService)` path cannot hand the baked BVH to the viewer; it only arrives through `loadBundle(url)` (which the shell calls for the published bundle). A `bakedBytes(name)` accessor would fix that.
 - Shell: mount `viewer.layers` (`makeLayersPanel(controller)`) and `viewer.tools` (`makeToolsPanel(controller)`) next to `viewer.main`, using the same `ViewerController`. They are already listed in `makeViewerModule(...).panels`; `shell/src/viewer.ts` builds its own module and only lists `viewer.main`.
 - Shell/contracts: `ModuleDefinition.layer` is typed `Layer<never>` and shell provides `MockViewerService` in its base layer, so the real service is not reachable by other modules yet. Shell should create one `ViewerController`, pass it to `makeViewerModule(data, controller)` and provide `makeViewerService(controller)` instead of the mock.
 - Contracts: `ViewerEvent` pick/hover carry only `id`; style has only `color`/`size` (line width is not supported by WebGL lines; fat lines come later). Per-feature styling from columns needs an `OverlayStyle` extension.
@@ -45,6 +50,9 @@
 - 2026-10-06 — M3: selecting an annotation reuses the viewer's single highlight slot, so it replaces any query highlight until cleared. Layer order is the draw order among overlay layers only; draft and highlight always draw above (render order 15 / 20). Annotation layers disappear (and their appearance resets) when their last annotation is deleted.
 
 - 2026-10-06 — M3: contract `Annotation.color`, `.layer` and `.properties` and the document's `layers` round-trip through import/export/autosave but are not rendered yet (annotation overlay layers are still one per kind with the viewer's default colours). Importing replaces rather than merges.
+
+- 2026-10-06 — M3: picking against the baked collision BVH, not the render tiles, when the bundle has one (it has the sky volumes removed and is the geometry the query library reasons about); with no baked file the visible scene meshes are used. Meshes are treated as double-sided because collision GLBs are not consistently wound.
+- 2026-10-06 — M3: annotation colour is part of the overlay layer id, so recolouring an annotation moves it between layers and a layers-panel override (visibility, colour, opacity) applies to that colour group only. Document-layer membership beyond colour is not rendered yet.
 
 ## Open questions
 - (see PLAN.md §9)

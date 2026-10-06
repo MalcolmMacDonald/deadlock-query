@@ -12,6 +12,8 @@ export interface ViewerControlsOptions {
   readonly camera: THREE.PerspectiveCamera
   readonly initial: { readonly mode: CameraMode; readonly pose: CameraPose }
   readonly onChange: () => void
+  /** Return true to keep a pointer-down for the host (a vertex drag) instead of starting a camera gesture. */
+  readonly intercept?: (e: PointerEvent) => boolean
   /** Window used for hash read/write; injectable for tests. */
   readonly location?: Pick<Location, "hash">
 }
@@ -73,6 +75,8 @@ export class ViewerControls {
     el.style.touchAction = "none"
     this.on(el, "contextmenu", (e: Event) => e.preventDefault())
     this.on(el, "pointerdown", (e: PointerEvent) => {
+      el.focus()
+      if (this.o.intercept?.(e)) return
       last = { x: e.clientX, y: e.clientY, button: e.button }
       el.setPointerCapture?.(e.pointerId)
       el.focus()

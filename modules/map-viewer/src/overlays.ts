@@ -7,6 +7,10 @@ import { DEFAULT_APPEARANCE, type LayerAppearance } from "./layers.ts"
 export const DEFAULT_COLOR = "#ffcc00"
 export const DEFAULT_SIZE = 6
 export const HIGHLIGHT_COLOR = "#ffffff"
+const HANDLE_STYLE: OverlayStyle = { color: "#4fc3ff", size: 11 }
+const ACTIVE_HANDLE_STYLE: OverlayStyle = { color: "#ffe14f", size: 15 }
+export const FEATURE_SNAP_COLOR = "#ff4fd8"
+export const VERTEX_SNAP_COLOR = "#4fff9a"
 
 export interface OverlayLayerData {
   readonly features: ReadonlyArray<OverlayFeature>
@@ -150,6 +154,8 @@ export class OverlayScene {
   private readonly appearances = new Map<string, LayerAppearance>()
   private readonly highlightGroup = new THREE.Group()
   private readonly draftGroup = new THREE.Group()
+  private readonly handleGroup = new THREE.Group()
+  private readonly snapGroup = new THREE.Group()
   private highlighted: ReadonlyArray<string> = []
 
   constructor(private readonly onChange: () => void = () => {}) {
@@ -157,6 +163,8 @@ export class OverlayScene {
     this.root.matrix.fromArray([...WORLD_TO_THREE])
     this.root.add(this.highlightGroup)
     this.root.add(this.draftGroup)
+    this.root.add(this.handleGroup)
+    this.root.add(this.snapGroup)
   }
 
   get layerIds(): ReadonlyArray<string> { return [...this.layers.keys()] }
@@ -197,6 +205,29 @@ export class OverlayScene {
     this.onChange()
   }
 
+  /** Grab points for the selected annotation's vertices; `active` is drawn larger and in a different colour. */
+  setHandles(points: ReadonlyArray<Vec3>, active?: number) {
+    disposeTree(this.handleGroup)
+    this.handleGroup.clear()
+    const rest = points.filter((_, i) => i !== active)
+    const add = (pts: ReadonlyArray<Vec3>, style: OverlayStyle) => {
+      for (const o of buildFeatureObjects(pts.map((at) => ({ type: "point" as const, at })), style)) { o.renderOrder = 22; this.handleGroup.add(o) }
+    }
+    add(rest, HANDLE_STYLE)
+    if (active !== undefined && points[active]) add([points[active]!], ACTIVE_HANDLE_STYLE)
+    this.onChange()
+  }
+
+  /** Marker where a snap landed (feature / vertex snaps only); `undefined` clears it. */
+  setSnapMarker(at: Vec3 | undefined, kind?: "feature" | "vertex") {
+    disposeTree(this.snapGroup)
+    this.snapGroup.clear()
+    if (at) {
+      for (const o of buildFeatureObjects([{ type: "point", at }], { color: kind === "feature" ? FEATURE_SNAP_COLOR : VERTEX_SNAP_COLOR, size: 13 })) { o.renderOrder = 25; this.snapGroup.add(o) }
+    }
+    this.onChange()
+  }
+
   private buildGroup(layerId: string, features: ReadonlyArray<OverlayFeature>, style: OverlayStyle): THREE.Group {
     const a = this.appearance(layerId)
     const group = new THREE.Group()
@@ -229,6 +260,8 @@ export class OverlayScene {
     for (const id of [...this.layers.keys()]) this.dropGroup(id)
     this.clearHighlight()
     disposeTree(this.draftGroup)
+    disposeTree(this.handleGroup)
+    disposeTree(this.snapGroup)
   }
 
   private dropGroup(layerId: string) {
