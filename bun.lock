@@ -72,6 +72,7 @@
         "monaco-editor": "^0.52.2",
       },
       "devDependencies": {
+        "@deadlock-query/query-library": "workspace:*",
         "playwright-core": "^1.56.1",
       },
     },
