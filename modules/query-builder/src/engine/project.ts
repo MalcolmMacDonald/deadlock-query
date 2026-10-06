@@ -33,7 +33,8 @@ const columnType = (values: ReadonlyArray<unknown>): ColumnType => {
  * Projects the JSON-like value a query returned into a `QueryResult` table.
  * Arrays of arrays → positional columns `c1…`; arrays of objects → one column per key
  * (first-seen order); arrays of scalars and single values → a `value` column.
- * Row IDs are derived from entityRef cells when present, otherwise from row index.
+ * Row IDs are derived from entityRef cells when present, otherwise from row index. Entity columns also yield a
+ * `<name>.position` point column so the entity shows up on the map.
  */
 export const projectResult = (
   value: unknown,
@@ -69,8 +70,26 @@ export const projectResult = (
     rows = list.map((v) => [v])
   }
 
-  const columns = names.map((name, i) => ({ name, type: columnType(rows.map((r) => r[i])) }))
-  const cells = rows.map((r) => r.map((v, i) => (columns[i]!.type === "string" && typeof v === "object" && v !== null && !isEntity(v) ? JSON.stringify(v) : cell(v))))
+  const baseColumns = names.map((name, i) => ({ name, type: columnType(rows.map((r) => r[i])) }))
+  const baseCells = rows.map((r) => r.map((v, i) => (baseColumns[i]!.type === "string" && typeof v === "object" && v !== null && !isEntity(v) ? JSON.stringify(v) : cell(v))))
+
+  // An entity cell collapses to its id, which would leave it off the map. Each entityRef column therefore gets a
+  // `<name>.position` point column right after it, so entities returned by a query are drawn where they stand.
+  const columns: Array<{ name: string; type: ColumnType }> = []
+  const sources: number[] = []
+  baseColumns.forEach((c, i) => {
+    columns.push(c)
+    sources.push(i)
+    if (c.type === "entityRef") { columns.push({ name: `${c.name}.position`, type: "point" }); sources.push(-1 - i) }
+  })
+  const cells = baseCells.map((r, ri) =>
+    sources.map((src) => {
+      if (src >= 0) return r[src]
+      const v = rows[ri]![-1 - src]
+      const at = isEntity(v) ? (v as { position?: unknown }).position : undefined
+      return isNum3(at) ? at : null
+    })
+  )
 
   // Generate row IDs: use entity ID if the item is an entity, otherwise use row index
   const rowIds = rawItems.map((item, idx) => isEntity(item) ? item.id : String(idx))

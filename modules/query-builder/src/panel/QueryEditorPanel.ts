@@ -320,7 +320,9 @@ export const mountQueryEditor = async (container: HTMLElement, opts: QueryEditor
     // Result ↔ viewer ↔ shared selection.
     let currentResult: QueryResult | null = null
     let lastRunSource = model.getValue()
-    let features = overlayFeatures({ columns: [], rows: [], rowIds: [], geometryColumns: [] } as unknown as QueryResult)
+    let features = overlayFeatures({ columns: [], rows: [], rowIds: [], geometryColumns: [] } as unknown as QueryResult, layerId)
+    /** Viewer layers the current result occupies (one per geometry column). */
+    let resultLayers: ReadonlyArray<string> = [layerId]
     let selectedRowIds: ReadonlyArray<string> = []
     let table: ResultsTable | null = null
     /** Builds the export bar and the table for the current result (once per run; selection changes only update row marks). */
@@ -372,7 +374,7 @@ export const mountQueryEditor = async (container: HTMLElement, opts: QueryEditor
       void Effect.runPromise(selection.current).then((ids) => applySelection(ids.filter((id) => currentResult?.rowIds.includes(id)), false)).catch(() => {})
     }, SELECTION_POLL_MS)
     cleanups.push(() => clearInterval(poll))
-    cleanups.push(() => fire(Effect.all([viewer.removeOverlay(layerId), viewer.highlight([])], { discard: true })))
+    cleanups.push(() => fire(Effect.all([...[...new Set([layerId, ...resultLayers])].map((id) => viewer.removeOverlay(id)), viewer.highlight([])], { discard: true })))
 
     const run = async () => {
       runBtn.disabled = true
@@ -385,8 +387,8 @@ export const mountQueryEditor = async (container: HTMLElement, opts: QueryEditor
         const { result } = await runQuery(engineLayer, source)
         store.record({ source, status: "ok", rows: result.stats.rowCount })
         currentResult = result
-        features = overlayFeatures(result)
-        await Effect.runPromise(setResultOverlay(layerId, result).pipe(Effect.provide(servicesLayer))).catch(() => {})
+        features = overlayFeatures(result, layerId)
+        resultLayers = await Effect.runPromise(setResultOverlay(layerId, result, resultLayers).pipe(Effect.provide(servicesLayer))).catch(() => resultLayers)
         selectedRowIds = []
         showResult()
         status.textContent = "done"

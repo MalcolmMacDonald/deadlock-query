@@ -1,0 +1,35 @@
+import { expect, test } from "bun:test"
+import { makeResult } from "@deadlock-query/contracts"
+import { COLUMN_COLORS, columnLayerId, overlayFeatures, rowLabel } from "../src/app/viewerIntegration.ts"
+
+const result = makeResult(
+  [{ name: "g", type: "string" }, { name: "g.pos", type: "point" }, { name: "orb", type: "string" }, { name: "orb.pos", type: "point" }, { name: "d", type: "number" }],
+  [["guardian-1", [1, 2, 3], "orb-9", [4, 5, 6], 12.3456], ["guardian-2", [7, 8, 9], "orb-8", null, 3]],
+  ["r1", "r2"]
+)
+
+test("one layer per geometry column, in distinct colours", () => {
+  const { layers } = overlayFeatures(result, "q")
+  expect(layers.map((l) => [l.id, l.column, l.features.length])).toEqual([["q", "g.pos", 2], ["q~1", "orb.pos", 1]])
+  expect(layers[0]!.style.color).toBe(COLUMN_COLORS[0]!)
+  expect(layers[1]!.style.color).toBe(COLUMN_COLORS[1]!)
+  expect(columnLayerId("q", 0)).toBe("q")
+})
+
+test("feature ids are the viewer's `<layer>:<index>` and map to table rows both ways", () => {
+  const { featureToRow, rowToFeatures } = overlayFeatures(result, "q")
+  expect(featureToRow.get("q:0")).toBe("r1")
+  expect(featureToRow.get("q:1")).toBe("r2")
+  expect(featureToRow.get("q~1:0")).toBe("r1")
+  expect(rowToFeatures.get("r1")).toEqual(["q:0", "q~1:0"])
+  expect(rowToFeatures.get("r2")).toEqual(["q:1"])
+})
+
+test("labels name what the geometry belongs to", () => {
+  const { layers } = overlayFeatures(result, "q")
+  expect(layers[0]!.features.map((f) => f.label)).toEqual(["guardian-1", "guardian-2"])
+  // The orb point is labelled by the cell next to it, not by the guardian that shares the row.
+  expect(layers[1]!.features.map((f) => f.label)).toEqual(["orb-9"])
+  expect(rowLabel(makeResult([{ name: "p", type: "point" }], [[[0, 0, 0]]]), 0, "p")).toBe("#1")
+  expect(rowLabel(makeResult([{ name: "p", type: "point" }, { name: "n", type: "number" }], [[[0, 0, 0], 12.3456]]), 0, "p")).toBe("12.35")
+})
