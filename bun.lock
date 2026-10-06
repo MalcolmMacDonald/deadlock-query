@@ -65,6 +65,7 @@
       "version": "0.1.0",
       "devDependencies": {
         "@deadlock-query/contracts": "workspace:*",
+        "@deadlock-query/spatial-core": "workspace:*",
       },
     },
     "modules/shell": {

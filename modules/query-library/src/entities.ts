@@ -1,5 +1,6 @@
 import { Seq } from "./Seq.ts"
 import { Vec3 } from "./Vec3.ts"
+import type { VisibleOpts } from "./spatial.ts"
 
 /**
  * Lane colour. Lane numbers 1-3 map to colours through `MapSettings.laneColors`.
@@ -128,6 +129,17 @@ export class EntityList extends Seq<MapEntity> {
    */
   highGround(minHeight: number): EntityList {
     return this.where((e) => e.position.z >= minHeight)
+  }
+
+  /**
+   * Entities visible from any of the given viewpoints (owner-authored semantics).
+   * O(n·m) ray tests.
+   * @example map.creepCamps.visibleFrom(map.guardians)
+   * @category Entities
+   */
+  visibleFrom(from: Locatable | Iterable<Locatable>, opts?: VisibleOpts): EntityList {
+    const pts = (from instanceof Vec3 || from instanceof MapEntity ? [from] : [...from]).map(where)
+    return this.where((e) => e.position.visibleFrom(pts, opts))
   }
 
   /**
