@@ -1,7 +1,7 @@
 # spatial-core — state
 
-- **Status:** M0 + M1 raycaster done
-- **Version:** 0.1.0
+- **Status:** M0, M1 raycaster and M3 SampleGrid done; M2 pending
+- **Version:** 0.2.0
 - **Current milestone:** M1 done; next M2 (semantics scaffold)
 - **Last updated:** 2026-10-05
 
@@ -19,11 +19,13 @@
 
 - **M0 + M1** (2026-10-06): `src/math.ts` (tuple Vec3/Aabb helpers), `src/raycaster.ts` (`Raycaster` over three-mesh-bvh: `raycastFirst/All`, `occluded`, `closestPoint`, `overlapsSphere/Capsule`, `raycastFirstMany`, `serialize`/`deserialize`). Serialised bytes embed geometry and are byte-deterministic; brute-force oracle tests for rays. Not done: sphereCast/capsuleCast sweeps (only overlap tests), AbortSignal/progress options (M5).
 
+- **M3 SampleGrid** (2026-10-06): `src/sampleGrid.ts`. Built-in `floorHeight` (downward ray from above bounds, NaN if none) is always present and passed to generators as `cell.floorZ`; custom channels are `fn` or `{type: "f32"|"u8", gen}` so owner functions plug in unchanged. `get(channel, p)` is nearest-cell (XY), null outside. Deterministic binary `serialize`/`deserialize`; `onProgress`/`AbortSignal` on build. Cost report on a real map is still to do.
+
 ## In progress
 - (nothing)
 
 ## Next
-- M2: `semantics/` scaffold (signatures, params, placeholders, cases.json harness). Then M3 SampleGrid, M4 NavMesh (query-library M4 needs it).
+- M2: `semantics/` scaffold (signatures, params, placeholders, cases.json harness). Touches `src/semantics/**`, so its PR is owner-merge. M4 NavMesh (query-library M4 needs it) does not depend on M2.
 
 ## Blockers / Requests to other modules
 - (none)
