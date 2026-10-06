@@ -13,6 +13,7 @@ export const QueryResult = Schema.Struct({
   columns: Schema.Array(Column),
   /** Cells are JSON values; geometry cells are coordinate arrays in canonical (world) space. */
   rows: Schema.Array(Schema.Array(Schema.Unknown)),
+  rowIds: Schema.Array(Schema.String),
   geometryColumns: Schema.Array(Schema.String),
   stats: Schema.Struct({ rowCount: Schema.Number, compileMs: Schema.Number, runMs: Schema.Number }),
   warnings: Schema.Array(Schema.String)
@@ -20,12 +21,13 @@ export const QueryResult = Schema.Struct({
 export type QueryResult = typeof QueryResult.Type
 
 export const makeResult = (
-  columns: QueryResult["columns"], rows: QueryResult["rows"],
+  columns: QueryResult["columns"], rows: QueryResult["rows"], rowIds: ReadonlyArray<string> = [],
   extra: Partial<Pick<QueryResult, "warnings" | "stats">> = {}
 ): QueryResult => ({
   schemaVersion: SCHEMA_VERSION,
   columns,
   rows,
+  rowIds: rowIds.length > 0 ? [...rowIds] : rows.map((_, i) => String(i)),
   geometryColumns: columns.filter((c) => ["point", "segment", "polyline", "polygon"].includes(c.type)).map((c) => c.name),
   stats: extra.stats ?? { rowCount: rows.length, compileMs: 0, runMs: 0 },
   warnings: extra.warnings ?? []

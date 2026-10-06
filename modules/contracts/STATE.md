@@ -3,7 +3,7 @@
 - **Status:** M1 done
 - **Version:** 0.1.0
 - **Current milestone:** M2 (real-data check) next
-- **Last updated:** 2026-10-05
+- **Last updated:** 2026-10-06
 
 ## Done
 - M0: package scaffold, `Space`, module/service type skeletons (SelectionBus, ViewerService, DevAuth) + mock layers, tests; root workspace (package.json, tsconfig.base.json, root CLAUDE.md). `bun run verify:all` green.
@@ -24,6 +24,8 @@
 - 2026-10-05 — Module scaffolded (rev 2 of IMPLEMENTATION_PLAN.md).
 
 - 2026-10-05 — M1: entities `kind` enum starts from S2 class list; `collision.glbToWorld` is per-file because S2 saw a 0.0254-scale axis-swapped node matrix in the physics GLB. Fixtures use a hand-rolled GLB writer and sync SHA-256 so mocks work in browsers.
+
+- 2026-10-06 — M1 extension: added `rowIds` field to `QueryResult` schema (array of strings, one per row, derived from entity.id or row index). Enables row ↔ feature tracking for viewer integration. Fixtures regenerated with new field.
 
 ## Open questions
 - (see PLAN.md §9)
