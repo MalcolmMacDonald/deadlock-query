@@ -4,8 +4,10 @@ import {
 } from "@deadlock-query/contracts"
 import { eyeOf, poseFromEye, type CameraPose } from "./camera.ts"
 import {
-  ANNOTATION_LAYER_IDS, AnnotationStore, annotationIdForFeature, annotationLayers, featureIdForAnnotation
+  AnnotationStore, annotationIdForFeature, annotationLayers, featureIdForAnnotation
 } from "./annotations.ts"
+import { SnapState } from "./snapping.ts"
+import { insertVertex, moveVertex, removeVertex } from "./vertexEdit.ts"
 import { LayerStore, type LayerAppearance } from "./layers.ts"
 import { ToolMachine } from "./tools.ts"
 import { DEFAULT_COLOR } from "./overlays.ts"
@@ -22,6 +24,8 @@ export interface ViewerSurface {
   readonly highlight: (ids: ReadonlyArray<string>) => void
   readonly setAppearance: (layerId: string, a: LayerAppearance) => void
   readonly setDraft: (features: ReadonlyArray<OverlayFeature>) => void
+  /** Vertex handles of the selected annotation (`active` is the selected vertex). Empty clears them. */
+  readonly setHandles: (points: ReadonlyArray<Vec3>, active: number | undefined) => void
   readonly getPose: () => CameraPose
   readonly setPose: (pose: CameraPose) => void
   readonly capture: () => Promise<Uint8Array>
@@ -47,7 +51,11 @@ export class ViewerController {
   readonly layers = new LayerStore()
   readonly annotations = new AnnotationStore()
   readonly tools = new ToolMachine((a) => { this.annotations.add(a) })
+  /** Snap-to-surface/vertex/feature switches for the annotation tools. */
+  readonly snapping = new SnapState()
   private selectedId: string | undefined
+  private selectedVertexIndex: number | undefined
+  private liveAnnotationLayers = new Set<string>()
   private map: MapIdentity = {}
   private storage: AnnotationStorage | undefined
   private autosaveReady = false
@@ -59,7 +67,7 @@ export class ViewerController {
     this.layers.subscribe(() => {
       for (const l of this.layers.list()) this.surface?.setAppearance(l.id, this.layers.appearance(l.id))
     })
-    this.tools.subscribe(() => this.surface?.setDraft(this.tools.draft()))
+    this.tools.subscribe(() => { this.surface?.setDraft(this.tools.draft()); this.syncHandles() })
     this.annotations.subscribe(() => { this.syncAnnotations(); this.scheduleSave() })
   }
 
@@ -140,6 +148,7 @@ export class ViewerController {
     for (const l of this.layers.list()) surface.setAppearance(l.id, this.layers.appearance(l.id))
     for (const [id, [f, s]] of this.overlays) surface.setOverlay(id, f, s)
     surface.setDraft(this.tools.draft())
+    this.syncHandles()
     if (this.highlighted.length) surface.highlight(this.highlighted)
     return () => { if (this.surface === surface) { this.pose = surface.getPose(); this.surface = undefined } }
   }
@@ -166,15 +175,17 @@ export class ViewerController {
 
   /** Selects an annotation (or clears with `undefined`) and highlights it; shares the viewer's one highlight slot. */
   selectAnnotation(id: string | undefined) {
+    if (id !== this.selectedId) this.selectedVertexIndex = undefined
     this.selectedId = id
-    const fid = id ? featureIdForAnnotation(this.annotations.annotations, id) : undefined
+    const fid = id ? featureIdForAnnotation(this.annotations.annotations, id, this.annotations.layers) : undefined
     this.highlight(fid ? [fid] : [])
+    this.syncHandles()
     for (const fn of [...this.selectionListeners]) fn()
   }
 
   /** Selects the annotation under an overlay feature id; other layers' ids are ignored. */
   selectFeature(featureId: string) {
-    const id = annotationIdForFeature(this.annotations.annotations, featureId)
+    const id = annotationIdForFeature(this.annotations.annotations, featureId, this.annotations.layers)
     if (id) this.selectAnnotation(id)
   }
 
@@ -184,14 +195,67 @@ export class ViewerController {
     return true
   }
 
+  /** Vertex of the selected annotation that Delete removes and a drag moves. */
+  get selectedVertex(): number | undefined { return this.selectedVertexIndex }
+
+  selectVertex(index: number | undefined) {
+    if (index === this.selectedVertexIndex) return
+    this.selectedVertexIndex = index
+    this.syncHandles()
+    for (const fn of [...this.selectionListeners]) fn()
+  }
+
+  private selected() { return this.selectedId ? this.annotations.annotations.find((a) => a.id === this.selectedId) : undefined }
+
+  /** Vertices the user can grab: those of the selected annotation, only while the Select tool is active. */
+  vertexHandles(): ReadonlyArray<Vec3> {
+    return this.tools.tool === "select" ? this.selected()?.points ?? [] : []
+  }
+
+  private syncHandles() {
+    const pts = this.vertexHandles()
+    if (this.selectedVertexIndex !== undefined && this.selectedVertexIndex >= pts.length) this.selectedVertexIndex = undefined
+    this.surface?.setHandles(pts, this.selectedVertexIndex)
+  }
+
+  /** Live drag of the selected annotation's vertex; nothing is undoable until `commitVertexEdit`. */
+  moveVertex(index: number, to: Vec3): boolean {
+    const a = this.selected()
+    return a !== undefined && this.annotations.edit(moveVertex(a, index, to))
+  }
+  commitVertexEdit() { this.annotations.commitEdit() }
+  cancelVertexEdit() { this.annotations.cancelEdit() }
+
+  /** Adds a vertex after `after` on the selected polyline/polygon and selects it. */
+  insertVertexAfter(after: number, at: Vec3): boolean {
+    const a = this.selected()
+    const next = a && insertVertex(a, after, at)
+    if (!next || !this.annotations.update(next)) return false
+    this.selectVertex(after + 1)
+    return true
+  }
+
+  /**
+   * Delete on a selected vertex removes it; a shape already at its minimum (and a single-point annotation) is deleted
+   * whole instead. Without a selected vertex it deletes the annotation.
+   */
+  deleteVertexOrSelected(): boolean {
+    const a = this.selected()
+    const i = this.selectedVertexIndex
+    if (a && i !== undefined) {
+      const next = removeVertex(a, i)
+      if (next && this.annotations.update(next)) { this.selectVertex(undefined); return true }
+    }
+    return this.deleteSelected()
+  }
+
   private syncAnnotations() {
     const doc = this.annotations.annotations
-    const live = annotationLayers(doc)
-    for (const id of ANNOTATION_LAYER_IDS) {
-      const l = live.find((x) => x.id === id)
-      if (l) this.setOverlay(l.id, l.features, l.style, l.label)
-      else if (this.overlays.has(id)) this.removeOverlay(id)
-    }
+    const live = annotationLayers(doc, this.annotations.layers)
+    const liveIds = new Set(live.map((l) => l.id))
+    for (const id of [...this.liveAnnotationLayers]) if (!liveIds.has(id)) this.removeOverlay(id)
+    this.liveAnnotationLayers = liveIds
+    for (const l of live) this.setOverlay(l.id, l.features, l.style, l.label)
     if (this.selectedId && !doc.some((a) => a.id === this.selectedId)) this.selectAnnotation(undefined)
     else if (this.selectedId) this.selectAnnotation(this.selectedId)
   }

@@ -210,6 +210,78 @@ try {
   })
   await page.waitForSelector('[data-testid="viewer-tools"] [data-role="status"]:has-text("Import failed")', { timeout: 5000 })
   if ((await annotationCount()) !== 2) fail("a rejected import changed the annotations")
+  // M3: snapping, BVH picking, vertex editing, annotation colour.
+  const anns = () => page.evaluate(() => (globalThis as any).__viewer.annotations.annotations) as Promise<Array<{ id: string; kind: string; points: number[][]; color?: string }>>
+  await page.evaluate(() => (globalThis as any).__viewer.importJson(JSON.stringify({ schemaVersion: "1.0.0", annotations: [] })))
+  await page.click('[data-testid="viewer-tools"] button[data-tool="polyline"]')
+  await page.mouse.click(350, 250)
+  await page.mouse.click(550, 250)
+  await page.mouse.click(550, 400)
+  await page.keyboard.press("Enter")
+  await settle()
+  const line0 = (await anns())[0]!
+  if (line0.kind !== "polyline" || line0.points.length !== 3) fail(`polyline not drawn for snapping test: ${JSON.stringify(line0)}`)
+  if ((await canvas.getAttribute("data-picker")) !== "meshes") fail(`surface picker is ${await canvas.getAttribute("data-picker")}`)
+  if (line0.points.some((p) => !Number.isFinite(p[2]))) fail("picked point has no height")
+  await page.click('[data-testid="viewer-tools"] button[data-tool="point"]')
+  await page.mouse.click(355, 253)
+  await settle()
+  const snapped = (await anns())[1]!
+  if (JSON.stringify(snapped.points[0]) !== JSON.stringify(line0.points[0])) fail(`point did not snap to the polyline vertex: ${JSON.stringify(snapped.points)} vs ${JSON.stringify(line0.points[0])}`)
+  await page.evaluate(() => (globalThis as any).__viewer.snapping.set({ features: false, vertices: false }))
+  await page.mouse.click(355, 253)
+  await settle()
+  const free = (await anns())[2]!
+  if (JSON.stringify(free.points[0]) === JSON.stringify(line0.points[0])) fail("point snapped although feature snapping is off")
+  await page.evaluate(() => (globalThis as any).__viewer.snapping.set({ features: true, vertices: true }))
+  // Vertex editing: dragging a handle moves one vertex, not the camera; the drag is one undo step.
+  await page.click('[data-testid="viewer-tools"] button[data-tool="select"]')
+  await page.evaluate((id) => (globalThis as any).__viewer.selectAnnotation(id), line0.id)
+  const handles = await page.evaluate(() => (globalThis as any).__viewer.vertexHandles().length as number)
+  if (handles !== 3) fail(`expected 3 vertex handles, got ${handles}`)
+  await settle()
+  const camBefore = await hash()
+  await page.mouse.move(550, 250)
+  await page.mouse.down()
+  await page.mouse.move(540, 230, { steps: 4 })
+  await page.mouse.move(520, 190, { steps: 4 })
+  await page.mouse.up()
+  await settle()
+  const moved = (await anns())[0]!
+  if (JSON.stringify(moved.points[1]) === JSON.stringify(line0.points[1])) fail("dragging a handle did not move the vertex")
+  if (JSON.stringify(moved.points[0]) !== JSON.stringify(line0.points[0]) || JSON.stringify(moved.points[2]) !== JSON.stringify(line0.points[2])) fail("dragging a handle moved other vertices")
+  if ((await hash()) !== camBefore) fail("dragging a handle also moved the camera")
+  await canvas.focus()
+  await page.keyboard.press("Control+z")
+  await settle()
+  if (JSON.stringify((await anns())[0]!.points) !== JSON.stringify(line0.points)) fail("undo did not restore the dragged vertex in one step")
+  await page.keyboard.press("Control+y")
+  await settle()
+  if (JSON.stringify((await anns())[0]!.points[1]) !== JSON.stringify(moved.points[1])) fail("redo did not re-apply the drag")
+  await page.keyboard.press("Control+z")
+  await settle()
+  // Double-click an edge adds a vertex; Delete on the new vertex removes it again.
+  await page.mouse.dblclick(450, 250)
+  await settle()
+  if ((await anns())[0]!.points.length !== 4) fail(`double-click on an edge did not insert a vertex (${(await anns())[0]!.points.length})`)
+  await page.keyboard.press("Delete")
+  await settle()
+  if ((await anns())[0]?.points.length !== 3 || (await anns()).length !== 3) fail("Delete on a selected vertex did not remove just that vertex")
+  // Annotation colour is drawn: a red polyline gets its own layer and red pixels.
+  const reds = () => page.evaluate(() => {
+    const c = document.querySelector("canvas")!
+    const d = document.createElement("canvas"); d.width = c.width; d.height = c.height
+    const ctx = d.getContext("2d")!; ctx.drawImage(c, 0, 0)
+    const px = ctx.getImageData(0, 0, d.width, d.height).data
+    let n = 0
+    for (let i = 0; i < px.length; i += 4) if (px[i]! > 200 && px[i + 1]! < 60 && px[i + 2]! < 60) n++
+    return n
+  })
+  const redBefore = await reds()
+  await page.evaluate(() => (globalThis as any).__viewer.annotations.add({ kind: "polyline", points: [[-500, -300, 0], [500, -300, 0], [500, 300, 0]], color: "#ff0000" }))
+  await settle()
+  if ((await page.locator('[data-testid="viewer-layers"] [data-layer="ann.lines.ff0000"]').count()) !== 1) fail("coloured annotation has no layer of its own")
+  if ((await reds()) - redBefore < 100) fail(`annotation colour not drawn (${(await reds()) - redBefore} red px)`)
   if (errors.length) fail(errors.join("; "))
   console.log("map-viewer e2e smoke: ok")
 } finally {

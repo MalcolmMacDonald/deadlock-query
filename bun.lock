@@ -45,6 +45,7 @@
       "version": "0.0.0",
       "dependencies": {
         "@deadlock-query/contracts": "workspace:*",
+        "@deadlock-query/spatial-core": "workspace:*",
         "effect": "4.0.1",
         "three": "^0.170.0",
       },
