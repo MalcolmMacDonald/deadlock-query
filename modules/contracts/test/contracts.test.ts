@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import { Effect } from "effect"
 import {
-  DEFAULT_GLB_TO_WORLD, MockSelectionBus, SelectionBus, distance, metersToUnits,
+  DEFAULT_GLB_TO_WORLD, MockSelectionBus, MockViewerService, SelectionBus, ViewerService, makeMockViewerServiceWithTools, distance, metersToUnits,
   threeToWorld, transformPoint, unitsToMeters, worldToThree, type Vec3
 } from "../src/index.ts"
 
@@ -154,4 +154,21 @@ test("AnnotationDocument rejects bad geometry and reports cross-field errors", (
 test("decodeVersioned rejects a newer AnnotationDocument major", async () => {
   const exit = await Effect.runPromiseExit(decodeVersioned(AnnotationDocument, 1)({ schemaVersion: "2.0.0", annotations: [] }))
   expect(exit._tag).toBe("Failure")
+})
+
+test("mock viewer with tools records registrations and unregisters", async () => {
+  const mock = makeMockViewerServiceWithTools()
+  const unregister = await Effect.runPromise(
+    Effect.gen(function* () {
+      const viewer = yield* ViewerService
+      const un = yield* viewer.registerTool!({ id: "metadata.camp", label: "Camp" })
+      expect(mock.registeredTools().map((t) => t.id)).toEqual(["metadata.camp"])
+      return un
+    }).pipe(Effect.provide(mock.layer))
+  )
+  unregister()
+  expect(mock.registeredTools()).toEqual([])
+  // The plain mock stays member-for-member what map-viewer's real service provides today.
+  const keys = await Effect.runPromise(Effect.gen(function* () { return Object.keys(yield* ViewerService) }).pipe(Effect.provide(MockViewerService)))
+  expect(keys).not.toContain("registerTool")
 })

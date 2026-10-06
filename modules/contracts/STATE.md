@@ -1,7 +1,7 @@
 # contracts — state
 
 - **Status:** M3 baked-data specs done (additive); `check:real` re-run on the real bundle still to do locally
-- **Version:** 0.2.0
+- **Version:** 0.2.1
 - **Current milestone:** M4 (`MapMetadata`, `ScreenshotSet`) next
 - **Last updated:** 2026-10-06
 
@@ -19,6 +19,8 @@
 
 - M3 (2026-10-06): typed `Manifest.baked` (`Baked`, `BakedBvh`, `BakedSampleGrid`, `BakedNavmesh`, `BakedFile`) matching what map-extractor writes; `Tile.lod`/`lodOf` plus `tileLod`/`tileBaseId`/`tilesAtLod` (legacy `#lod<n>` ids still read); pure `checkTiles`/`checkFiles` in `BundleCheck.ts`; `check:real` verifies baked files (existence, bytes, sha256, grid/navmesh sanity) and LOD tiles; fixture has one entity per `EntityKind`. Everything is additive under schemaVersion 1.0.0, see CHANGELOG. Verified in the cloud with unit tests and a synthetic baked + LOD bundle; **not run against the real dl_midtown bundle** (it lives on Malcolm's machine): run `bun run check:real -- <bundle>` locally and record the result here. Expected: pass, with warnings for placeholder semantics, the fixture lacking baked/LOD, and ids-only LODs. If navmesh counts are 0 (clip-lid navmesh, see map-extractor "Collision finding") `checkFiles` errors with "baked navmesh has no polygons"; that would be a real extractor finding, not a contract bug.
 
+- ViewerService.registerTool (2026-10-06, requested by map-viewer M5): `ExternalTool`, `ToolContext`, `NewAnnotation` moved into contracts as plain types; the `ViewerService` tag gained `registerTool?(tool): Effect<() => void>` and `makeMockViewerServiceWithTools()` is a mock layer that records registrations. `MockViewerService` itself is unchanged because map-viewer's parity test (`overlays.test.ts`) requires the same members as the real service; fold the member into it once the viewer implements it. Optional on purpose: making it required would break map-viewer's `makeViewerService` and query-builder's standalone viewer shape, which this module cannot edit. See CHANGELOG.
+
 ## In progress
 - Annotation schema (requested by map-viewer M3): added `Annotation`/`AnnotationDocument` (2026-10-06), see CHANGELOG. map-viewer can replace its local `Annotation` type (`src/annotations.ts`) with it for import/export and IndexedDB autosave; its local `id` is `a<N>`, which fits the non-empty string id.
 
@@ -27,6 +29,7 @@
 - M4: `MapMetadata` (+ `Submission`, `ReviewDecision`), `ScreenshotSet` (Phase 3; wait for the metadata/screenshot modules).
 
 ## Blockers / Requests to other modules
+- map-viewer: have `makeViewerService` implement `registerTool` (wrap `controller.registerTool`) and import `ExternalTool`/`ToolContext`/`NewAnnotation` from contracts instead of its local copies in `tools.ts`/`annotations.ts`. Once the viewer, the shell and query-builder's standalone shape all provide it, contracts can make the member required.
 - map-extractor: write `lod` and `lodOf` on LOD tiles (`tiling.ts` `lodId`/`lodFile` sites) alongside the `#lod<n>` id; the id convention can stay until consumers move. `BakedRecord`/`NavmeshRecord` could become `Baked`/`BakedNavmesh` from contracts instead of local interfaces.
 - map-viewer: draw `tilesAtLod(manifest, 0)` rather than every manifest tile (the real bundle has LOD tiles sharing the base bounds), and replace the `bakedBvhFile` cast with `manifest.baked?.bvh.file`.
 - infra: NEXT.md contracts row can move to M4 / "run check:real on the real bundle" (root file, so not in this module's PR).
@@ -43,6 +46,8 @@
 - 2026-10-06 — Annotation is a discriminated union on `kind` with per-kind point counts in the schema; unique ids and layer references are checked by `validateAnnotationDocument` (schema cannot express them). Added under schemaVersion 1.0.0 as it is purely additive.
 
 - 2026-10-06 — M3: `params` of the sample grid is `Record<string, number>` rather than a fixed struct so spatial-core can add a semantics parameter without a contracts bump; `Tile.lod` is optional with helpers reading the legacy id suffix, so no schemaVersion bump; fixture left unbaked and without LOD tiles (reasons in CHANGELOG).
+
+- 2026-10-06 — `registerTool` is an optional member of the `ViewerService` tag (additive); its value is `Effect<() => void>` as map-viewer suggested. `captureImage` options (`{ scale, transparent }`) and `OverlayStyle` extensions are not added yet (changing `captureImage` from an Effect value to a function would break callers); still on `ViewerController.capture(opts)`.
 
 ## Open questions
 - (see PLAN.md §9)

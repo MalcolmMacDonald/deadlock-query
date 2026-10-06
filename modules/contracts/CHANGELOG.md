@@ -1,5 +1,9 @@
 # contracts changelog
 
+## 0.2.1 — ViewerService.registerTool (additive, schemaVersion stays 1.0.0)
+- Added the plain types `ExternalTool`, `ToolContext` and `NewAnnotation` (same shapes map-viewer shipped in `ViewerController.registerTool`).
+- `ViewerService` gained `registerTool?: (tool: ExternalTool) => Effect<() => void>`; the value of the effect unregisters the tool. It is optional until map-viewer, shell and query-builder's standalone shape provide it, so no consumer breaks: call `viewer.registerTool?.(tool)`. `MockViewerService` is unchanged (map-viewer's parity test requires it to match the real service); `makeMockViewerServiceWithTools()` returns a mock layer whose `registerTool` records tools (`registeredTools()`).
+
 ## 0.2.0 — M3: baked-data specs (additive, schemaVersion stays 1.0.0)
 - `Manifest.baked` is now typed (`Baked`): `bakeVersion`, `semanticsVersion`, `placeholder`, `inputKey`, `bvh` (`BakedBvh`), `sampleGrid` (`BakedSampleGrid`: `cellSize`, `nx`, `ny`, `origin`, `channels`, `params`) and optional `navmesh` (`BakedNavmesh`), each file with `file`/`bytes`/`sha256` (`BakedFile`). This is the shape map-extractor already writes (checked against the dl_midtown run in STATE.md), so existing bundles decode unchanged. The binary file formats stay owned by spatial-core; contracts only fixes where the files are and what they were built from. Consumers that cast `manifest.baked` to a local shape can use the typed field.
 - `Tile` gains optional `lod` (integer >= 0, absent = 0) and `lodOf` (id of the LOD0 tile). Helpers `tileLod`, `tileBaseId`, `tilesAtLod` read both the fields and the legacy `<id>#lod<n>` id suffix, so current bundles keep working before the extractor writes the fields. Viewers should draw `tilesAtLod(manifest, 0)` unless they stream LODs.
