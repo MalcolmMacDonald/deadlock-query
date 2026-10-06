@@ -127,3 +127,23 @@ test("pack-lite checks every tile file named in the manifest, including nested L
   expect(r.errors.some((e) => e.startsWith("tile a is 21.0 MB"))).toBe(true)
   expect(r.errors.some((e) => e.includes("a#lod1 references missing file"))).toBe(true)
 })
+
+test("pack-lite leaves scratch (.work, .stage-*) out of the size total", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "dlq-bundle-"))
+  const ident = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]
+  const box = { min: [0, 0, 0], max: [1, 1, 1] }
+  writeFileSync(join(dir, "manifest.json"), JSON.stringify({
+    gameBuildId: "1", mapName: "m", tier: "lite", schemaVersion: "1.0.0", entitiesFile: "entities.json",
+    coordinateSystem: { up: "Z", unit: "source", glbToWorld: ident }, bounds: box,
+    tiles: [{ id: "t", file: "render/t.glb", bytes: 1, bounds: box, sha256: "x" }],
+    provenance: { extractorVersion: "0.3.0", s2vVersion: "20.0" }
+  }))
+  writeFileSync(join(dir, "entities.json"), JSON.stringify({ entities: [], schemaVersion: "1.0.0" }))
+  mkdirSync(join(dir, "render"), { recursive: true }); writeFileSync(join(dir, "render", "t.glb"), Buffer.alloc(1000))
+  mkdirSync(join(dir, ".work"), { recursive: true }); writeFileSync(join(dir, ".work", "big.bin"), Buffer.alloc(5000))
+  writeFileSync(join(dir, ".stage-x"), "scratch")
+  const r = await packLite(dir)
+  expect(r.ok).toBe(true)
+  expect(r.sizes.totalBytes).toBeLessThan(5000)
+  expect(r.warnings.some((w) => w.includes(".work/big.bin"))).toBe(true)
+})

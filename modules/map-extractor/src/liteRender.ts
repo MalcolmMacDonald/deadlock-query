@@ -97,8 +97,14 @@ const readAccessor = (g: G, r: BufferReader, idx: number): { data: Float32Array 
   const stride = bv.byteStride ?? size * comps
   const base = (bv.byteOffset ?? 0) + (a.byteOffset ?? 0)
   const raw = r.read(bv.buffer, base, (a.count - 1) * stride + size * comps)
-  const view = new DataView(raw.buffer, raw.byteOffset, raw.byteLength)
   const isIdx = a.type === "SCALAR" && a.componentType !== 5126
+  if (stride === size * comps && !(a.normalized && !isIdx && Ctor !== Float32Array) && (Ctor === Float32Array || Ctor === Uint32Array || Ctor === Uint16Array)) {
+    // Tightly packed little-endian data: copy into an aligned buffer and view it (the generic loop below is far slower).
+    const copy = new Uint8Array(raw.byteLength); copy.set(raw)
+    const typed = new Ctor(copy.buffer, 0, a.count * comps)
+    return { data: isIdx && Ctor !== Uint32Array ? Uint32Array.from(typed) : (typed as Float32Array | Uint32Array), comps }
+  }
+  const view = new DataView(raw.buffer, raw.byteOffset, raw.byteLength)
   const out = isIdx ? new Uint32Array(a.count) : new Float32Array(a.count * comps)
   const get = (o: number): number => {
     switch (Ctor) {
@@ -119,7 +125,7 @@ const readAccessor = (g: G, r: BufferReader, idx: number): { data: Float32Array 
   return { data: out, comps }
 }
 
-interface Cand { node: number; prim: number; mesh: number; matrix: Mat4; tris: number; verts: number; diag: number; centre: [number, number, number]; material: number; hasUv: boolean }
+interface Cand { node: number; prim: number; mesh: number; matrix: Mat4; tris: number; /** vertices actually referenced by the indices */ verts: number; diag: number; centre: [number, number, number]; material: number; hasUv: boolean }
 
 /** Nodes with their world matrices (scene graph walk; no hierarchy is typical for VRF exports). */
 const worldNodes = (g: G): Array<{ node: number; matrix: Mat4 }> => {
@@ -164,22 +170,49 @@ export const buildLiteTiles = (gltfPath: string, outDir: string, opts: LiteOptio
   try {
     const cands: Cand[] = []
     let total = 0
+    // A primitive's vertex buffer is often shared by many fragments (each indexes a small part of it), so tris, size and bounds
+    // come from the vertices the indices actually reference. Cached per (mesh, primitive): instances share it.
+    type Info = { verts: number; lo: number[]; hi: number[] }
+    const infos = new Map<string, Info | undefined>()
+    const primInfo = (mesh: number, prim: number): Info | undefined => {
+      const key = `${mesh}:${prim}`
+      if (infos.has(key)) return infos.get(key)
+      const p = g.meshes![mesh]!.primitives[prim]!
+      let info: Info | undefined
+      if ((p.mode ?? 4) === 4 && p.attributes["POSITION"] !== undefined) {
+        const pos = readAccessor(g, reader, p.attributes["POSITION"]).data as Float32Array
+        const nv = pos.length / 3
+        const idx = p.indices !== undefined ? (readAccessor(g, reader, p.indices).data as Uint32Array) : undefined
+        const n3 = Math.floor((idx ? idx.length : nv) / 3) * 3
+        const seen = new Uint8Array(nv)
+        const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity]
+        let verts = 0
+        for (let i = 0; i < n3; i++) {
+          const v = idx ? idx[i]! : i
+          if (v >= nv || seen[v]) continue
+          seen[v] = 1; verts++
+          for (let k = 0; k < 3; k++) { const x = pos[v * 3 + k]!; if (x < lo[k]!) lo[k] = x; if (x > hi[k]!) hi[k] = x }
+        }
+        if (verts > 0) info = { verts, lo, hi }
+      }
+      infos.set(key, info)
+      return info
+    }
     for (const { node, matrix } of worldNodes(g)) {
       const mesh = g.nodes![node]!.mesh!
       g.meshes![mesh]!.primitives.forEach((p, prim) => {
         if ((p.mode ?? 4) !== 4) return
-        const pos = g.accessors![p.attributes["POSITION"] ?? -1]
-        if (!pos?.min || !pos.max) return
-        const verts = pos.count
-        const tris = Math.floor((p.indices !== undefined ? g.accessors![p.indices]!.count : verts) / 3)
+        const info = primInfo(mesh, prim)
+        if (!info) return
+        const tris = Math.floor((p.indices !== undefined ? g.accessors![p.indices]!.count : g.accessors![p.attributes["POSITION"]!]!.count) / 3)
         total += tris
         let lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity]
         for (let c = 0; c < 8; c++) {
-          const q = transformPoint(matrix, [c & 1 ? pos.max[0]! : pos.min[0]!, c & 2 ? pos.max[1]! : pos.min[1]!, c & 4 ? pos.max[2]! : pos.min[2]!])
+          const q = transformPoint(matrix, [c & 1 ? info.hi[0]! : info.lo[0]!, c & 2 ? info.hi[1]! : info.lo[1]!, c & 4 ? info.hi[2]! : info.lo[2]!])
           lo = lo.map((v, i) => Math.min(v, q[i]!)); hi = hi.map((v, i) => Math.max(v, q[i]!))
         }
         cands.push({
-          node, prim, mesh, matrix, tris, verts, material: p.material ?? -1, hasUv: p.attributes["TEXCOORD_0"] !== undefined,
+          node, prim, mesh, matrix, tris, verts: info.verts, material: p.material ?? -1, hasUv: p.attributes["TEXCOORD_0"] !== undefined,
           diag: Math.hypot(hi[0]! - lo[0]!, hi[1]! - lo[1]!, hi[2]! - lo[2]!),
           centre: [(lo[0]! + hi[0]!) / 2, (lo[1]! + hi[1]!) / 2, (lo[2]! + hi[2]!) / 2]
         })
@@ -203,16 +236,19 @@ export const buildLiteTiles = (gltfPath: string, outDir: string, opts: LiteOptio
     }
     const estimate = (c: Cand) => c.verts * (12 + 12 + 8) + c.tris * 3 * 4
     const tileGroups: Array<{ id: string; prims: Cand[] }> = []
+    const oversized: Cand[] = []
     for (const key of [...cells.keys()].sort()) {
       let part = 0, cur: Cand[] = [], bytes = 0
       const flush = () => { if (cur.length) tileGroups.push({ id: part ? `${key}_${part}` : key, prims: cur }); cur = []; bytes = 0; part++ }
       for (const c of cells.get(key)!) {
         if (bytes + estimate(c) > tileBytes && cur.length) flush()
-        if (estimate(c) > tileBytes) { warnings.push(`primitive of node ${c.node} (${(estimate(c) / 1048576).toFixed(1)} MB) exceeds the tile budget; dropped`); continue }
+        if (estimate(c) > tileBytes) { oversized.push(c); continue }
         cur.push(c); bytes += estimate(c)
       }
       flush()
     }
+
+    if (oversized.length) warnings.push(`${oversized.length} primitives exceed the ${(tileBytes / 1048576).toFixed(0)} MB tile budget (largest ${(Math.max(...oversized.map(estimate)) / 1048576).toFixed(1)} MB, ${oversized.reduce((n, c) => n + c.tris, 0)} triangles); dropped`)
 
     const matName = (i: number) => (g.materials?.[i]?.name as string | undefined) ?? `material_${i}`
     const copiedImages = new Set<string>()
@@ -235,7 +271,7 @@ export const buildLiteTiles = (gltfPath: string, outDir: string, opts: LiteOptio
         offset += bytes.length + pad
         return bufferViews.length - 1
       }
-      let lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity]
+      const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity]
       let tTris = 0
       for (const [mat, list] of [...byMat.entries()].sort((a, b) => a[0] - b[0])) {
         const nV = list.reduce((n, c) => n + c.verts, 0), nI = list.reduce((n, c) => n + c.tris * 3, 0)
@@ -251,22 +287,36 @@ export const buildLiteTiles = (gltfPath: string, outDir: string, opts: LiteOptio
           const uv = withUv ? (readAccessor(g, reader, p.attributes["TEXCOORD_0"]!).data as Float32Array) : undefined
           const idx = p.indices !== undefined ? (readAccessor(g, reader, p.indices).data as Uint32Array) : undefined
           const m = c.matrix
-          for (let i = 0; i < c.verts; i++) {
-            const x = pos[i * 3]!, y = pos[i * 3 + 1]!, z = pos[i * 3 + 2]!
-            const wx = m[0]! * x + m[4]! * y + m[8]! * z + m[12]!, wy = m[1]! * x + m[5]! * y + m[9]! * z + m[13]!, wz = m[2]! * x + m[6]! * y + m[10]! * z + m[14]!
-            P.set([wx, wy, wz], (vo + i) * 3)
-            lo = [Math.min(lo[0]!, wx), Math.min(lo[1]!, wy), Math.min(lo[2]!, wz)]; hi = [Math.max(hi[0]!, wx), Math.max(hi[1]!, wy), Math.max(hi[2]!, wz)]
-            if (nor) {
-              const nx = nor[i * 3]!, ny = nor[i * 3 + 1]!, nz = nor[i * 3 + 2]!
-              const ax = m[0]! * nx + m[4]! * ny + m[8]! * nz, ay = m[1]! * nx + m[5]! * ny + m[9]! * nz, az = m[2]! * nx + m[6]! * ny + m[10]! * nz
-              const l = Math.hypot(ax, ay, az) || 1
-              N.set([ax / l, ay / l, az / l], (vo + i) * 3)
-            } else N.set([0, 1, 0], (vo + i) * 3)
-            if (T && uv) T.set([uv[i * 2]!, uv[i * 2 + 1]!], (vo + i) * 2)
-          }
+          // Only the referenced vertices are emitted (first-use order, so output stays deterministic).
+          const remap = new Int32Array(pos.length / 3).fill(-1)
+          let nUsed = 0
           const n3 = c.tris * 3
-          for (let i = 0; i < n3; i++) I[io + i] = (idx ? idx[i]! : i) + vo
-          vo += c.verts; io += n3
+          for (let i = 0; i < n3; i++) {
+            const v = idx ? idx[i]! : i
+            let o = remap[v]!
+            if (o < 0) {
+              o = nUsed++; remap[v] = o
+              const x = pos[v * 3]!, y = pos[v * 3 + 1]!, z = pos[v * 3 + 2]!
+              const wx = m[0]! * x + m[4]! * y + m[8]! * z + m[12]!, wy = m[1]! * x + m[5]! * y + m[9]! * z + m[13]!, wz = m[2]! * x + m[6]! * y + m[10]! * z + m[14]!
+              const d = vo + o
+              P[d * 3] = wx; P[d * 3 + 1] = wy; P[d * 3 + 2] = wz
+              if (wx < lo[0]!) lo[0] = wx
+              if (wy < lo[1]!) lo[1] = wy
+              if (wz < lo[2]!) lo[2] = wz
+              if (wx > hi[0]!) hi[0] = wx
+              if (wy > hi[1]!) hi[1] = wy
+              if (wz > hi[2]!) hi[2] = wz
+              if (nor) {
+                const nx = nor[v * 3]!, ny = nor[v * 3 + 1]!, nz = nor[v * 3 + 2]!
+                const ax = m[0]! * nx + m[4]! * ny + m[8]! * nz, ay = m[1]! * nx + m[5]! * ny + m[9]! * nz, az = m[2]! * nx + m[6]! * ny + m[10]! * nz
+                const l = Math.hypot(ax, ay, az) || 1
+                N[d * 3] = ax / l; N[d * 3 + 1] = ay / l; N[d * 3 + 2] = az / l
+              } else { N[d * 3] = 0; N[d * 3 + 1] = 1; N[d * 3 + 2] = 0 }
+              if (T && uv) { T[d * 2] = uv[v * 2]!; T[d * 2 + 1] = uv[v * 2 + 1]! }
+            }
+            I[io + i] = o + vo
+          }
+          vo += nUsed; io += n3
         }
         const attrs: Record<string, number> = {}
         accessors.push({ bufferView: addView(P, 34962), componentType: 5126, count: nV, type: "VEC3", min: [0, 0, 0], max: [0, 0, 0] }) // exact min/max filled in below

@@ -28,7 +28,7 @@ teamnumber  2
 lanenum  3
 ====2====
 classname  "info_super_trooper_spawn"
-subclass_name  "boss_rebel_t1_blue"
+bossname  "boss_rebel_t1_blue"
 origin  [ 0, 0, 0 ]
 ====3====
 classname  "light_omni2"
@@ -125,6 +125,12 @@ test("missing output after exit 0 reports the tool's exception line (disk full)"
   expect(err.stderr).toContain("n0.gltf")
 })
 
+test("render export omits --gltf_export_materials unless asked (it hangs the real CLI)", async () => {
+  const { args } = await import("../src/s2v.ts")
+  expect(args.render("m.vpk", "dl_midtown", "o.gltf")).not.toContain("--gltf_export_materials")
+  expect(args.render("m.vpk", "dl_midtown", "o.gltf", true)).toContain("--gltf_export_materials")
+})
+
 test("extract (full) requests glTF materials and counts textures in the tile", async () => {
   const root = mkdtempSync(join(tmpdir(), "dlq-"))
   const calls: string[][] = []
@@ -143,7 +149,7 @@ test("extract (full) requests glTF materials and counts textures in the tile", a
     }))
     return { code: 0, stdout: "", stderr: "" }
   }
-  const r = await extract({ vpk: "m.vpk", map: "dl_midtown", buildId: "1", s2vVersion: "20.0", tier: "full", outRoot: root, runner })
+  const r = await extract({ vpk: "m.vpk", map: "dl_midtown", buildId: "1", s2vVersion: "20.0", tier: "full", outRoot: root, runner, materials: true })
   const render = calls.find((c) => c.some((x) => x.endsWith(".vwnod_c")))!
   expect(render).toContain("--gltf_export_materials")
   expect(r.manifest.tiles[0]!.materials).toEqual(["wall"])

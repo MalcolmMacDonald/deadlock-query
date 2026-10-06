@@ -1,8 +1,8 @@
 # map-extractor — state
 
 - **Status:** S2 spike complete — **GO** (render, collision, entities, nav all obtainable)
-- **Version:** 0.6.0 (module); `EXTRACTOR_VERSION` stays 0.3.0 so cached extract stages remain valid
-- **Current milestone:** M5 code done (`bake` also builds the Recast navmesh + QA OBJ); **navmesh human sign-off pending**; M3, M4 and M5 pending real-data runs on the dev machine
+- **Version:** 0.6.1 (module); `EXTRACTOR_VERSION` stays 0.3.0 (the lite render stage key now includes `materials`, so old caches are not reused)
+- **Current milestone:** M0-M5 code done; M0-M4 verified on real `dl_midtown` data (2026-10-06); **navmesh (M5) real run and human sign-off pending**
 - **Last updated:** 2026-10-06
 
 ## Done
@@ -173,13 +173,38 @@ Other (bulk, likely out of scope): `light_omni2` 1,968, `light_barn` 755, `citad
 ## Navmesh sign-off
 - Pending: needs a human to look at the OBJ from a real `bake` (see M5 above).
 
+## Real-data run: lite pipeline on dl_midtown (2026-10-06, build 25738777, Windows 11, 39 GB free on C: before)
+
+`extract --tier lite --keep-work`, `tile`, `bake`, `pack-lite` (default `--tri-budget` 5 M, `--lods 2`, `--lod-ratio 0.25`, bake cell 64), then contracts `check:real`.
+
+| Step | Wall time | Output |
+|---|---|---|
+| `extract --tier lite` | about 7 to 8 min: Source2Viewer render export about 7 min 45 s (peak about 3 GB RAM, 1.1 GB per `.bin`), reduction about 1 to 2 min | `render/tiles`: 63 tiles, **281 MB**, 5.0 M of 30.0 M triangles; `collision/physics.glb` 6.9 MB; `entities.json` 6,076 entities |
+| `tile` | 14 s | 126 files (63 LOD0 + 63 LOD1): LOD0 **63.1 MB**, LOD1 **39.8 MB**, total **102.9 MB** (281 MB before: 2.7x smaller), largest tile **4.2 MB**; quantiser skips `TEXCOORD_0` outside [0,1] (harmless: lite has no textures) |
+| `bake` | 24 s | BVH 5.4 MB (103,174 triangles after dropping `sky` and `Citadel_Skyclip`, 2 nodes skipped), grid **333 x 385 cells of 64** (origin -10368,-12288), 1.1 MB, **109,090 / 128,205 cells (85.1 %) have a floor** |
+| `pack-lite` | under 1 s | **124.6 MB** total (budget 900 MB), 126 tiles, 0 texture files, ok |
+| `inspect` | under 1 s | ok; placeholder semantics warning |
+| contracts `check:real` | under 1 s | ok (see contracts STATE) |
+
+Disk: the lite bundle is 125 MB published; transient scratch is about 2.8 GB (`.work/render-full`, deleted after `extract` unless `--keep-work`) plus the 1.8 GB of textures the CLI writes if `--materials` is passed. Plan for about 4 GB free for a lite run.
+- All 375 entities that have a normalised kind lie inside the baked grid footprint (the sky lid removal shrinks it from the 42,956 x 37,728 collision bounds to 21,312 x 24,640).
+- LOD1 keeps about 68 % of LOD0 triangles on the sampled tiles (e.g. 15,728 -> 10,677), not the 25 % `--lod-ratio` asks for: the 2 % error bound stops the simplifier first. Tune before relying on LOD1 for far views.
+- The grid is the topmost-surface floor (see M4 limits), so 85.1 % "has floor" includes roofs.
+
+### Bugs the real data exposed (fixed in this change)
+1. **`--gltf_export_materials` breaks the render export.** With it, Source2Viewer 20.0 logs a `VCS file version 72` exception per material, writes 1,533 textures (1.8 GB) and the three `.bin` files, then never writes `n0.gltf` (once it exited without it, once it idled for hours). `extract` then crashed with `ENOENT .../n0.gltf`. The flag is now opt-in (`extract --materials`, off by default); lite does not need it (untextured, PLAN section 5.9).
+2. **Lite reduction copied whole vertex buffers.** Aggregate fragments share their mesh's vertex buffer and index a small part of it, so a 1.19 M-triangle selection produced **4.1 GB** of tiles and 1,722 of 2,317 chosen primitives were "over budget" and dropped. `liteRender` now sizes, bounds and emits only the referenced vertices (and reads tightly packed accessors with a fast path): the same 5.0 M triangles are **281 MB**, nothing dropped. Oversize drops are now one summary warning, not one line each.
+3. **Guardians were never mapped.** The real `info_super_trooper_spawn` carries `bossname` (e.g. `boss_rebel_t1_blue`), not `subclass_name`; `entityKind` input now takes either. `entities.json` has **6 guardians** (was 0). The test fixture uses the real shape.
+4. **`pack-lite` counted scratch.** `.work/` and `.stage-*` were summed into the 900 MB budget though `publish-data` excludes them; they are now listed as a note and excluded from the total.
+
 ## In progress
-- Testing on real data via Remote Control dev machine (pending).
+- M5 navmesh real run (see below, once recorded).
 
 ## Next
-1. On the dev machine: `extract --tier lite`, then `tile <bundle>`, `bake <bundle>`, then `pack-lite <bundle>`; record tile sizes, compression ratio, LOD1 triangle share, bake time, BVH/grid sizes (`pack-lite` counts `baked/`; check the 900 MB budget) and the share of cells with a floor. If LOD1 looks bad, tune `--lod-ratio` or the simplifier error. If bake is slow, add worker threads. `bake` now also builds the navmesh (M5): note the polygon count, component share and run time, then open `<bundle>.qa/navmesh.obj`, fix the zipline/jump pad property names if `links` is 0, tune `--agent-*` / `--nav-exclude-layers`, and record the sign-off. Then M6 (caching/resume/`diff`, README, update runbook).
-2. Settle M1 open questions via real-data tests on dev machine: (a) are physics GLB and render glTF in the same coordinate frame; (b) are all hulls exported; (c) per-entity volume models (interior/trigger) export; (d) triangle cut for `lite` impact on size/quality (tune `--tri-budget`).
-3. Check `dl_hideout` / `new_player_basics` only if the owner wants them (not in Slice 1).
+1. M5 on real data: `bake` now also builds the navmesh; run it on the real bundle, note polygon count, component share and run time, open `<bundle>.qa/navmesh.obj`, fix the zipline/jump pad property names if `links` is 0, tune `--agent-*` / `--nav-exclude-layers`, record the sign-off. Then M6 (caching/resume/`diff`, README, update runbook).
+2. Triangle cut quality (open question d): 5 M of 30 M triangles chosen by bbox diagonal drops small props and interiors. Render the lite tiles in map-viewer next to the collision GLB and tune `--tri-budget` (the whole lite bundle is only 125 MB, so there is room to raise it a lot), or add a real decimation pass. Check `tile` LOD1 ratio at the same time.
+3. Open questions: (a) physics vs render frame **settled, same frame** (see M1 findings); (b) all hulls exported and (c) per-entity volume models (interior/trigger shapes) still open.
+4. Check `dl_hideout` / `new_player_basics` only if the owner wants them (not in Slice 1).
 
 ## Blockers / Requests to other modules
 - spatial-core: (a) export a `SEMANTICS_VERSION` (bake currently hashes `semantics/*.ts` at run time); (b) `floorHeight` is the topmost surface, so interior cells under a roof are not detected, and row-range/worker-friendly `SampleGrid.build` would let `bake` parallelise.
@@ -205,6 +230,8 @@ Other (bulk, likely out of scope): `light_omni2` 1,968, `light_barn` 755, `citad
 - 2026-10-06 — M4: bake is its own command after `extract`/`tile` (collision is already in the bundle); collision soup excludes `sky` and `Citadel_Skyclip` by default; grid channels are `interior` (u8) and `wallDistance` (f32, saturating at `maxRange`) wired to spatial-core semantics, `floorHeight` built in; cache key in the manifest rather than stage stamps, because bake mutates `manifest.json`; `semanticsVersion` is a source hash until spatial-core exports one.
 
 - 2026-10-06 — M5: navmesh is a second stage of `bake` (default on, `--no-navmesh` to skip) so one command yields all baked data and the manifest keeps one `baked` record; tiled Recast + explicit tile-border stitching rather than a solo mesh, because a solo build of the ~43k x 38k unit map at cell 8 would be a ~25M-column heightfield; agent size defaults are Source-engine values until measured; QA OBJ lives beside the bundle, not in it, so pack-lite never counts or ships it; zipline/jump pad link keys are guesses and flagged.
+
+- 2026-10-06 - Real run: `--gltf_export_materials` is opt-in because it hangs the real export; lite tile reduction emits only referenced vertices; guardian marker is read from `bossname` as well as `subclass_name`; `pack-lite` size excludes scratch.
 
 ## Open questions
 - (see PLAN.md §9, and "Next" item 2 above)

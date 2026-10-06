@@ -64,7 +64,9 @@ export const toEntities = (raw: ReadonlyArray<RawEntity>): Entity[] => {
     const { classname: _c, origin, angles, teamnumber, lanenum, ...rest } = r.props
     const properties: Record<string, unknown> = { ...rest }
     if (r.outputs.length) properties["outputs"] = r.outputs
-    const kind = entityKind(cls, typeof rest["subclass_name"] === "string" ? rest["subclass_name"] : undefined)
+    // Guardians carry their marker in `bossname` (build 25738777); older exports and other classes use `subclass_name`.
+    const sub = [rest["subclass_name"], rest["bossname"]].find((v): v is string => typeof v === "string" && v !== "")
+    const kind = entityKind(cls, sub)
     const rot = vec3(angles)
     const team = num(teamnumber)
     const lane = num(lanenum)

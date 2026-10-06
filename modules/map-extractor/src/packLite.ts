@@ -84,16 +84,17 @@ export const packLite = async (dir: string): Promise<PackLiteReport> => {
     for (const f of files) {
       const fullPath = join(dir, f)
       const size = statSync(fullPath).size
+
+      // publish-data zips the bundle without these, so they count toward neither size nor budget.
+      if (f.startsWith(".work/") || f.startsWith(".stage-")) {
+        warnings.push(`scratch file is not published (excluded from size): ${f}`)
+        continue
+      }
       totalBytes += size
 
       if (isTextureFile(f)) {
         textureFiles.push(f)
         textureBytes += size
-      }
-
-      // Warn about work files that shouldn't be in a published bundle
-      if (f.startsWith(".work/") || f.startsWith(".stage-")) {
-        warnings.push(`scratch file should be excluded from published bundle: ${f}`)
       }
     }
   } catch (e) {
