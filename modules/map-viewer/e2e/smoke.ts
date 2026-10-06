@@ -334,6 +334,31 @@ try {
   await settle()
   if ((await selection()).length !== 0) fail("hiding the layer left its annotations selected")
   await page.evaluate(() => (globalThis as any).__viewer.importJson(JSON.stringify({ schemaVersion: "1.0.0", annotations: [] })))
+  // M6: entity layers per kind, toggleable from the layers panel; unkinded entities start hidden.
+  const entityRows = () => page.locator('[data-testid="viewer-layers"] [data-layer^="entities."]').count()
+  await page.evaluate(() => { const v = (globalThis as any).__viewer; v.setEntities(v.__fixtureEntities) })
+  if ((await entityRows()) < 18) fail(`expected a layer per entity kind, got ${await entityRows()}`)
+  const guardianRow = page.locator('[data-testid="viewer-layers"] [data-layer="entities.guardian"]')
+  if (!(await guardianRow.textContent())?.includes("Guardians (6)")) fail("guardian layer label")
+  if (!(await guardianRow.locator('input[data-role="visible"]').isChecked())) fail("guardian layer should start visible")
+  if (await page.locator('[data-testid="viewer-layers"] [data-layer="entities.other"] input[data-role="visible"]').isChecked()) fail("entities without a kind should start hidden")
+  const yellow = () => page.evaluate(() => {
+    const c = document.querySelector("canvas")!
+    const d = document.createElement("canvas"); d.width = c.width; d.height = c.height
+    const ctx = d.getContext("2d")!; ctx.drawImage(c, 0, 0)
+    const px = ctx.getImageData(0, 0, d.width, d.height).data
+    let n = 0
+    for (let i = 0; i < px.length; i += 4) if (px[i]! > 200 && px[i + 1]! > 130 && px[i + 1]! < 200 && px[i + 2]! < 90) n++
+    return n
+  })
+  await page.evaluate(() => { const v = (globalThis as any).__viewer; v.setPose({ target: [0, 0, 0], yaw: Math.PI / 2, pitch: -1.55, distance: 9000 }) })
+  await settle()
+  const withGuardians = await yellow()
+  await guardianRow.locator('input[data-role="visible"]').uncheck()
+  await settle()
+  const without = await yellow()
+  if (withGuardians - without < 100) fail(`guardian markers not drawn or not toggled (${withGuardians} vs ${without} amber px)`)
+  await guardianRow.locator('input[data-role="visible"]').check()
   // Labels render text: a label annotation adds a dark text plate (and its text) over the lit terrain.
   const cyan = () => page.evaluate(() => {
     const c = document.querySelector("canvas")!
@@ -344,6 +369,7 @@ try {
     for (let i = 0; i < px.length; i += 4) if (px[i]! < 70 && px[i + 1]! < 70 && px[i + 2]! < 70) n++
     return n
   })
+  await page.evaluate(() => (globalThis as any).__viewer.setEntities([])) // entity name plates would skew the dark-pixel count
   await settle()
   const cyanBefore = await cyan()
   await page.evaluate(() => (globalThis as any).__viewer.annotations.add({ kind: "label", points: [[0, 0, 0]], text: "Mid lane ambush" }))

@@ -1,8 +1,8 @@
 # map-viewer — state
 
-- **Status:** M5 viewer side done (`registerTool`, capture options); the `ViewerService` tag still lacks `registerTool` (contracts request below); M4 done; real-hardware perf checks pending
-- **Version:** 0.8.1
-- **Current milestone:** M5 (contracts side pending) / M6
+- **Status:** M6 entity layers done (fixture); screenshot markers wait on contracts; M5 viewer side done (the `ViewerService` tag still lacks `registerTool`, contracts request below); M4 done; real-hardware perf checks pending
+- **Version:** 0.9.0
+- **Current milestone:** M6 (screenshot markers pending contracts)
 - **Last updated:** 2026-10-06
 
 ## Done
@@ -29,6 +29,8 @@
 - 2026-10-06 — Overlay points readable on the real map: markers are round discs with a dark ring (tinted by layer colour, 9 px default, `roundMarker` in `src/overlays.ts`; squares remain without a DOM), and label sprites are decluttered each frame (`declutter` / `declutterLabels` in `src/labels.ts`, earlier labels win, more appear as you zoom in) instead of piling up to 500 overlapping boxes. Checked in Chromium against the real dl_midtown lite bundle.
 
 - 2026-10-06 — Contracts M3 follow-up (PR #75): LOD comes from contracts' `tileLod` / `tileBaseId` / `tilesAtLod` (the `lod` / `lodOf` fields, else the legacy `#lod<n>` id suffix), the viewer's own `parseTileId` is gone. The eager path (`loadViewerData`, `buildScene`) loads and draws only `tilesAtLod(manifest, 0)`, so LOD tiles no longer draw on top of their base tile; the streaming path still indexes every LOD into cells (`buildTileIndex` groups by `tileBaseId`). `bakedBvhFile` reads `manifest.baked?.bvh?.file` instead of casting. Tests: `test/tiles.test.ts` (lod/lodOf fields group correctly, eager path asks for and draws only LOD0).
+
+- 2026-10-06 — M6 (entity layers, fixture part): entities are overlay layers, not scene spheres. `src/entities.ts` (`entityLayers`: one layer per `EntityKind` present with its own colour and size, `entities.other` for entities without a kind, which is hidden by default because a real map has ~5.7k of those; labels (`Guardian (team 2, lane 1)`) only on the sparse kinds: guardian, walker, patron, barracks, baseSentry, shop, capturePoint, powerup, spawn). `ViewerController.setEntities(entities)` registers them (the panel calls it with the map's entities on mount and after `loadBundle`; layers the new map lacks are removed, a layer the user already toggled keeps its state), so each kind gets a visible/colour/opacity/order row in the Layers panel (labelled `Guardians (6)`), is picked and hovered like any overlay, and `controller.entityForFeature(featureId)` turns a `pick`/`hover` id back into the `Entity`. Label declutter now ranks by layer order (the layer drawn on top keeps its label), so an annotation or query label beats an entity name. Tests: bun unit (`test/entities.test.ts`: the contracts fixture yields a layer per kind) and e2e (a layer row per kind, guardians drawn and toggled, `other` starts hidden). Screenshot markers/popups are still to do (contracts `ScreenshotSet` is M4 there).
 
 ## In progress
 - (nothing)

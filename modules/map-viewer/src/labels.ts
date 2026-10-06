@@ -143,6 +143,8 @@ export const declutterLabels = (root: THREE.Object3D, camera: THREE.Camera, widt
   const sprites: THREE.Sprite[] = []
   root.traverse((o) => { if ((o as THREE.Sprite).isSprite && o.userData.px) sprites.push(o as THREE.Sprite) })
   if (sprites.length === 0) return
+  // The layer drawn on top wins a clash (annotations and query results over entity names); ties keep scene order.
+  sprites.sort((a, b) => ((b.userData.priority as number | undefined) ?? 0) - ((a.userData.priority as number | undefined) ?? 0))
   root.updateWorldMatrix(true, true)
   const rects = sprites.map((s): LabelRect | undefined => {
     if (!s.parent?.visible) return undefined

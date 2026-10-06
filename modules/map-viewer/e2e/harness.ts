@@ -8,6 +8,7 @@ const tiles = new Map<string, Uint8Array>()
 for (const t of manifest.tiles) tiles.set(t.id, new Uint8Array(await (await get(t.file)).arrayBuffer()))
 const controller = new ViewerController()
 ;(globalThis as any).__viewer = controller
+;(controller as any).__fixtureEntities = entities
 ;(globalThis as any).__events = [] as unknown[]
 import { Effect, Stream } from "effect"
 Effect.runFork(Stream.runForEach(controller.events, (e) => Effect.sync(() => (globalThis as any).__events.push(e))))

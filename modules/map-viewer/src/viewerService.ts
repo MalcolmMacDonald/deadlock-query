@@ -1,7 +1,8 @@
 import { Effect, Layer, PubSub, Stream } from "effect"
 import {
-  ViewerService, type OverlayFeature, type OverlayStyle, type Vec3, type ViewerEvent
+  ViewerService, type Entity, type OverlayFeature, type OverlayStyle, type Vec3, type ViewerEvent
 } from "@deadlock-query/contracts"
+import { entityLayers } from "./entities.ts"
 import { eyeOf, poseFromEye, type CameraPose } from "./camera.ts"
 import {
   AnnotationStore, annotationIdForFeature, annotationLayers, featureIdForAnnotation, isHidden, isLocked, type Annotation
@@ -188,6 +189,33 @@ export class ViewerController {
   }
 
   /** Primary selection (the last one added); vertex editing only applies when exactly one annotation is selected. */
+  private entityLayerIds = new Set<string>()
+  private entityByLayer = new Map<string, ReadonlyArray<Entity>>()
+
+  /**
+   * Shows the map's entities as overlay layers, one per kind (`entities.guardian`, ...), so the layers panel toggles
+   * them, picking and hover reach them, and they survive remounts like any overlay. Entities without a kind go to
+   * `entities.other`, which starts hidden. Call again when the map changes; layers the new map lacks are removed.
+   */
+  setEntities(entities: ReadonlyArray<Entity>) {
+    const layers = entityLayers(entities)
+    const ids = new Set(layers.map((l) => l.id))
+    for (const id of this.entityLayerIds) if (!ids.has(id)) this.removeOverlay(id)
+    this.entityLayerIds = ids
+    this.entityByLayer = new Map(layers.map((l) => [l.id, l.entities]))
+    for (const l of layers) {
+      const fresh = !this.layers.get(l.id)
+      this.setOverlay(l.id, l.features, l.style, l.label)
+      if (fresh && l.hiddenByDefault) this.layers.patch(l.id, { visible: false })
+    }
+  }
+
+  /** Entity behind an overlay feature id (`entities.guardian:2`), from a `pick` / `hover` event. */
+  entityForFeature(featureId: string): Entity | undefined {
+    const i = featureId.lastIndexOf(":")
+    return i < 0 ? undefined : this.entityByLayer.get(featureId.slice(0, i))?.[Number(featureId.slice(i + 1))]
+  }
+
   get selectedAnnotation(): string | undefined { return this.selectedIds[this.selectedIds.length - 1] }
 
   /** Every selected annotation id, in selection order. */

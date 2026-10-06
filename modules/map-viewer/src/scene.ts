@@ -37,9 +37,7 @@ export const surfaceMeshes = (root: THREE.Object3D): THREE.Mesh[] => {
   return out
 }
 
-const ENTITY_COLORS: Record<string, number> = { guardian: 0xe8a33d, walker: 0xd45d5d, patron: 0xb04fd0, creepCamp: 0x4fb36b }
-
-/** Builds the Three scene root (already in Three space) from loaded viewer data. */
+/** Builds the Three scene root (already in Three space) from loaded viewer data. Entities are overlay layers, not part of this scene. */
 export const buildScene = async (data: ViewerData): Promise<THREE.Group> => {
   const root = new THREE.Group()
   const baseMat = makeTerrainMaterial()
@@ -69,13 +67,6 @@ export const buildScene = async (data: ViewerData): Promise<THREE.Group> => {
     holder.matrix.copy(glbToThreeMatrix(data.manifest.collision.glbToWorld))
     holder.add(group)
     root.add(holder)
-  }
-  const geo = new THREE.SphereGeometry(40, 12, 8)
-  for (const e of data.entities) {
-    const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: ENTITY_COLORS[e.kind ?? ""] ?? 0x8a8f98 }))
-    m.userData.marker = true
-    m.position.set(e.position[0], e.position[2], -e.position[1])
-    root.add(m)
   }
   root.add(new THREE.HemisphereLight(0xffffff, 0x404048, 2.2))
   const sun = new THREE.DirectionalLight(0xffffff, 1.5)
