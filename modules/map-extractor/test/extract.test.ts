@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
+import { mkdtempSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
 import { buildMiniMap } from "@deadlock-query/contracts"
@@ -123,4 +123,29 @@ test("missing output after exit 0 reports the tool's exception line (disk full)"
   expect(err._tag).toBe("ExportFailed")
   expect(err.stderr).toContain("not enough space")
   expect(err.stderr).toContain("n0.gltf")
+})
+
+test("extract (full) requests glTF materials and counts textures in the tile", async () => {
+  const root = mkdtempSync(join(tmpdir(), "dlq-"))
+  const calls: string[][] = []
+  const runner: S2VRunner = async (a) => {
+    calls.push(a)
+    if (!a.includes(".vwnod_c") && !a.some((x) => x.endsWith(".vwnod_c"))) return fakeRunner([])(a)
+    const out = a[a.indexOf("-o") + 1]!
+    mkdirSync(join(dirname(out), "textures"), { recursive: true })
+    writeFileSync(join(dirname(out), "textures", "wall_color.png"), "png")
+    writeFileSync(out, JSON.stringify({
+      asset: { version: "2.0" },
+      materials: [{ name: "wall" }],
+      nodes: [{ mesh: 0 }],
+      meshes: [{ name: "n0_vism0_mt_wall", primitives: [{ attributes: { POSITION: 0 }, material: 0 }] }],
+      accessors: [{ count: 3, min: [0, 0, 0], max: [1, 1, 1] }]
+    }))
+    return { code: 0, stdout: "", stderr: "" }
+  }
+  const r = await extract({ vpk: "m.vpk", map: "dl_midtown", buildId: "1", s2vVersion: "20.0", tier: "full", outRoot: root, runner })
+  const render = calls.find((c) => c.some((x) => x.endsWith(".vwnod_c")))!
+  expect(render).toContain("--gltf_export_materials")
+  expect(r.manifest.tiles[0]!.materials).toEqual(["wall"])
+  expect(r.manifest.tiles[0]!.bytes).toBeGreaterThan(statSync(join(r.dir, "render/n0.gltf")).size)
 })

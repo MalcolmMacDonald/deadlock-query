@@ -35,5 +35,6 @@ export const args = {
   file: (vpk: string, inner: string, out: string, extra: string[] = []) => ["-i", vpk, "-f", inner, "-o", out, "-d", ...extra],
   collision: (vpk: string, map: string, out: string) => args.file(vpk, `maps/${map}/world_physics.vmdl_c`, out, ["--gltf_export_format", "glb"]),
   entities: (vpk: string, map: string, out: string) => args.file(vpk, `maps/${map}/entities/default_ents.vents_c`, out),
-  render: (vpk: string, map: string, out: string) => args.file(vpk, `maps/${map}/worldnodes/n0.vwnod_c`, out, ["--gltf_export_format", "gltf"])
+  /** `--gltf_export_materials` writes glTF materials plus their textures beside the .gltf. */
+  render: (vpk: string, map: string, out: string) => args.file(vpk, `maps/${map}/worldnodes/n0.vwnod_c`, out, ["--gltf_export_format", "gltf", "--gltf_export_materials"])
 }
