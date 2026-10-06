@@ -21,3 +21,9 @@ Behind the session cookie. Forwards an allowlist of repo-scoped endpoints (issue
 - `bun tools/build.ts` fails the build when the output exceeds a budget: tile ≤ 20 MB (any file under a `tiles/` dir), site ≤ 900 MB, first-load JS ≤ 1.5 MB gzipped (scripts and modulepreloads referenced by `index.html`). Limits live in `tools/lib/budget.ts`.
 - **Promote to prod:** Actions → deploy → Run workflow with `promote` ticked. Pushes to `main` only update dev; prod (GitHub Pages) moves only on promote.
 - **PR previews:** `preview.yml` deploys same-repo PRs to the dev Pages project on branch `pr-<number>` (`https://pr-<n>.deadlock-query-dev.pages.dev`, behind the same login). Pages preview deployments read *Preview* environment variables, so set `DEV_PASSWORD_HASH`, `SESSION_HMAC_KEY` (and later `GITHUB_TOKEN_PROXY`) under Settings → Variables and Secrets → Preview as well, or previews will not serve. Skipped until the Cloudflare secrets exist.
+
+## Publishing a new map bundle
+1. Extract locally: `bun run dlq-extract extract --tier lite` (output: `data/bundles/<buildId>/lite`; the `full` tier is over the site budget and is refused).
+2. `bun tools/publish-data.ts data/bundles/<buildId>/lite --upload` (needs `gh auth login`). It zips the bundle, uploads Release `data-<buildId>`, and rewrites `data/current-build.json` with the new sha256. Without `--upload` it only zips and prints the `gh` commands.
+3. Commit `data/current-build.json` on a branch and open a PR labelled `infra`. Merging to `main` redeploys the dev site, which downloads the Release into `dist/data/<map>/`.
+4. To un-publish, see `docs/takedown.md`.
