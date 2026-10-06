@@ -9,7 +9,7 @@ Single source for "what should I do next?". Prompt Claude with: **"Do the next t
 | map-extractor | S2 spike: run Source2Viewer on the game, record what exists in STATE.md | Human: game install (see below) |
 | query-builder | S1 spike: Monaco TS worker + custom `.d.ts` + sandboxed run/cancel | none |
 | spatial-core | S5 spike: three-mesh-bvh benchmark (1M tris, Bun + Worker) | none |
-| query-library, map-viewer, shell | contracts M1 is done; start against `modules/contracts/fixtures/mini-map` | none |
+| query-library, map-viewer, shell (M1 done; next M2) | contracts M1 is done; start against `modules/contracts/fixtures/mini-map` | none |
 | kanban | wait for infra M5 live (`GITHUB_TOKEN_PROXY`) | infra |
 | screenshot-tool, map-metadata | Phase 3 | — |
 
