@@ -1,8 +1,8 @@
 # spatial-core — state
 
-- **Status:** M0, M1, M3, M4 done; M2 in progress
-- **Version:** 0.3.0
-- **Current milestone:** M1 done; next M2 (semantics scaffold)
+- **Status:** M0–M4 done (semantics are placeholders)
+- **Version:** 0.4.0
+- **Current milestone:** M2 PR open (owner merge); next M5
 - **Last updated:** 2026-10-05
 
 ## Done
@@ -23,11 +23,13 @@
 
 - **M4 NavMesh** (2026-10-06): `src/navmesh.ts`. Convex polygon soup (`vertices`, `offsets`, `indices`); adjacency from shared edges; `nearestPoint`, `findPath` (A* over polygons, points via edge midpoints, no funnel smoothing yet), `distanceField(sources, MovementModel)` (multi-source Dijkstra, cost = travel time, `costAt(p)` at polygon resolution), `NavLink`s (cost = length / `linkSpeeds[kind]`, unlisted kinds unusable), `withOverrides` (blocked polys, added links, cost multipliers), deterministic `serialize`/`load`. Tests use a hand-computed corridor. Not done: Recast import (see request below), funnel smoothing, spatial acceleration for `nearestPoint` (linear scan, fine for tests, needs a grid before the 50k-polygon Dijkstra benchmark).
 
+- **M2 semantics** (2026-10-06, written at Malcolm's request): `src/semantics/{params,index}.ts` with `isInterior` (ray up within `interiorCeiling`), `isVisible` (segment test eye→target, range-limited), `nearestWall` (ring of horizontal rays, steep-surface filter). `PLACEHOLDER_SEMANTICS = true` until Malcolm reviews. Harness: `test/semantics/cases.json` + `semantics.test.ts` on a synthetic room; two cases deliberately unlabelled (`expected: null`). Merge needs Malcolm (CODEOWNERS on `src/semantics/**`).
+
 ## In progress
 - (nothing)
 
 ## Next
-- M2: `semantics/` scaffold (signatures, params, placeholders, cases.json harness). Touches `src/semantics/**`, so its PR is owner-merge. M4 NavMesh (query-library M4 needs it) does not depend on M2.
+- M5: cancellation/progress on raycasts, SAB-ready buffers, docs with a worked `isVisible` example; navmesh funnel smoothing and spatial acceleration for `nearestPoint`; Dijkstra benchmark (30 sources, 50k polys); cost report for SampleGrid on a real map.
 
 ## Blockers / Requests to other modules
 - Request to contracts/map-extractor: no navmesh binary spec exists in contracts yet. spatial-core defines one in `NavMesh.serialize` (polygon soup + links); extractor's Recast bake should emit `NavMeshData` (convex polygons) and links, or contracts should adopt this layout.
