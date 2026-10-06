@@ -7,6 +7,7 @@ import lock from "../tools.lock.json" with { type: "json" }
 import { extract, type Tier } from "./extract.ts"
 import { inspectBundle } from "./inspect.ts"
 import { packLite } from "./packLite.ts"
+import { tileBundle } from "./tiling.ts"
 import { bunRunner } from "./s2v.ts"
 import { findTool } from "./tool.ts"
 import { join, resolve } from "node:path"
@@ -19,6 +20,7 @@ const USAGE = `dlq-extract <command> [--json] [--game-dir <path>]
   list-maps  maps present in the game paks
   extract    --map <name> [--tier full|lite] [--force] [--out <dir>] [--tri-budget <n>] [--keep-work]   (default map ${lock.game.mainMap}, tier lite, out <repo>/data/bundles)
   inspect    <bundle-dir>   validate manifest/entities against contracts, report sizes and frame sanity
+  tile       <bundle-dir> [--lods <n>] [--lod-ratio <r>] [--keep-textures]   lite tier: meshopt-compress tiles, add simplified LODs (<id>#lod<n>), drop textures
   pack-lite  <bundle-dir>   validate lite bundle, check for textures, verify budget compliance
 (bake, diff: not implemented yet)`
 
@@ -82,6 +84,21 @@ export const mainAsync = async (argv: ReadonlyArray<string>): Promise<number> =>
       r.ok ? "pack-lite ok" : "pack-lite failed"
     ]
     emit(r, lines.join("\n"))
+    return r.ok ? EXIT.ok : EXIT.problem
+  }
+  if (cmd === "tile") {
+    const dir = rest[0]?.startsWith("--") ? undefined : rest[0] // first positional; later args are flags with values
+    if (!dir) { console.error(USAGE); return EXIT.usage }
+    const num = (n: string) => (flag(rest, n) === undefined ? undefined : Number(flag(rest, n)))
+    const r = await tileBundle(dir, {
+      ...(num("--lods") !== undefined ? { lods: num("--lods")! } : {}),
+      ...(num("--lod-ratio") !== undefined ? { lodRatio: num("--lod-ratio")! } : {}),
+      keepTextures: rest.includes("--keep-textures"), log: (m) => console.error(m)
+    })
+    const mb = (n: number) => `${(n / 1048576).toFixed(1)} MB`
+    emit(r, [...r.errors.map((e) => `✗ ${e}`), ...r.warnings.map((w) => `! ${w}`),
+      `${r.tiles.length} tile files, ${mb(r.bytesBefore)} before, ${mb(r.bytesAfter)} after (all LODs), largest ${mb(r.largestTileBytes)}`,
+      r.ok ? "tile ok" : "tile failed"].join("\n"))
     return r.ok ? EXIT.ok : EXIT.problem
   }
   if (cmd === "extract") {

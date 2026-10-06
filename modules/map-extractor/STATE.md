@@ -1,8 +1,8 @@
 # map-extractor — state
 
 - **Status:** S2 spike complete — **GO** (render, collision, entities, nav all obtainable)
-- **Version:** 0.3.0
-- **Current milestone:** M2 code done (pack-lite command implemented and tested); pending real-data run on dev machine
+- **Version:** 0.4.0 (module); `EXTRACTOR_VERSION` stays 0.3.0 so cached extract stages remain valid
+- **Current milestone:** M3 code done (`tile` command: meshopt + quantisation + LODs); pending real-data run on dev machine
 - **Last updated:** 2026-10-06
 
 ## Done
@@ -138,15 +138,27 @@ Other (bulk, likely out of scope): `light_omni2` 1,968, `light_barn` 755, `citad
   - 3 unit tests: valid lite bundle passes; non-lite bundle rejected; no-manifest error
 - Next: run `dlq-extract pack-lite <bundle-dir>` on dev machine after `extract --tier lite` to verify budget compliance; then ready for M3 (tiling/LOD).
 
+## M3 (2026-10-06)
+
+- **`dlq-extract tile <bundle-dir> [--lods 2] [--lod-ratio 0.25] [--keep-textures]`** (`src/tiling.ts`), run after `extract --tier lite`, before `pack-lite`. Lite tier only (the full tier is one multi-GB glTF and is rejected).
+  - Per tile: reads the GLB, drops textures (PLAN §5.9: lite is untextured; the copied texture files are deleted unless `--keep-textures`, in which case images get embedded in the GLB), welds vertices, then writes LOD0 in place and LOD*n* as `<id>.lod<n>.glb`. Each is `prune`d, quantised (KHR_mesh_quantization, 14-bit positions) and meshopt-compressed (EXT_meshopt_compression, level high). LOD*n* keeps `lodRatio^n` of LOD0's triangles via the meshoptimizer simplifier (error bound 2 % of the extent).
+  - Manifest: LOD0 keeps the tile id; LODs are separate tiles with id `<id>#lod<n>`, the same `bounds`, their own `bytes`/`sha256`. Bounds stay in the loaded frame transformed as before (quantisation puts scale/offset on the node, so decoded geometry is unchanged in frame).
+  - Fails (exit 2) when any tile file exceeds 20 MB, when the bundle is not lite, or when it already has `#lod` entries (re-run `extract --tier lite --force`).
+  - **Viewer decoder contract:** tiles need `MeshoptDecoder` (EXT_meshopt_compression, required) and a loader that supports KHR_mesh_quantization (three's `GLTFLoader` does). No Draco.
+  - `pack-lite` now checks the size of every tile file named in the manifest (it used to look only at `render/*.glb`, so `render/tiles/*.glb` and LOD files were skipped) and flags missing tile files.
+  - Tests: 5 for `tile` on synthetic grid tiles (LOD triangle counts, manifest ids/bytes/sha256, quantised bounds survive meshopt decode, texture stripping, budget error, rejection paths), 1 for the `pack-lite` manifest check.
+  - **Not run on real data.** Real tiles are the 18 MB cell tiles from `extract --tier lite`; compression time and the final size against the 900 MB site budget are unknown.
+
 ## In progress
 - Testing on real data via Remote Control dev machine (pending).
 
 ## Next
-1. Run `pack-lite` on a lite bundle produced by `extract --tier lite` on the dev machine to verify budget compliance.
+1. On the dev machine: `extract --tier lite`, then `tile <bundle>`, then `pack-lite <bundle>`; record tile sizes, compression ratio, LOD1 triangle share and the total size here. If LOD1 looks bad, tune `--lod-ratio` or the simplifier error. Then M4 (`bake`: collision BVH + sample grid) is unblocked (spatial-core M5 is merged).
 2. Settle M1 open questions via real-data tests on dev machine: (a) are physics GLB and render glTF in the same coordinate frame; (b) are all hulls exported; (c) per-entity volume models (interior/trigger) export; (d) triangle cut for `lite` impact on size/quality (tune `--tri-budget`).
 3. Check `dl_hideout` / `new_player_basics` only if the owner wants them (not in Slice 1).
 
 ## Blockers / Requests to other modules
+- contracts: `Tile` has no `lod` (or `lods[]`) field, so LODs are encoded as separate tiles with id `<id>#lod<n>` and a shared `bounds` (see M3). A `Tile.lod` / `Tile.lodOf` field would let the viewer select LODs without parsing ids; map-viewer M4 should read this convention until then.
 - root (optional): add `data/` to `.gitignore`; the extractor already self-ignores its output root.
 - contracts: `Tile` has a single `file`; the render export is `n0.gltf` + 3 `.bin` (>1 GB each). Tile `bytes` currently sums the bins and `sha256` covers the `.gltf` only. Consider `Tile.files[]` or a size-limit/tiling note (M3).
 
@@ -160,6 +172,8 @@ Other (bulk, likely out of scope): `light_omni2` 1,968, `light_barn` 755, `citad
 - 2026-10-06 — M1: lite tier omits render geometry for now (collision + entities only) rather than guess a decimation; full tier exports `n0.vwnod_c` as `.gltf`. Hand-rolled argv kept.
 
 - 2026-10-06 — M2: `pack-lite` validates lite-tier bundles for publishing (tier check, texture verification, budget compliance). No real-data testing yet; unit tests pass. Not yet integrated with the publish workflow (that lives in infra/tools/publish-data.ts).
+
+- 2026-10-06 — M3: `tile` is a separate step after `extract --tier lite` (not folded into `extract`) so the 8-minute export stays cached and LOD settings can be re-tried; LODs are separate manifest tiles (`#lod<n>`) because contracts' `Tile` has a single `file`; meshopt (not Draco) so one WASM decoder serves the viewer; lite tier drops textures at this step.
 
 ## Open questions
 - (see PLAN.md §9, and "Next" item 2 above)
