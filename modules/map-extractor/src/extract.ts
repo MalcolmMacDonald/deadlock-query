@@ -25,6 +25,8 @@ export interface ExtractOptions {
   readonly lite?: LiteOptions
   /** Lite tier: keep the multi-GB full render export in `.work` after deriving the lite tiles. */
   readonly keepWork?: boolean
+  /** Pass `--gltf_export_materials` to the render export (off by default; see `args.render`). */
+  readonly materials?: boolean
   readonly log?: (msg: string) => void
 }
 
@@ -114,7 +116,7 @@ export const extract = async (o: ExtractOptions): Promise<ExtractResult> => {
     const gltf = join(dir, "render", "n0.gltf")
     await stage(o, dir, "render", [gltf], async () => {
       for (const f of readdirSync(join(dir, "render"))) rmSync(join(dir, "render", f), { recursive: true, force: true })
-      await run(o.runner, "render", args.render(o.vpk, o.map, gltf))
+      await run(o.runner, "render", args.render(o.vpk, o.map, gltf, o.materials))
     })
     renderInfo = gltfInfo(readGltfJson(gltf))
     // Render nodes carry per-instance placement matrices (thousands of distinct ones, near-identity rotation) in the same
@@ -134,11 +136,11 @@ export const extract = async (o: ExtractOptions): Promise<ExtractResult> => {
     const fullGltf = join(work, "render-full", "n0.gltf")
     const liteDir = join(dir, "render")
     const manifestTiles = join(work, "lite-tiles.json")
-    const liteKey = `render-lite-${createHash("sha256").update(JSON.stringify({ ...o.lite, log: undefined })).digest("hex").slice(0, 8)}`
+    const liteKey = `render-lite-${createHash("sha256").update(JSON.stringify({ ...o.lite, log: undefined, materials: o.materials === true })).digest("hex").slice(0, 8)}`
     await stage(o, dir, liteKey, [manifestTiles], async () => {
       if (o.force || !existsSync(fullGltf)) {
         rmSync(join(work, "render-full"), { recursive: true, force: true }); mkdirSync(join(work, "render-full"), { recursive: true })
-        await run(o.runner, "render", args.render(o.vpk, o.map, fullGltf))
+        await run(o.runner, "render", args.render(o.vpk, o.map, fullGltf, o.materials))
       }
       for (const f of readdirSync(liteDir)) rmSync(join(liteDir, f), { recursive: true, force: true })
       const r = buildLiteTiles(fullGltf, liteDir, { ...o.lite, log: o.log })

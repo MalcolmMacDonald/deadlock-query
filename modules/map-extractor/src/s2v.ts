@@ -35,6 +35,11 @@ export const args = {
   file: (vpk: string, inner: string, out: string, extra: string[] = []) => ["-i", vpk, "-f", inner, "-o", out, "-d", ...extra],
   collision: (vpk: string, map: string, out: string) => args.file(vpk, `maps/${map}/world_physics.vmdl_c`, out, ["--gltf_export_format", "glb"]),
   entities: (vpk: string, map: string, out: string) => args.file(vpk, `maps/${map}/entities/default_ents.vents_c`, out),
-  /** `--gltf_export_materials` writes glTF materials plus their textures beside the .gltf. */
-  render: (vpk: string, map: string, out: string) => args.file(vpk, `maps/${map}/worldnodes/n0.vwnod_c`, out, ["--gltf_export_format", "gltf", "--gltf_export_materials"])
+  /**
+   * `--gltf_export_materials` writes glTF materials plus their textures beside the .gltf. Opt-in: on the real dl_midtown
+   * export (Source2Viewer 20.0, build 25738777) it logs shader-version exceptions (VCS 72), writes ~1.8 GB of textures, writes the
+   * `.bin` files and then never writes `n0.gltf` (the process idles forever or exits without it).
+   */
+  render: (vpk: string, map: string, out: string, materials = false) =>
+    args.file(vpk, `maps/${map}/worldnodes/n0.vwnod_c`, out, ["--gltf_export_format", "gltf", ...(materials ? ["--gltf_export_materials"] : [])])
 }

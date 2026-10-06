@@ -73,3 +73,24 @@ test("splits a cell into several tiles when the byte budget is small", () => {
   expect(r.keptTriangles).toBe(6)
   expect(new Set(r.tiles.map((t) => t.file)).size).toBe(3)
 })
+
+test("emits only the vertices a primitive's indices reference, and bounds ignore the rest", () => {
+  const dir = mkdtempSync(join(tmpdir(), "dlq-lite-"))
+  // 8 vertices, but the single triangle only uses 0, 1, 2; vertices 3..7 sit far away and must not count.
+  const pos = new Float32Array([0, 0, 0, 1, 0, 0, 0, 0, 1, ...[9e5, 9e5, 9e5, 9e5, 9e5, 9e5, 9e5, 9e5, 9e5, 9e5, 9e5, 9e5, 9e5, 9e5, 9e5]])
+  const idx = new Uint32Array([0, 1, 2])
+  writeFileSync(join(dir, "n0.bin"), Buffer.concat([Buffer.from(pos.buffer), Buffer.from(idx.buffer)]))
+  writeFileSync(join(dir, "n0.gltf"), JSON.stringify({
+    asset: { version: "2.0" }, scene: 0, scenes: [{ nodes: [0] }], nodes: [{ mesh: 0 }],
+    meshes: [{ name: "m", primitives: [{ attributes: { POSITION: 0 }, indices: 1 }] }],
+    accessors: [{ bufferView: 0, componentType: 5126, count: 8, type: "VEC3", min: [0, 0, 0], max: [9e5, 9e5, 9e5] }, { bufferView: 1, componentType: 5125, count: 3, type: "SCALAR" }],
+    bufferViews: [{ buffer: 0, byteOffset: 0, byteLength: pos.byteLength }, { buffer: 0, byteOffset: pos.byteLength, byteLength: idx.byteLength }],
+    buffers: [{ uri: "n0.bin", byteLength: pos.byteLength + idx.byteLength }]
+  }))
+  const out = mkdtempSync(join(tmpdir(), "dlq-out-"))
+  const r = buildLiteTiles(join(dir, "n0.gltf"), out, { cell: 1e6 })
+  expect(r.keptTriangles).toBe(1)
+  expect(r.tiles[0]!.bounds).toEqual({ min: [0, 0, 0], max: [1, 0, 1] })
+  const j = readGltfJson(join(out, r.tiles[0]!.file)) as any
+  expect(j.accessors.find((a: any) => a.min).count).toBe(3)
+})
