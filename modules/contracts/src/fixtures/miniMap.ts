@@ -62,6 +62,26 @@ const entities = (): Entity[] => {
   orbs.forEach((p, i) => out.push(ent(`orb-${i + 1}`, "citadel_pickup_spawner", "healingOrb", p, {
     properties: { subclass_name: "citadel_pickup_floating_health", spawn_delay_override: 180 }
   })))
+  // One entity per remaining kind, so consumers can exercise every `EntityKind` (classes as in the real extractor map).
+  out.push(ent("sentry-2-1", "npc_base_defense_sentry", "baseSentry", [-3600, 300, 20], { team: 2 }))
+  out.push(ent("sentry-3-1", "npc_base_defense_sentry", "baseSentry", [3600, -300, 20], { team: 3 }))
+  out.push(ent("barracks-2-1", "npc_barrack_boss", "barracks", [-3400, -2000, 20], { team: 2, lane: 1 }))
+  out.push(ent("barracks-3-1", "npc_barrack_boss", "barracks", [3400, 2000, 20], { team: 3, lane: 3 }))
+  out.push(ent("zipline-1", "citadel_zipline_path_node", "zipline", [-1500, -1500, 300], { properties: { targetname: "zipline_a_node_0" } }))
+  out.push(ent("zipline-2", "citadel_zipline_path_node", "zipline", [-500, -1500, 300], { properties: { targetname: "zipline_a_node_1" } }))
+  out.push(ent("jumppad-1", "trigger_catapult", "jumpPad", [1500, -1400, 20]))
+  out.push(ent("climbrope-1", "citadel_trigger_climb_rope", "climbRope", [1700, -1000, 300]))
+  out.push(ent("interior-1", "citadel_trigger_interior", "interior", [0, 1000, 200]))
+  out.push(ent("shop-2-1", "trigger_item_shop", "shop", [-3500, 600, 20], { team: 2 }))
+  out.push(ent("shop-3-1", "trigger_item_shop", "shop", [3500, -600, 20], { team: 3 }))
+  out.push(ent("spawn-2-1", "info_team_spawn", "spawn", [-3900, 200, 20], { team: 2 }))
+  out.push(ent("spawn-3-1", "info_team_spawn", "spawn", [3900, -200, 20], { team: 3 }))
+  out.push(ent("trooperspawn-2-2", "info_trooper_spawn", "trooperSpawn", [-3200, 0, 20], { team: 2, lane: 2 }))
+  out.push(ent("trooperspawn-3-2", "info_trooper_spawn", "trooperSpawn", [3200, 0, 20], { team: 3, lane: 2 }))
+  out.push(ent("capture-1", "citadel_capture_point", "capturePoint", [0, 0, 20]))
+  out.push(ent("powerup-1", "citadel_item_powerup_spawner", "powerup", [0, -1500, 20]))
+  out.push(ent("crate-1", "item_crate_spawn", "crate", [-1200, 1500, 20]))
+  out.push(ent("lanemarker-1", "lane_marker_path", "laneMarker", [0, -2000, 20], { lane: 1 }))
   // An unmapped class is preserved without `kind`.
   out.push(ent("prop-1", "prop_dynamic", undefined, [200, 200, 0], { properties: { model: "models/props/crate.vmdl" } }))
   return out

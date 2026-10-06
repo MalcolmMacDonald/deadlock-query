@@ -176,6 +176,13 @@
               "items": {
                 "type": "string"
               }
+            },
+            "lod": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "lodOf": {
+              "type": "string"
             }
           },
           "required": [
@@ -231,7 +238,574 @@
         "type": "string"
       },
       "baked": {
-        "type": "object"
+        "type": "object",
+        "properties": {
+          "bakeVersion": {
+            "type": "string"
+          },
+          "semanticsVersion": {
+            "type": "string"
+          },
+          "placeholder": {
+            "type": "boolean"
+          },
+          "inputKey": {
+            "type": "string"
+          },
+          "bvh": {
+            "type": "object",
+            "properties": {
+              "file": {
+                "type": "string"
+              },
+              "bytes": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string",
+                    "enum": [
+                      "Infinity",
+                      "-Infinity",
+                      "NaN"
+                    ]
+                  }
+                ]
+              },
+              "sha256": {
+                "type": "string"
+              },
+              "triangles": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string",
+                    "enum": [
+                      "Infinity",
+                      "-Infinity",
+                      "NaN"
+                    ]
+                  }
+                ]
+              },
+              "vertices": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string",
+                    "enum": [
+                      "Infinity",
+                      "-Infinity",
+                      "NaN"
+                    ]
+                  }
+                ]
+              },
+              "excludedLayers": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "skippedNodes": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string",
+                    "enum": [
+                      "Infinity",
+                      "-Infinity",
+                      "NaN"
+                    ]
+                  }
+                ]
+              }
+            },
+            "required": [
+              "file",
+              "bytes",
+              "sha256",
+              "triangles",
+              "vertices",
+              "excludedLayers",
+              "skippedNodes"
+            ],
+            "additionalProperties": true
+          },
+          "sampleGrid": {
+            "type": "object",
+            "properties": {
+              "file": {
+                "type": "string"
+              },
+              "bytes": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string",
+                    "enum": [
+                      "Infinity",
+                      "-Infinity",
+                      "NaN"
+                    ]
+                  }
+                ]
+              },
+              "sha256": {
+                "type": "string"
+              },
+              "cellSize": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string",
+                    "enum": [
+                      "Infinity",
+                      "-Infinity",
+                      "NaN"
+                    ]
+                  }
+                ]
+              },
+              "nx": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string",
+                    "enum": [
+                      "Infinity",
+                      "-Infinity",
+                      "NaN"
+                    ]
+                  }
+                ]
+              },
+              "ny": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string",
+                    "enum": [
+                      "Infinity",
+                      "-Infinity",
+                      "NaN"
+                    ]
+                  }
+                ]
+              },
+              "origin": {
+                "type": "array",
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "maxItems": 2,
+                "minItems": 2
+              },
+              "channels": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "params": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "number"
+                }
+              }
+            },
+            "required": [
+              "file",
+              "bytes",
+              "sha256",
+              "cellSize",
+              "nx",
+              "ny",
+              "origin",
+              "channels",
+              "params"
+            ],
+            "additionalProperties": true
+          },
+          "navmesh": {
+            "type": "object",
+            "properties": {
+              "file": {
+                "type": "string"
+              },
+              "bytes": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string",
+                    "enum": [
+                      "Infinity",
+                      "-Infinity",
+                      "NaN"
+                    ]
+                  }
+                ]
+              },
+              "sha256": {
+                "type": "string"
+              },
+              "bakeVersion": {
+                "type": "string"
+              },
+              "inputKey": {
+                "type": "string"
+              },
+              "polygons": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string",
+                    "enum": [
+                      "Infinity",
+                      "-Infinity",
+                      "NaN"
+                    ]
+                  }
+                ]
+              },
+              "vertices": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string",
+                    "enum": [
+                      "Infinity",
+                      "-Infinity",
+                      "NaN"
+                    ]
+                  }
+                ]
+              },
+              "tiles": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string",
+                    "enum": [
+                      "Infinity",
+                      "-Infinity",
+                      "NaN"
+                    ]
+                  }
+                ]
+              },
+              "stitchedEdges": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string",
+                    "enum": [
+                      "Infinity",
+                      "-Infinity",
+                      "NaN"
+                    ]
+                  }
+                ]
+              },
+              "components": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string",
+                    "enum": [
+                      "Infinity",
+                      "-Infinity",
+                      "NaN"
+                    ]
+                  }
+                ]
+              },
+              "largestComponentShare": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string",
+                    "enum": [
+                      "Infinity",
+                      "-Infinity",
+                      "NaN"
+                    ]
+                  }
+                ]
+              },
+              "links": {
+                "type": "object",
+                "properties": {
+                  "count": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "Infinity",
+                          "-Infinity",
+                          "NaN"
+                        ]
+                      }
+                    ]
+                  },
+                  "dropped": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "Infinity",
+                          "-Infinity",
+                          "NaN"
+                        ]
+                      }
+                    ]
+                  },
+                  "byKind": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "Infinity",
+                            "-Infinity",
+                            "NaN"
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "count",
+                  "dropped",
+                  "byKind"
+                ],
+                "additionalProperties": true
+              },
+              "agent": {
+                "type": "object",
+                "properties": {
+                  "radius": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "Infinity",
+                          "-Infinity",
+                          "NaN"
+                        ]
+                      }
+                    ]
+                  },
+                  "height": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "Infinity",
+                          "-Infinity",
+                          "NaN"
+                        ]
+                      }
+                    ]
+                  },
+                  "climb": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "Infinity",
+                          "-Infinity",
+                          "NaN"
+                        ]
+                      }
+                    ]
+                  },
+                  "slopeDegrees": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "Infinity",
+                          "-Infinity",
+                          "NaN"
+                        ]
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "radius",
+                  "height",
+                  "climb",
+                  "slopeDegrees"
+                ],
+                "additionalProperties": true
+              },
+              "recast": {
+                "type": "object",
+                "properties": {
+                  "cellSize": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "Infinity",
+                          "-Infinity",
+                          "NaN"
+                        ]
+                      }
+                    ]
+                  },
+                  "cellHeight": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "Infinity",
+                          "-Infinity",
+                          "NaN"
+                        ]
+                      }
+                    ]
+                  },
+                  "tileSize": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "Infinity",
+                          "-Infinity",
+                          "NaN"
+                        ]
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "cellSize",
+                  "cellHeight",
+                  "tileSize"
+                ],
+                "additionalProperties": true
+              },
+              "excludedLayers": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "inputTriangles": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string",
+                    "enum": [
+                      "Infinity",
+                      "-Infinity",
+                      "NaN"
+                    ]
+                  }
+                ]
+              }
+            },
+            "required": [
+              "file",
+              "bytes",
+              "sha256",
+              "bakeVersion",
+              "inputKey",
+              "polygons",
+              "vertices",
+              "tiles",
+              "stitchedEdges",
+              "components",
+              "largestComponentShare",
+              "links",
+              "agent",
+              "recast",
+              "excludedLayers",
+              "inputTriangles"
+            ],
+            "additionalProperties": true
+          }
+        },
+        "required": [
+          "bakeVersion",
+          "semanticsVersion",
+          "placeholder",
+          "inputKey",
+          "bvh",
+          "sampleGrid"
+        ],
+        "additionalProperties": true
       },
       "provenance": {
         "type": "object",

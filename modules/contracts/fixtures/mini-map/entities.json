@@ -237,6 +237,234 @@
       }
     },
     {
+      "id": "sentry-2-1",
+      "class": "npc_base_defense_sentry",
+      "kind": "baseSentry",
+      "position": [
+        -3600,
+        300,
+        20
+      ],
+      "team": 2,
+      "properties": {}
+    },
+    {
+      "id": "sentry-3-1",
+      "class": "npc_base_defense_sentry",
+      "kind": "baseSentry",
+      "position": [
+        3600,
+        -300,
+        20
+      ],
+      "team": 3,
+      "properties": {}
+    },
+    {
+      "id": "barracks-2-1",
+      "class": "npc_barrack_boss",
+      "kind": "barracks",
+      "position": [
+        -3400,
+        -2000,
+        20
+      ],
+      "team": 2,
+      "lane": 1,
+      "properties": {}
+    },
+    {
+      "id": "barracks-3-1",
+      "class": "npc_barrack_boss",
+      "kind": "barracks",
+      "position": [
+        3400,
+        2000,
+        20
+      ],
+      "team": 3,
+      "lane": 3,
+      "properties": {}
+    },
+    {
+      "id": "zipline-1",
+      "class": "citadel_zipline_path_node",
+      "kind": "zipline",
+      "position": [
+        -1500,
+        -1500,
+        300
+      ],
+      "properties": {
+        "targetname": "zipline_a_node_0"
+      }
+    },
+    {
+      "id": "zipline-2",
+      "class": "citadel_zipline_path_node",
+      "kind": "zipline",
+      "position": [
+        -500,
+        -1500,
+        300
+      ],
+      "properties": {
+        "targetname": "zipline_a_node_1"
+      }
+    },
+    {
+      "id": "jumppad-1",
+      "class": "trigger_catapult",
+      "kind": "jumpPad",
+      "position": [
+        1500,
+        -1400,
+        20
+      ],
+      "properties": {}
+    },
+    {
+      "id": "climbrope-1",
+      "class": "citadel_trigger_climb_rope",
+      "kind": "climbRope",
+      "position": [
+        1700,
+        -1000,
+        300
+      ],
+      "properties": {}
+    },
+    {
+      "id": "interior-1",
+      "class": "citadel_trigger_interior",
+      "kind": "interior",
+      "position": [
+        0,
+        1000,
+        200
+      ],
+      "properties": {}
+    },
+    {
+      "id": "shop-2-1",
+      "class": "trigger_item_shop",
+      "kind": "shop",
+      "position": [
+        -3500,
+        600,
+        20
+      ],
+      "team": 2,
+      "properties": {}
+    },
+    {
+      "id": "shop-3-1",
+      "class": "trigger_item_shop",
+      "kind": "shop",
+      "position": [
+        3500,
+        -600,
+        20
+      ],
+      "team": 3,
+      "properties": {}
+    },
+    {
+      "id": "spawn-2-1",
+      "class": "info_team_spawn",
+      "kind": "spawn",
+      "position": [
+        -3900,
+        200,
+        20
+      ],
+      "team": 2,
+      "properties": {}
+    },
+    {
+      "id": "spawn-3-1",
+      "class": "info_team_spawn",
+      "kind": "spawn",
+      "position": [
+        3900,
+        -200,
+        20
+      ],
+      "team": 3,
+      "properties": {}
+    },
+    {
+      "id": "trooperspawn-2-2",
+      "class": "info_trooper_spawn",
+      "kind": "trooperSpawn",
+      "position": [
+        -3200,
+        0,
+        20
+      ],
+      "team": 2,
+      "lane": 2,
+      "properties": {}
+    },
+    {
+      "id": "trooperspawn-3-2",
+      "class": "info_trooper_spawn",
+      "kind": "trooperSpawn",
+      "position": [
+        3200,
+        0,
+        20
+      ],
+      "team": 3,
+      "lane": 2,
+      "properties": {}
+    },
+    {
+      "id": "capture-1",
+      "class": "citadel_capture_point",
+      "kind": "capturePoint",
+      "position": [
+        0,
+        0,
+        20
+      ],
+      "properties": {}
+    },
+    {
+      "id": "powerup-1",
+      "class": "citadel_item_powerup_spawner",
+      "kind": "powerup",
+      "position": [
+        0,
+        -1500,
+        20
+      ],
+      "properties": {}
+    },
+    {
+      "id": "crate-1",
+      "class": "item_crate_spawn",
+      "kind": "crate",
+      "position": [
+        -1200,
+        1500,
+        20
+      ],
+      "properties": {}
+    },
+    {
+      "id": "lanemarker-1",
+      "class": "lane_marker_path",
+      "kind": "laneMarker",
+      "position": [
+        0,
+        -2000,
+        20
+      ],
+      "lane": 1,
+      "properties": {}
+    },
+    {
       "id": "prop-1",
       "class": "prop_dynamic",
       "position": [

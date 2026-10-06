@@ -1,8 +1,8 @@
 # contracts — state
 
-- **Status:** M2 real-data check done (no schema changes needed)
-- **Version:** 0.1.0
-- **Current milestone:** M3 (baked-data specs) next
+- **Status:** M3 baked-data specs done (additive); `check:real` re-run on the real bundle still to do locally
+- **Version:** 0.2.0
+- **Current milestone:** M4 (`MapMetadata`, `ScreenshotSet`) next
 - **Last updated:** 2026-10-06
 
 ## Done
@@ -17,13 +17,19 @@
   - The first run flagged "fixture covers kind guardian but real data has none". That was an extractor bug (the marker is in `bossname`, not `subclass_name`); fixed in map-extractor, and the warning is gone with 6 guardians.
   - `check:real` does not look at `manifest.baked`, the `#lod<n>` tile ids or file sizes. Real shape for M3: `baked` has `bakeVersion`, `semanticsVersion`, `placeholder`, `inputKey`, `bvh{file,bytes,sha256,triangles,vertices,excludedLayers,skippedNodes}`, `sampleGrid{file,bytes,sha256,cellSize,nx,ny,origin,channels,params}` (333 x 385 cells of 64, channels floorHeight/interior/wallDistance). LODs are separate tiles with the same bounds (63 LOD0 + 63 `#lod1`, largest tile 4.2 MB). Both are still untyped or by convention; M3 should adopt them.
 
+- M3 (2026-10-06): typed `Manifest.baked` (`Baked`, `BakedBvh`, `BakedSampleGrid`, `BakedNavmesh`, `BakedFile`) matching what map-extractor writes; `Tile.lod`/`lodOf` plus `tileLod`/`tileBaseId`/`tilesAtLod` (legacy `#lod<n>` ids still read); pure `checkTiles`/`checkFiles` in `BundleCheck.ts`; `check:real` verifies baked files (existence, bytes, sha256, grid/navmesh sanity) and LOD tiles; fixture has one entity per `EntityKind`. Everything is additive under schemaVersion 1.0.0, see CHANGELOG. Verified in the cloud with unit tests and a synthetic baked + LOD bundle; **not run against the real dl_midtown bundle** (it lives on Malcolm's machine): run `bun run check:real -- <bundle>` locally and record the result here. Expected: pass, with warnings for placeholder semantics, the fixture lacking baked/LOD, and ids-only LODs. If navmesh counts are 0 (clip-lid navmesh, see map-extractor "Collision finding") `checkFiles` errors with "baked navmesh has no polygons"; that would be a real extractor finding, not a contract bug.
+
 ## In progress
 - Annotation schema (requested by map-viewer M3): added `Annotation`/`AnnotationDocument` (2026-10-06), see CHANGELOG. map-viewer can replace its local `Annotation` type (`src/annotations.ts`) with it for import/export and IndexedDB autosave; its local `id` is `a<N>`, which fits the non-empty string id.
 
 ## Next
-- M3: baked-data specs. Adopt the real `manifest.baked` shape (above) and a `Tile.lod`/`lodOf` field instead of the `#lod<n>` id convention; extend `check:real` to verify `baked` files, tile sizes and LOD tiles; add one fixture entity per missing kind.
+- Run `check:real` on the real bundle (Malcolm's machine) and note the outcome.
+- M4: `MapMetadata` (+ `Submission`, `ReviewDecision`), `ScreenshotSet` (Phase 3; wait for the metadata/screenshot modules).
 
 ## Blockers / Requests to other modules
+- map-extractor: write `lod` and `lodOf` on LOD tiles (`tiling.ts` `lodId`/`lodFile` sites) alongside the `#lod<n>` id; the id convention can stay until consumers move. `BakedRecord`/`NavmeshRecord` could become `Baked`/`BakedNavmesh` from contracts instead of local interfaces.
+- map-viewer: draw `tilesAtLod(manifest, 0)` rather than every manifest tile (the real bundle has LOD tiles sharing the base bounds), and replace the `bakedBvhFile` cast with `manifest.baked?.bvh.file`.
+- infra: NEXT.md contracts row can move to M4 / "run check:real on the real bundle" (root file, so not in this module's PR).
 - map-extractor: write `manifest.json`/`entities.json` with `schemaVersion` "1.0.0" and per-file `collision.glbToWorld`; entity `kind` mapping table is in `EntityKind` (S2 class list). Unverified: physics vs render frame agreement.
 - consumers: use `Mock*` layers + `fixtures/mini-map`; do not depend on extractor output.
 
@@ -35,6 +41,8 @@
 - 2026-10-06 — M1 extension: added `rowIds` field to `QueryResult` schema (array of strings, one per row, derived from entity.id or row index). Enables row ↔ feature tracking for viewer integration. Fixtures regenerated with new field.
 
 - 2026-10-06 — Annotation is a discriminated union on `kind` with per-kind point counts in the schema; unique ids and layer references are checked by `validateAnnotationDocument` (schema cannot express them). Added under schemaVersion 1.0.0 as it is purely additive.
+
+- 2026-10-06 — M3: `params` of the sample grid is `Record<string, number>` rather than a fixed struct so spatial-core can add a semantics parameter without a contracts bump; `Tile.lod` is optional with helpers reading the legacy id suffix, so no schemaVersion bump; fixture left unbaked and without LOD tiles (reasons in CHANGELOG).
 
 ## Open questions
 - (see PLAN.md §9)
