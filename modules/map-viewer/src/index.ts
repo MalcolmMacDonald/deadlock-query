@@ -2,6 +2,7 @@ import type { ModuleDefinition } from "@deadlock-query/contracts"
 import { Layer } from "effect"
 import { ViewerController } from "./viewerService.ts"
 import { VIEWER_PANEL_ID, makeViewerPanel, type ViewerData } from "./ViewerPanel.ts"
+import { VIEWER_INSPECTOR_PANEL_ID, makeInspectorPanel } from "./inspector.ts"
 import { VIEWER_LAYERS_PANEL_ID, VIEWER_TOOLS_PANEL_ID, makeLayersPanel, makeToolsPanel } from "./panels.ts"
 
 export * from "./ViewerPanel.ts"
@@ -20,6 +21,7 @@ export * from "./snapping.ts"
 export * from "./vertexEdit.ts"
 export * from "./persistence.ts"
 export * from "./panels.ts"
+export * from "./inspector.ts"
 export * from "./viewerService.ts"
 export * from "./tiles.ts"
 export * from "./tileStreamer.ts"
@@ -34,7 +36,8 @@ export const makeViewerModule = (data: ViewerData, controller = new ViewerContro
   panels: [
     { id: VIEWER_PANEL_ID, title: "Map", component: makeViewerPanel(data, controller), defaultPlacement: "center" },
     { id: VIEWER_LAYERS_PANEL_ID, title: "Layers", component: makeLayersPanel(controller), defaultPlacement: "right" },
-    { id: VIEWER_TOOLS_PANEL_ID, title: "Tools", component: makeToolsPanel(controller), defaultPlacement: "left" }
+    { id: VIEWER_TOOLS_PANEL_ID, title: "Tools", component: makeToolsPanel(controller), defaultPlacement: "left" },
+    { id: VIEWER_INSPECTOR_PANEL_ID, title: "Inspector", component: makeInspectorPanel(controller), defaultPlacement: "right" }
   ]
 })
 export * from "./shotPopup.ts"

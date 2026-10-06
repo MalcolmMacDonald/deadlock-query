@@ -337,7 +337,7 @@ export const makeViewerPanel = (data: ViewerData, controller: ViewerController =
       if (id) {
         controller.emit({ _tag: "pick", id })
         controller.selectFeature(id, e.shiftKey || e.ctrlKey || e.metaKey)
-      } else if (!(e.shiftKey || e.ctrlKey || e.metaKey)) controller.selectAnnotation(undefined)
+      } else if (!(e.shiftKey || e.ctrlKey || e.metaKey)) controller.clearSelection()
     }
     const onKey = (e: KeyboardEvent) => {
       const mod = e.ctrlKey || e.metaKey

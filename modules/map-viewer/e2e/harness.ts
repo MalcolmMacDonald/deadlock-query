@@ -1,5 +1,5 @@
 import type { Entity, Manifest } from "@deadlock-query/contracts"
-import { ViewerController, makeLayersPanel, makeToolsPanel, makeViewerPanel } from "../src/index.ts"
+import { ViewerController, makeInspectorPanel, makeLayersPanel, makeToolsPanel, makeViewerPanel } from "../src/index.ts"
 
 const get = (p: string) => fetch(`/fixture/${p}`)
 const manifest = (await (await get("manifest.json")).json()) as Manifest
@@ -22,3 +22,5 @@ const side = (id: string, css: string) => {
 }
 makeToolsPanel(controller).mount(side("tools", "left:0"))
 makeLayersPanel(controller).mount(side("layers", "right:0"))
+// Parked below the viewport so it never covers the canvas the smoke test clicks on; its text is still readable.
+makeInspectorPanel(controller).mount(side("inspector", "left:0;top:640px;height:400px;width:320px"))
