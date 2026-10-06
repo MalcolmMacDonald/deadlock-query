@@ -166,7 +166,7 @@ export const makeViewerPanel = (data: ViewerData, controller: ViewerController =
           if (!res.ok) throw new Error(`${p}: HTTP ${res.status}`)
           return res
         }
-        const manifest = (await (await get(manifestUrl)).json()) as Manifest
+        const manifest = (await (await get(base.href)).json()) as Manifest
         const entities = ((await (await get(manifest.entitiesFile)).json()) as { entities: Entity[] }).entities
         const tiles = new Map<string, Uint8Array>()
         for (const t of manifest.tiles) tiles.set(t.id, new Uint8Array(await (await get(t.file)).arrayBuffer()))
