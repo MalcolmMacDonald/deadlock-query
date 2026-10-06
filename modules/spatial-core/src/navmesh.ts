@@ -153,19 +153,24 @@ export class NavMesh {
   }
 
   /** Multi-source Dijkstra over the polygon graph; cost is travel time under `model`. */
-  distanceField(sources: readonly Vec3[], model: MovementModel): DistanceField {
+  distanceField(sources: readonly Vec3[], model: MovementModel, opts?: { signal?: AbortSignal; onProgress?: (done: number, total: number) => void }): DistanceField {
+    if (opts?.signal?.aborted) throw new DOMException("aborted", "AbortError")
     const costs = new Float64Array(this.polyCount).fill(Infinity)
     const h = new Heap()
     for (const s of sources) {
       const p = this.nearestPoly(s)
       if (p >= 0 && !this.blocked[p]) { costs[p] = 0; h.push(0, p) }
     }
+    let processed = 0
     while (h.size) {
+      if (opts?.signal?.aborted) throw new DOMException("aborted", "AbortError")
       const [c, p] = h.pop()
       if (c > costs[p]!) continue
       this.neighbours(p, model, (to, w) => {
         if (c + w < costs[to]!) { costs[to] = c + w; h.push(c + w, to) }
       })
+      processed++
+      if (opts?.onProgress) opts.onProgress(processed, this.polyCount)
     }
     return { costs, costAt: (pt, maxSnap) => {
       const n = this.nearestPoint(pt, maxSnap === undefined ? {} : { maxDist: maxSnap })
@@ -174,7 +179,8 @@ export class NavMesh {
   }
 
   /** A* over polygons; points run from → shared-edge midpoints → to (no funnel smoothing). */
-  findPath(from: Vec3, to: Vec3, model: MovementModel): NavPath | null {
+  findPath(from: Vec3, to: Vec3, model: MovementModel, opts?: { signal?: AbortSignal }): NavPath | null {
+    if (opts?.signal?.aborted) throw new DOMException("aborted", "AbortError")
     const a = this.nearestPoly(from), b = this.nearestPoly(to)
     if (a < 0 || b < 0 || this.blocked[a] || this.blocked[b]) return null
     const g = new Float64Array(this.polyCount).fill(Infinity), prev = new Int32Array(this.polyCount).fill(-1)
@@ -182,6 +188,7 @@ export class NavMesh {
     const hf = (p: number) => dist(this.centroid(p), goal) / Math.max(model.speed, ...Object.values(model.linkSpeeds ?? {}))
     g[a] = 0; h.push(hf(a), a)
     while (h.size) {
+      if (opts?.signal?.aborted) throw new DOMException("aborted", "AbortError")
       const [, p] = h.pop()
       if (p === b) break
       this.neighbours(p, model, (n, w) => {

@@ -4,7 +4,7 @@ import type { Aabb, Vec3 } from "@deadlock-query/contracts"
 
 export interface Hit { readonly point: Vec3; readonly normal: Vec3; readonly distance: number; readonly triIndex: number }
 export interface ClosestPoint { readonly point: Vec3; readonly normal: Vec3; readonly distance: number; readonly triIndex: number }
-export interface RayOpts { readonly max?: number; readonly backfaces?: boolean }
+export interface RayOpts { readonly max?: number; readonly backfaces?: boolean; readonly signal?: AbortSignal; readonly onProgress?: (done: number, total: number) => void }
 export interface SphereShape { readonly center: Vec3; readonly radius: number }
 export interface CapsuleShape { readonly a: Vec3; readonly b: Vec3; readonly radius: number }
 
@@ -81,15 +81,18 @@ class BvhRaycaster implements Raycaster {
   }
 
   raycastFirstMany(origins: Float32Array, dirs: Float32Array, opts: RayOpts = {}): Float32Array {
+    if (opts.signal?.aborted) throw new DOMException("aborted", "AbortError")
     const n = origins.length / 3
     const out = new Float32Array(n)
     const ray = new Ray()
     const side = opts.backfaces ? DoubleSide : FrontSide
     for (let i = 0; i < n; i++) {
+      if (opts.signal?.aborted) throw new DOMException("aborted", "AbortError")
       ray.origin.fromArray(origins, i * 3)
       ray.direction.fromArray(dirs, i * 3).normalize()
       const h = this.bvh.raycastFirst(ray, side, 0, opts.max ?? Infinity)
       out[i] = h ? h.distance : -1
+      if (opts.onProgress) opts.onProgress(i + 1, n)
     }
     return out
   }

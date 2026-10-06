@@ -1,11 +1,13 @@
 # spatial-core — state
 
-- **Status:** M0–M4 done (semantics are placeholders)
-- **Version:** 0.4.0
-- **Current milestone:** M2 PR open (owner merge); next M5
-- **Last updated:** 2026-10-05
+- **Status:** M0–M5 done (semantics are placeholders)
+- **Version:** 0.5.0
+- **Current milestone:** M5 complete; next: owner-written semantics or Phase 2 tasks
+- **Last updated:** 2026-10-06
 
 ## Done
+- **M5 hardening** (2026-10-06): Added `AbortSignal` and `onProgress` callbacks to long-running operations (`raycastFirstMany`, `distanceField`, `findPath`). Created `SEMANTICS.md` with comprehensive documentation and a worked example of `isVisible` implementation. Confirmed SAB (SharedArrayBuffer) readiness: serialised geometry and grids are zero-copy and safe for cross-worker transfer.
+
 - **S5 spike: GO** (2026-10-05). `bun run bench` (`bench/s5.ts`) on a deterministic 1.0M-triangle heightfield, three@0.170 + three-mesh-bvh@0.8.x, default CENTER strategy, maxLeafTris 10:
 
 | Metric | Gate | Bun main | Bun Worker | Chromium Worker |
