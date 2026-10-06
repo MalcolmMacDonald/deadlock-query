@@ -85,12 +85,13 @@
     },
     "modules/screenshot-tool": {
       "name": "@deadlock-query/screenshot-tool",
-      "version": "0.3.0",
+      "version": "0.5.1",
       "bin": {
         "dlq-shoot": "./src/cli.ts",
       },
       "dependencies": {
         "@deadlock-query/contracts": "workspace:*",
+        "@deadlock-query/spatial-core": "workspace:*",
         "effect": "4.0.1",
       },
     },

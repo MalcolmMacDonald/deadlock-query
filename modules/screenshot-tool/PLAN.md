@@ -21,7 +21,7 @@ Local-only CLI (`dlq-shoot`) that instructs a running Deadlock client, through i
 Shot plan: `{ gameBuildId?, map, resolution, fov, hideHud, shots[]: { id, position, orientation | lookAt, group? } }`. Output format = contracts `ScreenshotSet`.
 
 ## 4. Uses
-`contracts`: `ScreenshotSet`, `Annotation` (read annotation files for `from-annotations`), `MapBundle` (bounds + baked navmesh/height grid for `grid`, to avoid shooting inside walls).
+`contracts`: `ScreenshotSet`, `Annotation` (read annotation files for `from-annotations`), `MapBundle` (bounds + baked navmesh/height grid for `grid`, to avoid shooting inside walls). `spatial-core` (optional): `Raycaster.occluded` over the baked collision BVH for the line-of-sight check of `from-annotations`/`from-metadata` when a baked bundle is given.
 
 ## 5. Technical design
 - **Transport abstraction** `GameConsole` (Effect service): `send(cmd): Effect<string, ConsoleError>`, plus implementations — `NetConPort` (TCP to the port opened by a `-netconport <port>` launch option, as in other Source 2 titles) and `SourceRcon` (RCON protocol over TCP, password). Choice made by spike S3 **[VERIFY** which Deadlock supports; and whether `getpos`/`setpos`/`setang`/`screenshot`/`noclip`/`cl_drawhud` are available and cheat-gated**]**. Do not rely on synthetic key presses.

@@ -70,6 +70,11 @@ export interface StandoffOptions {
   /** Cameras outside these bounds (xy) are not used. */
   readonly bounds?: Aabb
   readonly occlusion?: Occlusion
+  /**
+   * The line of sight is tested to this far above the target (default 32), because annotation points usually sit on the
+   * floor and a ray ending exactly on a floor triangle would count as blocked. The camera still aims at the target itself.
+   */
+  readonly sightLift?: number
 }
 
 /** When a view is blocked, try the same bearing closer in before giving up on it. */
@@ -89,6 +94,7 @@ export const standoffPlan = (meta: PlanMeta, targets: ReadonlyArray<Target>, o: 
   const count = o.standoffs ?? 3, distance = o.distance ?? 600, eye = o.eyeHeight ?? 64, offset = o.bearingOffset ?? 0
   if (!Number.isInteger(count) || count < 1 || count > 16) throw new PlanError([`standoffs must be an integer from 1 to 16, got ${count}`])
   if (!(distance > 0)) throw new PlanError([`distance must be positive, got ${distance}`])
+  const lift = o.sightLift ?? 32
   const skipped: Skipped[] = [], warnings: string[] = []
   if (o.occlusion === undefined) warnings.push("no collision data: lines of sight were not checked, some shots may face a wall")
   const inBounds = (p: Vec3) => o.bounds === undefined || (p[0] >= o.bounds.min[0] && p[0] <= o.bounds.max[0] && p[1] >= o.bounds.min[1] && p[1] <= o.bounds.max[1])
@@ -109,7 +115,7 @@ export const standoffPlan = (meta: PlanMeta, targets: ReadonlyArray<Target>, o: 
         const d = distance * step
         const pos: Vec3 = [round(t.at[0] + d * Math.cos(bearing)), round(t.at[1] + d * Math.sin(bearing)), round(t.at[2] + eye)]
         if (!inBounds(pos)) { outOfBounds++; continue }
-        if (o.occlusion?.blocked(pos, t.at)) { blocked++; continue }
+        if (o.occlusion?.blocked(pos, [t.at[0], t.at[1], t.at[2] + lift])) { blocked++; continue }
         chosen = pos
         break
       }
