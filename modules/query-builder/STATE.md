@@ -130,6 +130,7 @@ Also verified: library-class member completions with TSDoc signature, string-lit
 
 - 2026-10-06 — M7: paging replaced the render cap instead of virtual scrolling. At most 500 rows are in the DOM, which keeps every row a real, focusable, labelled element (virtual scrolling would break row-by-row screen-reader and keyboard navigation) and removes the need for a scroll container hack; `LIMITS.maxRenderedRows` is gone. Filtering matches the displayed text (numbers rounded to 3 places, geometry as its JSON).
 - 2026-10-06 — The standalone viewer stub implements `registerTool` as a no-op (requested by the contracts thread; harmless while it is optional, required before contracts makes it required).
+- 2026-10-06 — Flaky `verify:all` fix: `@deadlock-query/query-library` is now a `devDependency` (`workspace:*`) only to give `bun run --filter` a build order. The app build and the e2e tests read `modules/query-library/dist`, which query-library's own `verify` deletes and rebuilds last; with no declared edge both ran at once on a cold checkout (no `dist` yet), so a test could see `dist` half-written ("query-library is not built") or two builds could delete each other's output. Nothing is imported from it (`check:deps` unchanged); the cost is that `verify:all` waits for query-library before query-builder starts.
 
 ## Open questions
 - (see PLAN.md §9)

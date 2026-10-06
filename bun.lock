@@ -72,6 +72,7 @@
         "monaco-editor": "^0.52.2",
       },
       "devDependencies": {
+        "@deadlock-query/query-library": "workspace:*",
         "playwright-core": "^1.56.1",
       },
     },
@@ -85,7 +86,7 @@
     },
     "modules/screenshot-tool": {
       "name": "@deadlock-query/screenshot-tool",
-      "version": "0.5.1",
+      "version": "0.6.0",
       "bin": {
         "dlq-shoot": "./src/cli.ts",
       },
