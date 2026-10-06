@@ -1,8 +1,8 @@
 # shell — state
 
-- **Status:** M3 done; M2 done except swapping the fixture for the published bundle (viewer + embedded query editor wired to the shared viewer/selection; rows overlay and highlight on the map, map picks select rows)
+- **Status:** M4 done (dev-only modules, lock screen, live DevAuth); M3 done; M2 done except swapping the fixture for the published bundle (viewer + embedded query editor wired to the shared viewer/selection; rows overlay and highlight on the map, map picks select rows)
 - **Version:** 0.1.0
-- **Current milestone:** M3 complete; M4 (dev lock screen) next; M2 fixture swap waits on a published bundle
+- **Current milestone:** M4 complete; M5 (theming, a11y, about panel, toasts) next; M2 fixture swap waits on a published bundle
 - **Last updated:** 2026-10-06
 
 ## Done
@@ -25,16 +25,20 @@
 - 2026-10-06 — M3 (presets, palette, share): `src/presets.ts` now has Query (default), Explore (map + tools + layers) and Review (adds `metadata.*` panels; offered only when such a panel is registered) behind `PRESETS` / `availablePresets`; header buttons apply one (`src/dock.ts` `applyPreset` clears the dock and re-adds). "Reset layout" now re-applies the default preset in place (and clears the saved layout) instead of reloading. Ctrl/Cmd+K opens `src/CommandPalette.tsx` (capture-phase shortcut, so Monaco cannot swallow it; ARIA combobox/listbox, arrows/Enter/Escape, focus returns on close); `src/commands.ts` builds its entries from the module list: "Show panel: X" (focuses an open panel, else reopens at its `defaultPlacement`), "Layout preset: X", Reset, Copy share link, plus each module's own `commands`. `src/share.ts`: `#layout=<base64url of the versioned layout>`; opening such a link (fresh load or pasted into an open tab) adopts it, persists it, and clears the hash. Saved and shared layouts naming a panel that is not registered are ignored (`isRestorable`) so a renamed panel falls back to the default preset instead of breaking `fromJSON`. E2E: new `e2e/presets.ts`, `e2e/palette.ts`, `e2e/share.ts` (shared harness `e2e/util.ts`), all in `bun run e2e`; unit tests for presets, commands, share, restorability.
 - 2026-10-06 — M2 (selection sync): the results table lives inside the query-editor panel (query-builder owns it), and it already syncs both ways with the map through the shared `ViewerService`/`SelectionBus`. `e2e/slice.ts` now also asserts the clicked row is the only `.selected` row and that a map `pick` event selects its row. No separate shell results panel was added (feature UI is a shell non-goal).
 
+- 2026-10-06 — M4 (dev lock screen): `src/modules.ts` now lists `ModuleEntry`s (`module` + `devOnly`); `modulesFor(entries, target)` leaves dev-only ones out of `prod`, and `loginRequired` is true only on a `dev` build that ships one. `src/target.ts`: `VITE_TARGET` (`dev`|`prod`) at shell build time, else `vite dev` is dev and any other build is prod, so a build that forgets the flag omits dev-only modules. `src/devAuth.ts` is the shell's own `DevAuth` over `/auth/session` + `/auth/login` (same protocol as infra's `DevAuthLive`; the shell may not import infra); `vite dev` uses `MockDevAuth` since it has no `/auth` functions. `AuthGate` in `src/App.tsx` renders nothing but `LockScreen` (`src/LockScreen.tsx`: labelled password form, error alert) until `DevAuth.status` is authenticated; prod and dev builds without dev-only modules never call `/auth`. `?demoDevOnly` adds a dev-only dummy panel on the dev target for demos and tests. `e2e/lock.ts` builds its own `VITE_TARGET=dev` copy with `/auth/*` stubbed: locked (no dock) -> wrong password -> right password shows the dev-only panel -> reload stays unlocked; plus the prod build ignoring `?demoDevOnly` with zero `/auth` requests.
+- 2026-10-06 — Query share links: the shell hands `location.hash` to the query-builder panel as `initialShare` on its first mount only (`takeInitialShare` in `src/editor.tsx`), so a `#q=…` link fills the editor without running it; reopening the panel does not reapply it. Adopting a `#layout=` link now strips only that parameter from the hash (`withoutLayoutParam`). `e2e/querylink.ts` (full site build, like `slice.ts`) covers it. A `#q=` link pasted into an already-open tab is not reapplied (the panel reads it at mount).
+
 ## In progress
 - (nothing yet)
 
 ## Next
-- M4: dev lock screen + `DevAuth` integration; dev-only panels.
+- M5: theming, a11y (keyboard-only panel operation), about panel, error toasts (Lighthouse a11y >= 90).
 - M2 (remaining): swap the fixture for the published MapBundle once Malcolm publishes a real one.
 - M3 leftovers: share links are uncompressed (a default layout is a few KB); compress if links get unwieldy. Review preset has nothing to show until map-metadata ships a `metadata.*` panel.
 - Infra follow-up: ship `library.json` without the standalone editor app (it is only published for that file now).
 
 ## Blockers / Requests to other modules
+- infra: `tools/build.ts` runs the shell build without a target, so every deployed shell is a `prod` build (dev-only modules omitted, no login). Once a dev-only module exists, build the shell with `VITE_TARGET=dev` for `--target dev` (e.g. pass `env: { ...process.env, VITE_TARGET: target }` to the shell build step). No dev-only module exists yet, so nothing is lost today.
 - query-builder (resolved 2026-10-06): the embeddable panel shipped in PR #67 and is wired. Still nice to have there: a `SelectionBus` change stream (the panel polls `current` every 250 ms).
 - map-viewer: confirmed — shell mounts a panel `component` that is `{ mount(container) => dispose }` (see `src/panels.tsx`); React components also work. `viewer.main` can use the handle as-is.
 - infra: optionally run `bun run --filter @deadlock-query/shell e2e` in CI (needs Chromium); `tools/build.ts` already picks up `modules/shell/dist` (run `bun run --filter @deadlock-query/shell build` first).
@@ -49,6 +53,8 @@
 
 - 2026-10-06 — M3: Explore is the map with its Tools/Layers sidebar rather than the bare map (those are map-viewer panels); Review is hidden until a `metadata.*` panel exists, since without one it would duplicate Explore. Palette uses the Ctrl+K shortcut in the capture phase, which shadows Monaco's Ctrl+K chords.
 - 2026-10-06 — M2: unrelated extra panels (e.g. `?demoFailure`) are split below the viewer rather than tabbed, so the map stays visible.
+
+- 2026-10-06 — M4: the lock screen gates the whole app (not individual panels), matching the dev site's server-side middleware; the client check is a UX layer, not the security boundary. Dev-only is a shell-side flag on the module list because contracts' `ModuleDefinition` has no such field (module.json carries `devOnly` for tooling).
 
 ## Open questions
 - (see PLAN.md §9)

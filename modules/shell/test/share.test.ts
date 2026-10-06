@@ -27,3 +27,11 @@ test("shareUrl replaces any existing hash and keeps path and query", () => {
   expect(url.startsWith("https://x.test/app/?demoFailure#layout=")).toBe(true)
   expect(decodeLayoutHash(new URL(url).hash)).toEqual(layout)
 })
+
+test("withoutLayoutParam drops only the layout parameter", async () => {
+  const { withoutLayoutParam } = await import("../src/share.ts")
+  expect(withoutLayoutParam("#layout=abc")).toBe("")
+  expect(withoutLayoutParam("")).toBe("")
+  expect(withoutLayoutParam("#q=xyz&api=0.1.0&layout=abc")).toBe("#q=xyz&api=0.1.0")
+  expect(withoutLayoutParam("#q=xyz")).toBe("#q=xyz")
+})

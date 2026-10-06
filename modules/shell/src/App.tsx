@@ -1,15 +1,18 @@
 import { DockviewReact, type DockviewApi, type DockviewReadyEvent, type IDockviewPanelProps } from "dockview"
 import "dockview/dist/styles/dockview.css"
-import { type FunctionComponent, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { type FunctionComponent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { DevAuth } from "@deadlock-query/contracts"
+import { Effect } from "effect"
 import { buildCommands } from "./commands.ts"
 import { CommandPalette } from "./CommandPalette.tsx"
 import { addPreset, applyPreset, showPanel } from "./dock.ts"
 import { isRestorable, loadLayout, resetLayout, saveLayout } from "./layout.ts"
-import { modules } from "./modules.ts"
+import { LockScreen } from "./LockScreen.tsx"
+import { loginRequired, modules } from "./modules.ts"
 import { availablePresets, DEFAULT_PRESET_ID, PRESETS } from "./presets.ts"
 import { ErrorPanel, toDockviewComponent } from "./panels.tsx"
 import { appBaseLayer, composeModules, type Composition } from "./runtime.ts"
-import { decodeLayoutHash, shareUrl } from "./share.ts"
+import { decodeLayoutHash, shareUrl, withoutLayoutParam } from "./share.ts"
 
 export const App = () => {
   const [composition, setComposition] = useState<Composition>()
@@ -19,7 +22,27 @@ export const App = () => {
   }, [])
   if (fatal) return <ErrorPanel moduleId="shell" message={fatal} />
   if (!composition) return <div style={{ padding: 12 }}>Loading…</div>
-  return <Shell composition={composition} />
+  return <AuthGate composition={composition}><Shell composition={composition} /></AuthGate>
+}
+
+const authenticated = (composition: Composition) =>
+  composition.runtime.runPromise(Effect.gen(function* () { return (yield* (yield* DevAuth).status) === "authenticated" }))
+
+/** On the dev site (dev-only modules shipped) nothing renders until `DevAuth` reports a session; prod never asks. */
+const AuthGate = ({ composition, children }: { composition: Composition; children: ReactNode }) => {
+  const [state, setState] = useState<"checking" | "locked" | "open">(loginRequired ? "checking" : "open")
+  useEffect(() => {
+    if (loginRequired) void authenticated(composition).then((ok) => setState(ok ? "open" : "locked"), () => setState("locked"))
+  }, [composition])
+  if (state === "checking") return <div style={{ padding: 12 }}>Loading…</div>
+  if (state === "locked")
+    return (
+      <LockScreen
+        login={(password) => composition.runtime.runPromise(Effect.gen(function* () { return yield* (yield* DevAuth).login(password) }))}
+        onUnlocked={() => setState("open")}
+      />
+    )
+  return <>{children}</>
 }
 
 const Shell = ({ composition }: { composition: Composition }) => {
@@ -118,7 +141,7 @@ const Shell = ({ composition }: { composition: Composition }) => {
       const api = apiRef.current
       const shared = decodeLayoutHash(location.hash)
       if (!api || shared === null) return
-      if (restore(api, shared)) history.replaceState(null, "", location.pathname + location.search)
+      if (restore(api, shared)) history.replaceState(null, "", location.pathname + location.search + withoutLayoutParam(location.hash))
       else flash("That layout link does not match this version of the app")
     }
     window.addEventListener("hashchange", onHash)
@@ -135,7 +158,7 @@ const Shell = ({ composition }: { composition: Composition }) => {
       if (restored) {
         // The change listener is not attached yet, so persist the adopted layout now or a reload would lose it.
         saveLayout(localStorage, e.api.toJSON())
-        history.replaceState(null, "", location.pathname + location.search)
+        history.replaceState(null, "", location.pathname + location.search + withoutLayoutParam(location.hash))
       }
     }
     if (!restored) restored = restore(e.api, loadLayout(localStorage))

@@ -41,6 +41,17 @@ const captureServices = Layer.effectDiscard(
   }),
 )
 
+/**
+ * A share link the page was opened with (`#q=…&api=…`): the shell owns the URL, so it hands the fragment to the editor,
+ * once. It only fills the editor and is never run; reopening the panel later must not overwrite the user's edits.
+ */
+let pendingShare: string | undefined = typeof location !== "undefined" && location.hash.length > 1 ? location.hash : undefined
+export const takeInitialShare = (): string | undefined => {
+  const share = pendingShare
+  pendingShare = undefined
+  return share
+}
+
 /** Mounts query-builder's embeddable panel (Monaco loads lazily, with the shell's real viewer and selection). */
 const mountEditor = (container: HTMLElement): (() => void) => {
   let dispose = () => {}
@@ -48,12 +59,14 @@ const mountEditor = (container: HTMLElement): (() => void) => {
   void Promise.all([import("@deadlock-query/query-builder"), import("./monacoWorkers.ts"), services])
     .then(([qb, { monacoWorkerUrl }, { viewer, selection }]) => {
       if (cancelled) return
+      const initialShare = takeInitialShare()
       dispose = qb.makeQueryEditorPanel({
         library: qb.fetchLibraryArtifact(LIBRARY_URL),
         bundle: loadQueryBundle(),
         viewer,
         selection,
         getWorkerUrl: monacoWorkerUrl,
+        ...(initialShare ? { initialShare } : {}),
       }).mount(container)
     })
     .catch((e) => {
