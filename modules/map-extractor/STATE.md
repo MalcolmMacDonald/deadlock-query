@@ -261,6 +261,7 @@ Not verified visually: the triangle selection is by size and a uniform ratio, so
 - 2026-10-06 - Real run: world_physics lacks walkable ground (floors are clip lids), recorded as a finding rather than worked around; zipline links are first-to-last node per path, jump pads follow `target`; `--gltf_export_materials` is opt-in because it hangs the real export; lite tile reduction emits only referenced vertices; guardian marker is read from `bossname` as well as `subclass_name`; `pack-lite` size excludes scratch.
 
 - 2026-10-06 - Lite decimation: per-primitive meshopt simplification with a common ratio for everything outside the largest-primitive full-detail share (default 0.6 of the budget), a per-primitive triangle floor, cached accessor reads and vertex compaction for speed; `EXTRACTOR_VERSION` bumped to 0.4.0 so old lite stages rebuild.
+- 2026-10-06 — Flaky `verify:all` fix: the five tests that run a real bake or navmesh bake (0.5 to 1.3 s alone) get an explicit 60 s timeout. bun's 5 s default failed them in clean-clone runs where `verify:all` ran every module in parallel on a busy machine. Assertions unchanged; the timeout only guards against a hang.
 
 ## Open questions
 - (see PLAN.md §9, and "Next" item 2 above)

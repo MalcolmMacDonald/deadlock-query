@@ -37,6 +37,9 @@ const tJunction = (): PolygonSoup => {
   return { vertices: Float64Array.from(v), polys: [[0, 1, 2, 3], [4, 5, 6, 7], [8, 9, 10, 11]] }
 }
 
+/** These bake real fixture geometry (0.5 to 1.3 s alone); bun's 5 s default fails them when `verify:all` runs every module at once. */
+const BAKE_TIMEOUT_MS = 60_000
+
 test("weldVertices merges border vertices that differ slightly in height but not distinct levels", () => {
   const pos = Float64Array.from([0, 0, 0, 0, 0, 5, 0, 0, 100, 1, 0, 0, 0, 1, 0])
   const w = weldVertices(pos, [[0, 3, 4], [1, 3, 4], [2, 3, 4]], 18)
@@ -137,7 +140,7 @@ test("navmesh bake on the mini-map: lane is one connected region, paths cross ti
   const ledge = nm.nearestPoint([1500, -1000, 600], { maxDist: 100 })
   expect(ledge).not.toBeNull()
   expect(nm.findPath(a.point, ledge!.point, WALK)).toBeNull()
-})
+}, BAKE_TIMEOUT_MS)
 
 test("navmesh bake is deterministic, cached, recorded in the manifest and validated by inspect", async () => {
   const dir = miniBundle()
@@ -159,7 +162,7 @@ test("navmesh bake is deterministic, cached, recorded in the manifest and valida
   const rep = await inspectBundle(dir)
   expect(rep.errors).toEqual([])
   expect((rep.info["navmesh"] as { polygons: number }).polygons).toBe(wide.navmesh!.polygons)
-})
+}, BAKE_TIMEOUT_MS)
 
 test("bake keeps baked.navmesh when the collision/grid stage re-runs", async () => {
   const dir = miniBundle()
@@ -170,7 +173,7 @@ test("bake keeps baked.navmesh when the collision/grid stage re-runs", async () 
   expect(manifest.baked.navmesh.file).toBe("baked/navmesh.bin")
   expect(manifest.baked.bvh.file).toBe("baked/collision.bvh")
   expect((await bakeNavmesh(dir, { qaDir: false })).cached).toBe(true)
-})
+}, BAKE_TIMEOUT_MS)
 
 test("navmesh bake error paths", async () => {
   const dir = miniBundle()
