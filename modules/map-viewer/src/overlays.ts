@@ -267,6 +267,7 @@ export class OverlayScene {
     const rank = 10 + Math.min(Math.max(a.order, 0), 1000) * 0.004
     for (const o of buildFeatureObjects(features, a.color ? { ...style, color: a.color } : style, { opacity: a.opacity })) {
       o.renderOrder = o instanceof THREE.Sprite ? rank + 0.002 : rank
+      if (o instanceof THREE.Sprite) o.userData.priority = a.order
       group.add(o)
     }
     this.root.add(group)

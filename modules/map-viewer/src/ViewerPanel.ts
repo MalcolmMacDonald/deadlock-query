@@ -364,6 +364,7 @@ export const makeViewerPanel = (data: ViewerData, controller: ViewerController =
     syncTool()
 
     controller.setMap({ mapName: data.manifest.mapName, gameBuildId: data.manifest.gameBuildId })
+    controller.setEntities(data.entities)
     controller.useDefaultStorage()
     const detach = controller.attach({
       setOverlay: (id, f, s) => overlays.set(id, f, s),
@@ -414,6 +415,7 @@ export const makeViewerPanel = (data: ViewerData, controller: ViewerController =
         if (!disposed) {
           bakedBvh = bvh
           controller.setMap({ mapName: manifest.mapName, gameBuildId: manifest.gameBuildId })
+          controller.setEntities(entities)
           setWorld(g)
           startStreaming(loaded)
           controls.setPose(frameBounds(manifest.bounds.min, manifest.bounds.max, FOV_DEG))
