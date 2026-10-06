@@ -1,7 +1,7 @@
 import * as monaco from "monaco-editor/esm/vs/editor/editor.api.js"
 import "monaco-editor/esm/vs/basic-languages/typescript/typescript.contribution.js"
 import "monaco-editor/esm/vs/language/typescript/monaco.contribution.js"
-import "monaco-editor/esm/vs/editor/editor.all.js"
+import "./monacoContributions.ts"
 import { Effect, Layer, Stream } from "effect"
 import { QueryEngine, SelectionBus, ViewerService, type QueryResult } from "@deadlock-query/contracts"
 import { runQuery } from "../app/engine.ts"
@@ -408,19 +408,3 @@ export const mountQueryEditor = async (container: HTMLElement, opts: QueryEditor
     throw e
   }
 }
-
-/**
- * Panel definition in the shell's `{ mount(container) => dispose }` shape. Import this package
- * lazily (`import("@deadlock-query/query-builder")`) so Monaco stays out of the initial bundle.
- */
-export const makeQueryEditorPanel = (opts: QueryEditorPanelOptions) => ({
-  mount: (container: HTMLElement): (() => void) => {
-    let handle: QueryEditorHandle | undefined
-    let cancelled = false
-    void mountQueryEditor(container, opts).then(
-      (h) => { if (cancelled) h.dispose(); else handle = h },
-      (e) => { if (!cancelled) container.textContent = `Query editor failed to load: ${e instanceof Error ? e.message : String(e)}` }
-    )
-    return () => { cancelled = true; handle?.dispose() }
-  }
-})

@@ -312,3 +312,61 @@ test.skipIf(!haveBrowser)("saved queries and history persist across reloads; .dl
   expect(errors).toEqual([])
   await page.close()
 }, 90_000)
+
+// M6: loading UX and timings.
+test.skipIf(!haveBrowser)("a loading view with per-step progress shows until the editor is ready", async () => {
+  const page = await browser.newPage()
+  const errors: string[] = []
+  page.on("pageerror", (e) => errors.push(e.message))
+  await page.route("**/bundle.json", async (route) => {
+    const res = await route.fetch()
+    await new Promise((r) => setTimeout(r, 1500))
+    await route.fulfill({ response: res })
+  })
+  await page.goto(`http://localhost:${server.port}/`, { waitUntil: "commit" })
+  await page.waitForSelector("[data-testid=loading]")
+  expect(await page.textContent("[data-testid=loading]")).toMatch(/Loading the query editor/)
+  expect(await page.$$eval("[data-testid=loading] [data-step]", (s) => s.map((x) => (x as HTMLElement).dataset.step))).toEqual(["editor", "library", "map"])
+  // Library and editor code arrive while the (delayed) map data is still loading.
+  await page.waitForSelector("[data-step=library][data-done=true]", { timeout: 20_000 })
+  expect(await page.getAttribute("[data-step=map]", "data-done")).toBeNull()
+  await page.waitForFunction(() => (self as any).__qb, undefined, { timeout: 30_000 })
+  expect(await page.$("[data-testid=loading]")).toBeNull()
+  expect(await page.isVisible(".monaco-editor")).toBe(true)
+  expect(errors).toEqual([])
+  await page.close()
+}, 90_000)
+
+test.skipIf(!haveBrowser)("a failed download shows the error and Retry recovers", async () => {
+  const page = await browser.newPage()
+  let failing = true
+  await page.route("**/library.json", (route) => (failing ? route.abort() : route.continue()))
+  await page.goto(`http://localhost:${server.port}/`)
+  await page.waitForSelector("[data-testid=loading-error]", { timeout: 20_000 })
+  expect(await page.textContent("[data-testid=loading]")).toMatch(/failed to load/)
+  failing = false
+  await page.click("[data-testid=loading-retry]")
+  await page.waitForFunction(() => (self as any).__qb, undefined, { timeout: 30_000 })
+  expect(await page.$("[data-testid=loading]")).toBeNull()
+  await page.close()
+}, 90_000)
+
+// PLAN.md S1 gates, re-measured on the real app (local server, headless Chromium): first suggestion ≤ 2 s after the
+// editor is up. The asserts leave slack for busy machines; the numbers are logged and recorded in STATE.md.
+test.skipIf(!haveBrowser)("timings: editor ready and first suggestion", async () => {
+  const page = await browser.newPage()
+  const t0 = performance.now()
+  await page.goto(`http://localhost:${server.port}/`)
+  await page.waitForFunction(() => (self as any).__qb, undefined, { timeout: 30_000 })
+  const ready = performance.now() - t0
+  await setSource(page, "")
+  await page.click(".monaco-editor")
+  const t1 = performance.now()
+  await page.keyboard.type("map.")
+  await page.waitForSelector(".suggest-widget.visible .monaco-list-row", { timeout: 20_000 })
+  const firstSuggestion = performance.now() - t1
+  console.log(`timings: editor ready ${Math.round(ready)} ms, first suggestion ${Math.round(firstSuggestion)} ms`)
+  expect(ready).toBeLessThan(10_000)
+  expect(firstSuggestion).toBeLessThan(4_000)
+  await page.close()
+}, 60_000)
