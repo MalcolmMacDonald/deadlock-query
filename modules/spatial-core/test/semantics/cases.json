@@ -1,0 +1,14 @@
+{
+  "_note": "Labelled probes on the synthetic room scene in semantics.test.ts. `expected: null` means unlabelled (owner to fill). Values marked provisional were filled by the placeholder author from the geometry.",
+  "cases": [
+    { "name": "inside closed room", "fn": "isInterior", "args": { "p": [300, 300, 10] }, "expected": true },
+    { "name": "open sky", "fn": "isInterior", "args": { "p": [700, 700, 10] }, "expected": false },
+    { "name": "room blocks sight", "fn": "isVisible", "args": { "from": [100, 300, 0], "to": [500, 300, 0] }, "expected": false },
+    { "name": "clear outdoor line", "fn": "isVisible", "args": { "from": [600, 100, 0], "to": [900, 100, 0] }, "expected": true },
+    { "name": "beyond max range", "fn": "isVisible", "args": { "from": [0, 0, 0], "to": [900, 900, 0], "opts": { "maxRange": 500 } }, "expected": false },
+    { "name": "wall 50 away", "fn": "nearestWall", "args": { "p": [250, 300, 0] }, "expected": { "distance": 50 } },
+    { "name": "no wall in open", "fn": "nearestWall", "args": { "p": [800, 800, 0], "opts": { "maxRange": 100 } }, "expected": null },
+    { "name": "ledge edge", "fn": "isInterior", "args": { "p": [200, 150, 10] }, "expected": null },
+    { "name": "window wall sight", "fn": "isVisible", "args": { "from": [300, 300, 0], "to": [300, 150, 0] }, "expected": null }
+  ]
+}
