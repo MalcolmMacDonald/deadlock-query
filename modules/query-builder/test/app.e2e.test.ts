@@ -84,3 +84,37 @@ test.skipIf(!haveBrowser)("an infinite loop can be cancelled and the editor stay
   expect(await page.textContent("[data-testid=results-table] tbody tr")).toBe("6")
   await page.close()
 }, 90_000)
+
+// Viewer/selection wiring through the panel's injected services (recording viewer + in-memory bus).
+test.skipIf(!haveBrowser)("results drive the viewer overlay, and row ↔ pick ↔ shared selection stay in sync", async () => {
+  const { page, errors } = await open()
+  const mini = buildMiniMap()
+  await setSource(page, `map.guardians.select((g) => [g.id, g.position]).toArray()`)
+  await page.click("#run")
+  await page.waitForSelector("[data-testid=results-table] tbody tr", { timeout: 20_000 })
+  // The query returns plain rows (not entities), so row ids are row indexes.
+  const ids = mini.expectedGuardianOrbDistance.rows.map((_, i) => String(i))
+  const overlay = await page.evaluate(() => (self as any).__qb.host.log.overlays.get("query-result")?.map((f: any) => f.label))
+  expect(overlay).toEqual(ids.map((id) => `${id}:c2`))
+
+  // Row click → shared selection + viewer highlight + selected row.
+  await page.click(`tr[data-row-id="${ids[1]}"]`)
+  const sel1 = await page.evaluate(() => ({ highlight: (self as any).__qb.host.log.highlights.at(-1) }))
+  expect(sel1.highlight).toEqual([`${ids[1]}:c2`])
+  expect(await page.$$eval("tr.selected", (r) => r.map((x) => (x as HTMLElement).dataset.rowId))).toEqual([ids[1]])
+
+  // Viewer pick → row selected.
+  await page.evaluate((id) => (self as any).__qb.host.emitPick(id), `${ids[2]}:c2`)
+  await page.waitForFunction((id) => document.querySelector("tr.selected")?.getAttribute("data-row-id") === id, ids[2])
+
+  // External selection change (polled) → row selected.
+  await page.evaluate((id) => (self as any).__qb.host.setSelected([id]), ids[0])
+  await page.waitForFunction((id) => document.querySelector("tr.selected")?.getAttribute("data-row-id") === id, ids[0], { timeout: 5_000 })
+
+  // A result without geometry clears the overlay.
+  await setSource(page, "map.guardians.count()")
+  await page.click("#run")
+  await page.waitForFunction(() => !(self as any).__qb.host.log.overlays.has("query-result"))
+  expect(errors).toEqual([])
+  await page.close()
+}, 90_000)
