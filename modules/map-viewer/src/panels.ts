@@ -1,13 +1,13 @@
 import * as THREE from "three"
 import { describe, isHidden, isLocked } from "./annotations.ts"
-import { TOOL_IDS, type ToolId } from "./tools.ts"
+import { TOOL_IDS, type BuiltinToolId } from "./tools.ts"
 import type { PanelComponent } from "./ViewerPanel.ts"
 import type { ViewerController } from "./viewerService.ts"
 
 export const VIEWER_LAYERS_PANEL_ID = "viewer.layers"
 export const VIEWER_TOOLS_PANEL_ID = "viewer.tools"
 
-const TOOL_LABELS: Record<ToolId, string> = {
+const TOOL_LABELS: Record<BuiltinToolId, string> = {
   select: "Select", point: "Point", label: "Label", polyline: "Line", polygon: "Polygon", measure: "Measure"
 }
 
@@ -148,13 +148,17 @@ export const makeToolsPanel = (controller: ViewerController): PanelComponent => 
     root.append(toolBar, actions, files, snaps, hint, status, selectionInfo, list)
     container.appendChild(root)
 
-    const toolButtons = TOOL_IDS.map((t) => {
-      const b = el("button", "", { textContent: TOOL_LABELS[t] })
-      b.dataset.tool = t
-      b.onclick = () => controller.tools.setTool(t)
-      toolBar.appendChild(b)
+    const makeToolButton = (id: string, label: string) => {
+      const b = el("button", "", { textContent: label })
+      b.dataset.tool = id
+      b.onclick = () => controller.tools.setTool(id)
       return b
-    })
+    }
+    const builtinButtons = TOOL_IDS.map((t) => makeToolButton(t, TOOL_LABELS[t]))
+    toolBar.append(...builtinButtons)
+    /** Buttons of tools other modules registered; rebuilt when the registry changes. */
+    let externalButtons: HTMLButtonElement[] = []
+    let externalSig = ""
     const action = (name: string, text: string, fn: () => void) => {
       const b = el("button", "", { textContent: text })
       b.dataset.action = name
@@ -205,7 +209,7 @@ export const makeToolsPanel = (controller: ViewerController): PanelComponent => 
       return [k, box] as const
     })
 
-    const HINTS: Record<ToolId, string> = {
+    const HINTS: Record<BuiltinToolId, string> = {
       select: "Click an annotation to select it (Shift/Ctrl-click adds or removes, Ctrl+A selects all); drag a blue handle to move a vertex, double-click an edge to add one, Delete removes the vertex (or the annotation).",
       point: "Click the map to drop a point.",
       label: "Click the map, then type the label text.",
@@ -215,12 +219,25 @@ export const makeToolsPanel = (controller: ViewerController): PanelComponent => 
     }
     const render = () => {
       const tool = controller.tools.tool
-      for (const b of toolButtons) b.style.fontWeight = b.dataset.tool === tool ? "700" : "400"
+      const registered = controller.tools.registered
+      const sig = registered.map((t) => `${t.id}\n${t.label}`).join("\n\n")
+      if (sig !== externalSig) {
+        externalSig = sig
+        for (const b of externalButtons) b.remove()
+        externalButtons = registered.map((t) => makeToolButton(t.id, t.label))
+        toolBar.append(...externalButtons)
+      }
+      for (const b of [...builtinButtons, ...externalButtons]) b.style.fontWeight = b.dataset.tool === tool ? "700" : "400"
+      const ext = registered.find((t) => t.id === tool)
+      const baseHint = ext ? ext.hint ?? "" : HINTS[tool as BuiltinToolId] ?? ""
       for (const [k, box] of snapBoxes) box.checked = controller.snapping.settings[k]
-      hint.textContent = controller.tools.pending ? `${HINTS[tool]} (${controller.tools.pending} placed)` : HINTS[tool]
+      const status = controller.tools.status
+      hint.textContent = ext
+        ? status ? `${baseHint} ${status}`.trim() : baseHint
+        : controller.tools.pending ? `${baseHint} (${controller.tools.pending} placed)` : baseHint
       undo.disabled = !controller.annotations.canUndo
       redo.disabled = !controller.annotations.canRedo
-      finish.disabled = controller.tools.pending === 0
+      finish.disabled = ext ? ext.finish === undefined : controller.tools.pending === 0
       del.disabled = controller.selection.length === 0
       const layers = controller.annotations.layers
       list.replaceChildren(...controller.annotations.annotations.map((a) => {

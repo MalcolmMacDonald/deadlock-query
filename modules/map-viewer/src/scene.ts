@@ -1,5 +1,6 @@
 import * as THREE from "three"
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js"
+import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js"
 import type { Mat4 } from "@deadlock-query/contracts"
 import type { ViewerData } from "./ViewerPanel.ts"
 
@@ -12,8 +13,17 @@ export const glbToThreeMatrix = (glbToWorld: Mat4): THREE.Matrix4 =>
 
 const parseGlb = (bytes: Uint8Array): Promise<THREE.Group> => {
   const buf = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer
-  return new Promise((resolve, reject) => new GLTFLoader().parse(buf, "", (g) => resolve(g.scene), reject))
+  const loader = new GLTFLoader()
+  loader.setMeshoptDecoder(MeshoptDecoder)
+  return new Promise((resolve, reject) => loader.parse(buf, "", (g) => resolve(g.scene), reject))
 }
+
+/**
+ * Material for terrain tiles. flatShading derives normals per-fragment: extracted GLBs carry POSITION only (no
+ * NORMAL), and without normals a lit material renders solid black.
+ */
+export const makeTerrainMaterial = (): THREE.MeshStandardMaterial =>
+  new THREE.MeshStandardMaterial({ color: 0x9aa3ad, roughness: 0.9, side: THREE.DoubleSide, flatShading: true })
 
 /** Visible terrain / collision meshes under a scene built by `buildScene` (entity markers excluded). */
 export const surfaceMeshes = (root: THREE.Object3D): THREE.Mesh[] => {
@@ -32,9 +42,7 @@ const ENTITY_COLORS: Record<string, number> = { guardian: 0xe8a33d, walker: 0xd4
 /** Builds the Three scene root (already in Three space) from loaded viewer data. */
 export const buildScene = async (data: ViewerData): Promise<THREE.Group> => {
   const root = new THREE.Group()
-  // flatShading derives normals per-fragment: extracted GLBs carry POSITION only (no NORMAL), and without
-  // normals a lit material renders solid black.
-  const baseMat = new THREE.MeshStandardMaterial({ color: 0x9aa3ad, roughness: 0.9, side: THREE.DoubleSide, flatShading: true })
+  const baseMat = makeTerrainMaterial()
   for (const tile of data.manifest.tiles) {
     const bytes = data.tiles.get(tile.id)
     if (!bytes) continue

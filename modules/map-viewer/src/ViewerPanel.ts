@@ -4,14 +4,18 @@ import { MapDataService, type Entity, type Manifest, type Vec3 } from "@deadlock
 import { boundsOf, fitTopDown } from "./projection.ts"
 import { frameBounds, type CameraMode } from "./camera.ts"
 import { FOV_DEG, ViewerControls } from "./controls.ts"
-import { buildScene, surfaceMeshes } from "./scene.ts"
+import { buildScene, glbToThreeMatrix, makeTerrainMaterial, surfaceMeshes } from "./scene.ts"
 import { OverlayScene, parseFeatureId, pickFeature } from "./overlays.ts"
-import { ViewerController } from "./viewerService.ts"
+import { MAX_CAPTURE_SCALE, ViewerController } from "./viewerService.ts"
 import { eyeOf } from "./camera.ts"
 import { SurfacePicker, threeToWorld, worldTriangleSoup } from "./picking.ts"
 import { snap, snapCandidates, type SnapResult } from "./snapping.ts"
 import { annotationIdForFeature } from "./annotations.ts"
 import { nearestEdge, nearestVertex } from "./vertexEdit.ts"
+import { buildTileIndex, type ManifestTile } from "./tiles.ts"
+import { TileStreamer, type StreamStats } from "./tileStreamer.ts"
+import { defaultDecoder } from "./defaultDecoder.ts"
+import type { TileDecoder } from "./tileDecode.ts"
 
 export const VIEWER_PANEL_ID = "viewer.main"
 
@@ -20,11 +24,28 @@ export interface PanelComponent {
   readonly mount: (container: HTMLElement) => () => void
 }
 
+/** Tile streaming settings (`ViewerData.tileSource` turns streaming on). */
+export interface StreamingConfig {
+  /** Decoded geometry kept resident, in bytes (default 512 MB). */
+  readonly budgetBytes?: number
+  /** Tiles fetching/decoding at once (default 4). */
+  readonly maxInFlight?: number
+  /** Decode workers (default 2; 0 decodes on the main thread). Ignored when `decoder` is given. */
+  readonly workers?: number
+  /** Replaces the worker pool (tests, hosts with their own worker setup). */
+  readonly decoder?: TileDecoder
+  /** Distance, in tile diagonals, within which a tile shows its finest LOD (default 1.5). */
+  readonly lod0Range?: number
+}
+
 export interface ViewerData {
   readonly manifest: Manifest
   readonly entities: ReadonlyArray<Entity>
-  /** Raw render-tile GLB bytes keyed by tile id. */
+  /** Raw render-tile GLB bytes keyed by tile id (drawn eagerly; leave empty when streaming through `tileSource`). */
   readonly tiles: ReadonlyMap<string, Uint8Array>
+  /** Fetches one tile's GLB. When set, tiles are streamed by camera (frustum + LOD + memory budget) instead of read from `tiles`. */
+  readonly tileSource?: ((tile: ManifestTile) => Promise<Uint8Array>) | undefined
+  readonly streaming?: StreamingConfig | undefined
   /** Raw collision GLB bytes (drawn when the bundle has no render tiles). */
   readonly collision?: Uint8Array | undefined
   /** Bytes of the bundle's `baked/collision.bvh` (spatial-core `Raycaster.serialize()`); picking builds its own BVH without it. */
@@ -61,11 +82,13 @@ export const makeViewerPanel = (data: ViewerData, controller: ViewerController =
     root.appendChild(bar)
     container.appendChild(root)
 
-    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true })
-    renderer.setClearColor(0x14161a)
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true, alpha: true })
+    renderer.setClearColor(0x14161a, 1)
     const camera = new THREE.PerspectiveCamera(FOV_DEG, 1, 5, 200_000)
     const scene = new THREE.Scene()
     let dirty = true
+    let streamDirty = false
+    let streamer: TileStreamer | undefined
     let disposed = false
     let frame = 0
     const requestRender = () => {
@@ -76,6 +99,7 @@ export const makeViewerPanel = (data: ViewerData, controller: ViewerController =
       frame = 0
       if (!dirty || disposed) return
       dirty = false
+      if (streamDirty && streamer) { streamDirty = false; streamer.update(camera) }
       renderer.render(scene, camera)
       canvas.dataset.frames = String(Number(canvas.dataset.frames ?? "0") + 1)
     }
@@ -92,6 +116,7 @@ export const makeViewerPanel = (data: ViewerData, controller: ViewerController =
       initial: { mode: "map", pose: frameBounds(min, max, FOV_DEG) },
       intercept: (e) => grabsHandle(e),
       onChange: () => {
+        streamDirty = true
         requestRender()
         if (live) controller.emit({ _tag: "camera", position: eyeOf(live.pose), target: live.pose.target })
       }
@@ -118,6 +143,7 @@ export const makeViewerPanel = (data: ViewerData, controller: ViewerController =
       renderer.setSize(w, h, false)
       camera.aspect = w / h
       camera.updateProjectionMatrix()
+      streamDirty = true
       requestRender()
     }
     resize()
@@ -138,7 +164,9 @@ export const makeViewerPanel = (data: ViewerData, controller: ViewerController =
       }
       if (!picker && world) {
         world.updateMatrixWorld(true)
-        picker = SurfacePicker.fromSoup(worldTriangleSoup(surfaceMeshes(world)))
+        const meshes = surfaceMeshes(world)
+        if (streamer) { streamer.root.updateMatrixWorld(true); meshes.push(...surfaceMeshes(streamer.root)) }
+        picker = SurfacePicker.fromSoup(worldTriangleSoup(meshes))
       }
       canvas.dataset.picker = picker?.source ?? "none"
       return picker
@@ -153,6 +181,51 @@ export const makeViewerPanel = (data: ViewerData, controller: ViewerController =
       requestRender()
     }
     buildScene(data).then((g) => { if (!disposed) setWorld(g) }, (err) => { canvas.dataset.error = String(err) })
+
+    // Tile streaming (when the data has a `tileSource`): tiles come and go with the camera, within a memory budget.
+    let lastStats = ""
+    const startStreaming = (d: ViewerData) => {
+      streamer?.dispose()
+      if (streamer) scene.remove(streamer.root)
+      streamer = undefined
+      if (!d.tileSource || d.manifest.tiles.length === 0) return
+      const cfg = d.streaming ?? {}
+      const fetchTile = d.tileSource
+      const s = new TileStreamer({
+        cells: buildTileIndex(d.manifest.tiles),
+        fetchTile,
+        decoder: cfg.decoder ?? defaultDecoder(cfg.workers),
+        glbToThree: glbToThreeMatrix(d.manifest.coordinateSystem.glbToWorld),
+        material: makeTerrainMaterial(),
+        ...(cfg.budgetBytes === undefined ? {} : { budgetBytes: cfg.budgetBytes }),
+        ...(cfg.maxInFlight === undefined ? {} : { maxInFlight: cfg.maxInFlight }),
+        ...(cfg.lod0Range === undefined ? {} : { select: { lod0Range: cfg.lod0Range } }),
+        onChange: () => {
+          // A BVH built from the meshes goes stale when tiles come and go; the baked one does not.
+          if (picker?.source === "meshes") { picker = undefined; pickerReady = false }
+          requestRender()
+        },
+        onStats: (st) => {
+          const sig = `${st.loading}/${st.resident}/${st.residentBytes}/${st.evicted}/${st.missing}/${st.displayed}/${st.failed}`
+          if (sig === lastStats) return
+          lastStats = sig
+          canvas.dataset.tileResident = String(st.resident)
+          canvas.dataset.tileBytes = String(st.residentBytes)
+          canvas.dataset.tilePeak = String(st.peakBytes)
+          canvas.dataset.tileBudget = String(st.budgetBytes)
+          canvas.dataset.tileLoading = String(st.loading)
+          canvas.dataset.tileMissing = String(st.missing)
+          canvas.dataset.tileDisplayed = String(st.displayed)
+          canvas.dataset.tileEvicted = String(st.evicted)
+          controller.emitProgress(st)
+        }
+      })
+      streamer = s
+      scene.add(s.root)
+      streamDirty = true
+      requestRender()
+    }
+    startStreaming(data)
 
     const project = (p: Vec3): readonly [number, number] | undefined => {
       const v = new THREE.Vector3(p[0], p[2], -p[1]).project(camera)
@@ -301,11 +374,26 @@ export const makeViewerPanel = (data: ViewerData, controller: ViewerController =
       setHandles: (pts, active) => overlays.setHandles(pts, active),
       getPose: () => controls.pose,
       setPose: (p) => controls.setPose(p),
-      capture: async () => {
-        renderer.render(scene, camera)
-        const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, "image/png"))
-        if (!blob) throw new Error("canvas capture failed")
-        return new Uint8Array(await blob.arrayBuffer())
+      capture: async (opts) => {
+        const scale = Math.min(MAX_CAPTURE_SCALE, Math.max(1, Math.round(opts?.scale ?? 1)))
+        const transparent = opts?.transparent === true
+        const ratio = renderer.getPixelRatio()
+        const w = Math.max(1, Math.floor(root.getBoundingClientRect().width)), h = Math.max(1, Math.floor(root.getBoundingClientRect().height))
+        const restyle = scale > 1 || transparent
+        if (scale > 1) { renderer.setPixelRatio(ratio * scale); renderer.setSize(w, h, false) }
+        if (transparent) renderer.setClearAlpha(0)
+        try {
+          renderer.render(scene, camera)
+          const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, "image/png"))
+          if (!blob) throw new Error("canvas capture failed")
+          return new Uint8Array(await blob.arrayBuffer())
+        } finally {
+          if (restyle) {
+            if (transparent) renderer.setClearAlpha(1)
+            if (scale > 1) { renderer.setPixelRatio(ratio); renderer.setSize(w, h, false) }
+            requestRender()
+          }
+        }
       },
       loadBundle: async (manifestUrl) => {
         const base = new URL(manifestUrl, globalThis.location?.href)
@@ -316,16 +404,18 @@ export const makeViewerPanel = (data: ViewerData, controller: ViewerController =
         }
         const manifest = (await (await get(base.href)).json()) as Manifest
         const entities = ((await (await get(manifest.entitiesFile)).json()) as { entities: Entity[] }).entities
-        const tiles = new Map<string, Uint8Array>()
-        for (const t of manifest.tiles) tiles.set(t.id, new Uint8Array(await (await get(t.file)).arrayBuffer()))
+        // Tiles are streamed by camera; only the collision GLB and the BVH are fetched up front.
+        const tileSource = async (t: ManifestTile) => new Uint8Array(await (await get(t.file)).arrayBuffer())
         const collision = manifest.collision ? new Uint8Array(await (await get(manifest.collision.file)).arrayBuffer()) : undefined
-        const g = await buildScene({ manifest, entities, tiles, collision })
+        const loaded: ViewerData = { manifest, entities, tiles: new Map(), tileSource, streaming: data.streaming, collision }
+        const g = await buildScene(loaded)
         const baked = bakedBvhFile(manifest)
         const bvh = baked ? await get(baked).then(async (r) => new Uint8Array(await r.arrayBuffer())).catch((err) => { console.warn("baked collision BVH not loaded:", err); return undefined }) : undefined
         if (!disposed) {
           bakedBvh = bvh
           controller.setMap({ mapName: manifest.mapName, gameBuildId: manifest.gameBuildId })
           setWorld(g)
+          startStreaming(loaded)
           controls.setPose(frameBounds(manifest.bounds.min, manifest.bounds.max, FOV_DEG))
         }
       }
@@ -341,6 +431,7 @@ export const makeViewerPanel = (data: ViewerData, controller: ViewerController =
       canvas.removeEventListener("dblclick", onDblClick)
       unsubTool()
       overlays.dispose()
+      streamer?.dispose()
       cancelAnimationFrame(frame)
       ro?.disconnect()
       controls.dispose()
