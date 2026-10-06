@@ -161,14 +161,15 @@ test("mock viewer with tools records registrations and unregisters", async () =>
   const unregister = await Effect.runPromise(
     Effect.gen(function* () {
       const viewer = yield* ViewerService
-      const un = yield* viewer.registerTool!({ id: "metadata.camp", label: "Camp" })
+      const un = yield* viewer.registerTool({ id: "metadata.camp", label: "Camp" })
       expect(mock.registeredTools().map((t) => t.id)).toEqual(["metadata.camp"])
       return un
     }).pipe(Effect.provide(mock.layer))
   )
   unregister()
   expect(mock.registeredTools()).toEqual([])
-  // The plain mock stays member-for-member what map-viewer's real service provides today.
-  const keys = await Effect.runPromise(Effect.gen(function* () { return Object.keys(yield* ViewerService) }).pipe(Effect.provide(MockViewerService)))
-  expect(keys).not.toContain("registerTool")
+  // The plain mock has the same members, with a no-op registerTool.
+  const plain = await Effect.runPromise(Effect.gen(function* () { return yield* ViewerService }).pipe(Effect.provide(MockViewerService)))
+  expect(typeof (await Effect.runPromise(plain.registerTool({ id: "x", label: "X" })))).toBe("function")
+  expect(Object.keys(plain).sort()).toEqual(Object.keys(await Effect.runPromise(Effect.gen(function* () { return yield* ViewerService }).pipe(Effect.provide(mock.layer)))).sort())
 })

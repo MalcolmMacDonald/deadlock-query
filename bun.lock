@@ -11,7 +11,7 @@
     },
     "modules/contracts": {
       "name": "@deadlock-query/contracts",
-      "version": "0.4.0",
+      "version": "0.5.0",
       "dependencies": {
         "effect": "4.0.1",
       },
@@ -85,7 +85,7 @@
     },
     "modules/screenshot-tool": {
       "name": "@deadlock-query/screenshot-tool",
-      "version": "0.3.0",
+      "version": "0.4.0",
       "bin": {
         "dlq-shoot": "./src/cli.ts",
       },
