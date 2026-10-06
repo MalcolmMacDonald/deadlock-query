@@ -22,6 +22,9 @@ const miniBundle = (): string => {
 const sha = (p: string) => createHash("sha256").update(readFileSync(p)).digest("hex")
 const rd = (p: string) => new Uint8Array(readFileSync(p)).buffer.slice(0) as ArrayBuffer
 
+/** These bake real fixture geometry (0.5 to 1.3 s alone); bun's 5 s default fails them when `verify:all` runs every module at once. */
+const BAKE_TIMEOUT_MS = 60_000
+
 test("bake round-trips through spatial-core and matches fixture goldens", async () => {
   const dir = miniBundle()
   const r = await bakeBundle(dir)
@@ -73,7 +76,7 @@ test("bake round-trips through spatial-core and matches fixture goldens", async 
   const rep = await inspectBundle(dir)
   expect(rep.errors).toEqual([])
   expect(rep.info["baked"]).toEqual({ semanticsVersion: b.semanticsVersion, placeholder: PLACEHOLDER_SEMANTICS })
-})
+}, BAKE_TIMEOUT_MS)
 
 test("bake is deterministic and cached until an input changes", async () => {
   const dir = miniBundle()
@@ -90,7 +93,7 @@ test("bake is deterministic and cached until an input changes", async () => {
   expect(coarse.cached).toBe(false)
   expect(coarse.baked!.inputKey).not.toBe(first.baked!.inputKey)
   expect(coarse.baked!.sampleGrid.nx).toBe(64)
-})
+}, BAKE_TIMEOUT_MS)
 
 test("excluded layers are left out of the BVH; the sky default drops sky boxes", async () => {
   const dir = mkdtempSync(join(tmpdir(), "dlq-bake-"))
