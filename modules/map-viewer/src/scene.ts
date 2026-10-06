@@ -40,9 +40,9 @@ export const buildScene = async (data: ViewerData): Promise<THREE.Group> => {
     const meshes: THREE.Mesh[] = []
     group.traverse((o) => { if ((o as THREE.Mesh).isMesh) meshes.push(o as THREE.Mesh) })
     for (const m of meshes) m.material = collisionMat
-    // Sky / clip volumes enclose the whole map and hide it; draw only the `solid` layer when the GLB tags it.
-    const isSolid = (m: THREE.Mesh) => ((m.userData.InteractAs ?? m.parent?.userData.InteractAs) as string[] | undefined)?.includes("solid") ?? false
-    if (meshes.some(isSolid)) for (const m of meshes) m.visible = isSolid(m)
+    // Sky / sky-clip volumes enclose the whole map and hide everything inside; leave them out.
+    const hidden = (m: THREE.Mesh) => ((m.userData.InteractAs ?? m.parent?.userData.InteractAs) as string[] | undefined)?.some((l) => l === "sky" || l === "Citadel_Skyclip") ?? false
+    for (const m of meshes) m.visible = !hidden(m)
     const holder = new THREE.Group()
     holder.matrixAutoUpdate = false
     holder.matrix.copy(glbToThreeMatrix(data.manifest.collision.glbToWorld))
