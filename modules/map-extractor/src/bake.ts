@@ -222,7 +222,9 @@ export const bakeBundle = async (dir: string, o: BakeOptions = {}): Promise<Bake
   }
   // Rewrite the manifest as raw JSON so unrelated fields round-trip untouched.
   const raw = JSON.parse(readFileSync(join(dir, "manifest.json"), "utf8")) as Record<string, unknown>
-  raw["baked"] = baked
+  // The navmesh stage (`bakeNavmesh`) owns `baked.navmesh`; keep it across a collision/grid re-bake (it re-keys itself).
+  const prevNavmesh = (raw["baked"] as { navmesh?: unknown } | undefined)?.navmesh
+  raw["baked"] = prevNavmesh ? { ...baked, navmesh: prevNavmesh } : baked
   writeFileSync(join(dir, "manifest.json"), JSON.stringify(raw, null, 2) + "\n")
   return { ok: true, cached: false, dir, errors, warnings, baked }
 }
