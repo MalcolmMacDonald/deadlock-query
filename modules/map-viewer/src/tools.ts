@@ -1,9 +1,46 @@
 import type { OverlayFeature, Vec3 } from "@deadlock-query/contracts"
-import type { NewAnnotation } from "./annotations.ts"
+import type { Annotation, NewAnnotation } from "./annotations.ts"
 
-export type ToolId = "select" | "point" | "label" | "polyline" | "polygon" | "measure"
+export type BuiltinToolId = "select" | "point" | "label" | "polyline" | "polygon" | "measure"
+/** A built-in tool, or the id of a tool registered through `ToolMachine.register`. */
+export type ToolId = BuiltinToolId | (string & {})
 
-export const TOOL_IDS: ReadonlyArray<ToolId> = ["select", "point", "label", "polyline", "polygon", "measure"]
+export const TOOL_IDS: ReadonlyArray<BuiltinToolId> = ["select", "point", "label", "polyline", "polygon", "measure"]
+
+/** What the viewer hands a registered tool: the only ways it can change the viewer. */
+export interface ToolContext {
+  /** Adds an annotation (into the active layer) as one undo step. */
+  readonly commit: (a: NewAnnotation) => Annotation
+  /** Preview geometry drawn while the tool works; replaces the previous preview, `[]` clears it. */
+  readonly setDraft: (features: ReadonlyArray<OverlayFeature>) => void
+  /** One-line message shown in the Tools panel next to the tool's hint (`undefined` clears it). */
+  readonly setStatus: (text: string | undefined) => void
+  /** The tool is finished: go back to the Select tool. */
+  readonly done: () => void
+}
+
+/**
+ * A tool contributed by another module (map-metadata, screenshot markers, ...). The viewer feeds it snapped
+ * world-space points exactly like a built-in drawing tool; it draws through `ToolContext` only.
+ */
+export interface ExternalTool {
+  /** Unique, not one of the built-in ids. */
+  readonly id: string
+  readonly label: string
+  readonly hint?: string
+  /** The tool became the active one. */
+  readonly activate?: (ctx: ToolContext) => void
+  /** The tool stopped being the active one (another tool picked, unregistered); clear any state here. */
+  readonly deactivate?: () => void
+  /** A click (not a drag) on the map, with the snapped world point. */
+  readonly click?: (p: Vec3) => void
+  /** Pointer hover with no button down. */
+  readonly move?: (p: Vec3) => void
+  /** Enter / double-click / the panel's Finish button. */
+  readonly finish?: () => void
+  /** Escape. */
+  readonly cancel?: () => void
+}
 
 export const DRAFT_COLOR = "#4fc3ff"
 
@@ -27,9 +64,50 @@ export class ToolMachine {
   /** Supplies text for the label tool; return null/empty to cancel. */
   askText: () => string | null = () => null
 
-  constructor(private readonly commit: (a: NewAnnotation) => void) {}
+  private readonly external = new Map<string, ExternalTool>()
+  private externalDraft: ReadonlyArray<OverlayFeature> = []
+  private externalStatus: string | undefined
+
+  constructor(private readonly commit: (a: NewAnnotation) => Annotation | void) {}
 
   get tool(): ToolId { return this.current }
+
+  /** Tools registered by other modules, in registration order. */
+  get registered(): ReadonlyArray<ExternalTool> { return [...this.external.values()] }
+  /** Status line of the active external tool, if it set one. */
+  get status(): string | undefined { return this.externalStatus }
+  private active(): ExternalTool | undefined { return this.external.get(this.current) }
+
+  /**
+   * Registers a tool (this is the viewer's `registerTool`); returns the unregister function. A tool that is active
+   * when it is unregistered is deactivated and the Select tool takes over.
+   */
+  register(tool: ExternalTool): () => void {
+    if ((TOOL_IDS as ReadonlyArray<string>).includes(tool.id)) throw new Error(`tool id "${tool.id}" is a built-in tool`)
+    if (this.external.has(tool.id)) throw new Error(`tool "${tool.id}" is already registered`)
+    this.external.set(tool.id, tool)
+    this.emit()
+    return () => {
+      if (this.external.get(tool.id) !== tool) return
+      if (this.current === tool.id) this.setTool("select")
+      this.external.delete(tool.id)
+      this.emit()
+    }
+  }
+
+  private contextFor(tool: ExternalTool): ToolContext {
+    const live = () => this.external.get(this.current) === tool
+    return {
+      commit: (a) => {
+        const made = this.commit(a)
+        if (!made) throw new Error("the viewer did not store the annotation")
+        return made
+      },
+      setDraft: (f) => { if (live()) { this.externalDraft = f; this.emit() } },
+      setStatus: (t) => { if (live()) { this.externalStatus = t; this.emit() } },
+      done: () => { if (live()) this.setTool("select") }
+    }
+  }
   /** Points placed so far for the shape in progress. */
   get pending(): number { return this.points.length }
   /** The placed points themselves, so the next click can snap to them (closing a polygon on its first vertex). */
@@ -42,15 +120,23 @@ export class ToolMachine {
 
   setTool(tool: ToolId) {
     if (tool === this.current) return
+    if (tool !== "select" && !(TOOL_IDS as ReadonlyArray<string>).includes(tool) && !this.external.has(tool)) return
+    const leaving = this.active()
     this.points = []
     this.hover = undefined
+    this.externalDraft = []
+    this.externalStatus = undefined
     this.current = tool
+    leaving?.deactivate?.()
+    this.active()?.activate?.(this.contextFor(this.active()!))
     this.emit()
   }
 
   click(p: Vec3, now = Date.now()) {
     if (this.last && now - this.last.t < DEBOUNCE_MS && dist(this.last.p, p) < SAME_POINT) return
     this.last = { p, t: now }
+    const ext = this.active()
+    if (ext) { ext.click?.(p); return }
     switch (this.current) {
       case "select": return
       case "point": this.commit({ kind: "point", points: [p] }); return
@@ -72,6 +158,8 @@ export class ToolMachine {
   }
 
   move(p: Vec3 | undefined) {
+    const ext = this.active()
+    if (ext) { if (p) ext.move?.(p); return }
     if (this.points.length === 0) return
     this.hover = p
     this.emit()
@@ -79,6 +167,8 @@ export class ToolMachine {
 
   /** Completes the polyline/polygon in progress; too-short shapes are dropped. */
   finish() {
+    const ext = this.active()
+    if (ext) { ext.finish?.(); return }
     const min = this.current === "polygon" ? 3 : this.current === "polyline" ? 2 : Infinity
     if (this.points.length >= min) this.commit({ kind: this.current as "polyline" | "polygon", points: this.points })
     this.cancel()
@@ -86,6 +176,8 @@ export class ToolMachine {
 
   /** Abandons the shape in progress. */
   cancel() {
+    const ext = this.active()
+    if (ext) { ext.cancel?.(); return }
     if (this.points.length === 0 && !this.hover) return
     this.points = []
     this.hover = undefined
@@ -94,6 +186,7 @@ export class ToolMachine {
 
   /** Rubber-band preview of the shape in progress, in overlay features. */
   draft(): ReadonlyArray<OverlayFeature> {
+    if (this.active()) return this.externalDraft
     if (this.points.length === 0) return []
     const out: OverlayFeature[] = this.points.map((at) => ({ type: "point", at }))
     const path = this.hover ? [...this.points, this.hover] : this.points
