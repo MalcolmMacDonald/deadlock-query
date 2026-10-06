@@ -35,6 +35,14 @@
         "effect": "4.0.1",
       },
     },
+    "modules/map-viewer": {
+      "name": "@deadlock-query/map-viewer",
+      "version": "0.0.0",
+      "dependencies": {
+        "@deadlock-query/contracts": "workspace:*",
+        "effect": "4.0.1",
+      },
+    },
     "modules/query-builder": {
       "name": "@deadlock-query/query-builder",
       "version": "0.0.0",
@@ -63,6 +71,8 @@
     "@deadlock-query/infra": ["@deadlock-query/infra@workspace:modules/infra"],
 
     "@deadlock-query/map-extractor": ["@deadlock-query/map-extractor@workspace:modules/map-extractor"],
+
+    "@deadlock-query/map-viewer": ["@deadlock-query/map-viewer@workspace:modules/map-viewer"],
 
     "@deadlock-query/query-builder": ["@deadlock-query/query-builder@workspace:modules/query-builder"],
 
