@@ -47,6 +47,8 @@
       "name": "@deadlock-query/query-builder",
       "version": "0.0.0",
       "dependencies": {
+        "@deadlock-query/contracts": "workspace:*",
+        "effect": "4.0.1",
         "monaco-editor": "^0.52.2",
       },
       "devDependencies": {
