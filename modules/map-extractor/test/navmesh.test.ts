@@ -80,15 +80,18 @@ test("entityLinks resolves zipline and jump pad targets and ignores dangling one
   const e = (id: string, kind: Entity["kind"], position: [number, number, number], properties: Record<string, unknown>): Entity =>
     ({ id, class: "x", ...(kind ? { kind } : {}), position, properties })
   const links = entityLinks([
-    e("z1", "zipline", [0, 0, 500], { targetname: "z1", target: "z2" }),
-    e("z2", "zipline", [1000, 0, 500], { targetname: "z2" }),
-    e("z3", "zipline", [5, 5, 5], { target: "missing" }),
-    e("j1", "jumpPad", [0, 100, 0], { launchTarget: "land" }),
+    // a three-node path (listed out of order) plus a lone node, as in the real lump (path_uniqueid / path_index)
+    e("z2", "zipline", [500, 0, 600], { path_uniqueid: "p1", path_index: 1 }),
+    e("z3", "zipline", [1000, 0, 500], { path_uniqueid: "p1", path_index: 2 }),
+    e("z1", "zipline", [0, 0, 500], { path_uniqueid: "p1", path_index: 0 }),
+    e("z4", "zipline", [5, 5, 5], { path_uniqueid: "p2", path_index: 0 }),
+    e("j1", "jumpPad", [0, 100, 0], { target: "land" }),
+    e("j2", "jumpPad", [0, 200, 0], { target: "missing" }),
     e("l", undefined, [0, 900, 300], { targetname: "land" })
   ])
   expect(links).toEqual([
-    { from: [0, 0, 500], to: [1000, 0, 500], kind: "zipline", bidirectional: true },
-    { from: [0, 100, 0], to: [0, 900, 300], kind: "jumpPad", bidirectional: false }
+    { from: [0, 100, 0], to: [0, 900, 300], kind: "jumpPad", bidirectional: false },
+    { from: [0, 0, 500], to: [1000, 0, 500], kind: "zipline", bidirectional: true }
   ])
   const v = Float64Array.from([0, 0, 480, 1000, 0, 480, 0, 100, 0])
   const s = snapLinks(links, v, 100)

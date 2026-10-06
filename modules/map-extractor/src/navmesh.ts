@@ -233,23 +233,34 @@ export const navmeshObj = (soup: PolygonSoup, component: Int32Array): string => 
 const str = (v: unknown): string | undefined => (typeof v === "string" && v.length > 0 ? v : undefined)
 
 /**
- * Candidate off-mesh links, UNVERIFIED against the real entity lump (property names are a best guess, see STATE.md):
- *   - ziplines: `kind: zipline` nodes whose `target` names the next node's `targetname` (kept bidirectional);
- *   - jump pads: `kind: jumpPad` (`trigger_catapult`) whose `launchTarget` names the landing entity (one way).
+ * Candidate off-mesh links, from the real dl_midtown entity lump (build 25738777):
+ *   - ziplines: `citadel_zipline_path_node`s share a `path_uniqueid` and are ordered by `path_index`. The nodes hang in the air,
+ *     so only each path's first and last node become one link (a rider can get on and off at the ends), bidirectional unless the
+ *     first node has `one_way`;
+ *   - jump pads: `trigger_catapult` whose `target` names an `info_target_server_only` landing point (one way; `launchTarget` is
+ *     accepted as an alias).
  * Entities without a resolvable target produce no link.
  */
 export const entityLinks = (entities: ReadonlyArray<Entity>): NavLink[] => {
   const byName = new Map<string, Entity>()
   for (const e of entities) { const n = str(e.properties["targetname"]); if (n && !byName.has(n)) byName.set(n, e) }
   const out: NavLink[] = []
+  const paths = new Map<string, Entity[]>()
   for (const e of entities) {
     if (e.kind === "zipline") {
-      const t = str(e.properties["target"]), dest = t ? byName.get(t) : undefined
-      if (dest && dest !== e) out.push({ from: e.position, to: dest.position, kind: "zipline", bidirectional: true })
+      const p = str(e.properties["path_uniqueid"])
+      if (p) (paths.get(p) ?? paths.set(p, []).get(p)!).push(e)
     } else if (e.kind === "jumpPad") {
-      const t = str(e.properties["launchTarget"]), dest = t ? byName.get(t) : undefined
+      const t = str(e.properties["target"]) ?? str(e.properties["launchTarget"]), dest = t ? byName.get(t) : undefined
       if (dest && dest !== e) out.push({ from: e.position, to: dest.position, kind: "jumpPad", bidirectional: false })
     }
+  }
+  const idx = (e: Entity) => Number(e.properties["path_index"] ?? 0)
+  for (const nodes of paths.values()) {
+    if (nodes.length < 2) continue
+    nodes.sort((a, b) => idx(a) - idx(b))
+    const first = nodes[0]!, last = nodes[nodes.length - 1]!
+    out.push({ from: first.position, to: last.position, kind: "zipline", bidirectional: !(str(first.properties["one_way"]) === "1" || first.properties["one_way"] === true) })
   }
   return out
 }
@@ -397,7 +408,7 @@ export const bakeNavmesh = async (dir: string, o: NavmeshOptions = {}): Promise<
   for (const l of kept) byKind[l.kind] = (byKind[l.kind] ?? 0) + 1
   if (dropped > 0) warnings.push(`${dropped} off-mesh links dropped: an endpoint is more than ${maxLinkSnap} units from the navmesh`)
   if (candidates.length === 0 && entities.some((e) => e.kind === "zipline" || e.kind === "jumpPad")) {
-    warnings.push("zipline/jump pad entities present but none resolved to a link: target property names are unverified (see STATE.md)")
+    warnings.push("zipline/jump pad entities present but none resolved to a link: check the path_uniqueid / target property names against entities.json")
   }
 
   const bytes = new Uint8Array(NavMesh.fromPolygons(toNavMeshData(soup), kept).serialize())
