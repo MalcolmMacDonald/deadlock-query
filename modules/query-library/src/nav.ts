@@ -1,0 +1,90 @@
+import { Vec3 } from "./Vec3.ts"
+import { UNITS_PER_METER } from "./units.ts"
+import { requireSpatial } from "./active.ts"
+import type { MovementModelLike, NavInput } from "./spatial.ts"
+
+/**
+ * Seconds of travel time (identity, for readability: travel-time functions work in seconds).
+ * @example map.healingOrbs.withinTravelTime(seconds(10), map.guardians)
+ * @category Units
+ */
+export const seconds = (n: number): number => n
+
+type Field = { costAt(p: readonly [number, number, number], maxSnap?: number): number }
+const MAX_FIELDS = 256
+const fields = new Map<string, Field>()
+let fieldsFor: NavInput | undefined
+
+const need = (what: string): NavInput => {
+  const nav = requireSpatial(what).nav
+  if (!nav) throw new Error(`${what} needs a navmesh: pass { spatial: { raycaster, nav: { mesh } } } to MapContext.fromBundle`)
+  return nav
+}
+
+const timeModel = (nav: NavInput): MovementModelLike => ({ speed: nav.heroSpeed ?? 7 * UNITS_PER_METER, linkSpeeds: nav.linkSpeeds ?? { zipline: 15 * UNITS_PER_METER } })
+/** Unit speeds everywhere: cost is path length in Source units. */
+const distanceModel = (nav: NavInput): MovementModelLike => ({ speed: 1, linkSpeeds: Object.fromEntries(Object.keys(timeModel(nav).linkSpeeds ?? {}).map((k) => [k, 1])) })
+const snap = (nav: NavInput): number => nav.maxSnap ?? 200
+
+/** Distance fields are memoised per (model, source set); cleared when a new nav backend is active. */
+const fieldFor = (nav: NavInput, mode: "time" | "distance", sources: ReadonlyArray<Vec3>): Field => {
+  if (fieldsFor !== nav) { fields.clear(); fieldsFor = nav }
+  const key = `${mode}|${sources.map((s) => `${s.x},${s.y},${s.z}`).join(";")}`
+  const hit = fields.get(key)
+  if (hit) { fields.delete(key); fields.set(key, hit); return hit }
+  const f = nav.mesh.distanceField(sources.map((s) => s.toArray()), mode === "time" ? timeModel(nav) : distanceModel(nav))
+  if (fields.size >= MAX_FIELDS) fields.delete(fields.keys().next().value!)
+  fields.set(key, f)
+  return f
+}
+
+/** @internal */
+export const travelCost = (what: string, mode: "time" | "distance", from: Vec3, to: Vec3): number => {
+  const nav = need(what)
+  const f = fieldFor(nav, mode, [from])
+  return f.costAt(to.toArray(), snap(nav))
+}
+
+/** @internal Fields over a source set, for withinTravelTime. */
+export const timeField = (what: string, sources: ReadonlyArray<Vec3>): ((p: Vec3) => number) => {
+  const nav = need(what)
+  const f = fieldFor(nav, "time", sources)
+  return (p) => f.costAt(p.toArray(), snap(nav))
+}
+
+/** A route over the navmesh. @category Navigation */
+export interface NavRoute {
+  /** Waypoints from start to end. */
+  readonly points: ReadonlyArray<Vec3>
+  /** Travel time in seconds. */
+  readonly time: number
+}
+
+/**
+ * Navigation queries (`map.nav`), over the baked navmesh with ziplines and overrides.
+ * Costs are approximate: polygon-centroid hops, so expect error of about one polygon size.
+ * @example map.nav.path(map.guardians.first()!.position, map.healingOrbs.first()!.position)
+ * @category Navigation
+ */
+export class NavApi {
+  /**
+   * Quickest route between two points, or `undefined` when unreachable. One A* search.
+   * @example map.nav.path(vec(0, 0, 0), vec(1000, 0, 0))?.time
+   * @category Navigation
+   */
+  path(from: Vec3, to: Vec3): NavRoute | undefined {
+    const nav = need("nav.path()")
+    const r = nav.mesh.findPath(from.toArray(), to.toArray(), timeModel(nav))
+    return r ? { points: r.points.map((p) => new Vec3(p[0], p[1], p[2])), time: r.cost } : undefined
+  }
+
+  /**
+   * Travel time in seconds from every source to a point (the quickest source), `Infinity` if
+   * unreachable. The field over the source set is computed once and cached.
+   * @example map.nav.timeFrom(map.guardians.select(g => g.position))(vec(0, 0, 0))
+   * @category Navigation
+   */
+  timeFrom(sources: Vec3 | Iterable<Vec3>): (to: Vec3) => number {
+    return timeField("nav.timeFrom()", sources instanceof Vec3 ? [sources] : [...sources])
+  }
+}

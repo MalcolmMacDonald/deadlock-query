@@ -3,9 +3,9 @@ import { readdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import { buildMiniMap } from "@deadlock-query/contracts"
 import { MapContext } from "../src/index.ts"
+import { buildNavMap } from "./navFixture.ts"
 
 const dir = join(import.meta.dir, "../examples")
-const map = MapContext.fromBundle(buildMiniMap())
 const files = readdirSync(dir).filter((f) => f.endsWith(".ts")).sort()
 
 test("there are example files", () => expect(files.length).toBeGreaterThan(0))
@@ -15,6 +15,8 @@ for (const file of files) {
     const src = readFileSync(join(dir, file), "utf8")
     expect(src).toMatch(/@example\b/)
     expect(src).toMatch(/@category\b/)
+    // Examples tagged `@requires nav` run on the mini-map with a grid navmesh.
+    const map = /@requires nav\b/.test(src) ? buildNavMap() : MapContext.fromBundle(buildMiniMap())
     const run = (await import(join(dir, file))).default as (m: MapContext) => unknown
     const a = JSON.stringify(run(map))
     expect(a).toBeDefined()
@@ -25,5 +27,5 @@ for (const file of files) {
 test("guardian-nearest-orb example reproduces the fixture's expected result", async () => {
   const mini = buildMiniMap()
   const run = (await import(join(dir, "guardian-nearest-orb.ts"))).default as (m: MapContext) => unknown
-  expect(run(map)).toEqual(mini.expectedGuardianOrbDistance.rows as never)
+  expect(run(MapContext.fromBundle(buildMiniMap()))).toEqual(mini.expectedGuardianOrbDistance.rows as never)
 })

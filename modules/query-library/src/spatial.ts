@@ -39,9 +39,39 @@ export interface SemanticsLike {
   nearestWall(rc: RaycasterLike, p: readonly [number, number, number], params: SemanticsParams): WallHit | null
 }
 
+/** Walking/link speeds in Source units per second. @category Navigation */
+export interface MovementModelLike {
+  readonly speed: number
+  /** Speed per off-mesh link kind; links of unlisted kinds are unusable. */
+  readonly linkSpeeds?: Readonly<Record<string, number>>
+}
+
+/** The slice of spatial-core's `NavMesh` this library uses (structural). @category Navigation */
+export interface NavMeshLike {
+  findPath(from: readonly [number, number, number], to: readonly [number, number, number], model: MovementModelLike): { readonly points: ReadonlyArray<readonly [number, number, number]>; readonly cost: number } | null
+  distanceField(sources: readonly (readonly [number, number, number])[], model: MovementModelLike): { costAt(p: readonly [number, number, number], maxSnap?: number): number }
+}
+
+/**
+ * Navigation backend: a spatial-core `NavMesh` plus the travel model.
+ * Defaults (hero speed 7 m/s, zipline 15 m/s) are proposals for the owner to confirm.
+ * @category Navigation
+ */
+export interface NavInput {
+  readonly mesh: NavMeshLike
+  /** Walking speed in Source units per second. Default `meters(7)`. */
+  readonly heroSpeed?: number
+  /** Off-mesh link speeds by kind, Source units per second. Default `{ zipline: meters(15) }`. */
+  readonly linkSpeeds?: Readonly<Record<string, number>>
+  /** Max distance from a point to the mesh before it counts as off-mesh (unreachable). Default 200 units. */
+  readonly maxSnap?: number
+}
+
 /** Spatial backend handed to `MapContext.fromBundle`. @category Spatial */
 export interface SpatialInput {
   readonly raycaster: RaycasterLike
+  /** Navmesh + travel model; without it travel-time functions throw. */
+  readonly nav?: NavInput
   readonly semantics?: SemanticsLike
   readonly params?: SemanticsParams
 }

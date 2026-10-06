@@ -1,8 +1,8 @@
 # query-library — state
 
-- **Status:** M0 + M1 + M2 + M3 done
+- **Status:** M0 + M1 + M2 + M3 + M4 done
 - **Version:** 0.1.0
-- **Current milestone:** M4 (needs spatial-core NavMesh)
+- **Current milestone:** M5
 - **Last updated:** 2026-10-06
 
 ## Done
@@ -15,17 +15,21 @@
 
 - M3 (2026-10-06): fluent wrappers over spatial-core, via structural types (`RaycasterLike`, `SemanticsLike`, `SpatialInput`) so `dist/*.d.ts` stays free of spatial-core. `MapContext.fromBundle({..., spatial: {raycaster, semantics?, params?}})`. `Vec3.height()` (elevation above map-bounds min z), `isInterior()`, `nearestWall()`, `visibleFrom(p|iterable, opts)`; `EntityList.visibleFrom`; `map.sample.grid(spacing,{region})` (downward rays, walkable normals) and `map.sample.walls(spacing)` (owner `nearestWall` from grid points, deduped per cell); `map.provisional` mirrors `semantics.placeholder`. Tests use the real spatial-core `Raycaster` with stub semantics (wiring + determinism only).
 
+- M4 (2026-10-06): navigation over spatial-core's `NavMesh` via structural `NavMeshLike`/`NavInput` (`spatial: {raycaster, nav: {mesh, heroSpeed?, linkSpeeds?, maxSnap?}}`). `Vec3.travelTimeTo/travelDistanceTo` (Infinity if unreachable/off-mesh), `EntityList.withinTravelTime(seconds(n), of)` (one multi-source field), `map.nav.path/timeFrom`, `seconds()`; `pairs()` was already in M1. Distance fields are memoised per (mode, source set) in a 256-entry LRU, so `a.travelDistanceTo(b)` over pairs costs one Dijkstra per distinct `a`. Distance mode is the same Dijkstra with unit speeds. Tests use a hand-computable 9x9 grid navmesh (`test/navFixture.ts`) and assert hop lengths, zipline shortcuts, caching, determinism; examples `orbs-within-10s` (query 1) and `orb-detours` (query 2 shape).
+
 ## In progress
 - (nothing)
 
 ## Next
-- M4 needs spatial-core NavMesh. Owner semantics (spatial-core M2) are not in yet: `isInterior`/`nearestWall`/`visibleFrom`/`sample.walls` throw until a `semantics` is passed.
+- M5 (query 3 + helpers). Not yet verified: query 2 on the real map in < 30 s (needs the real bake; `nearestPoint` in spatial-core is a linear scan, so field lookups per polygon are slow at 50k polygons: request a spatial index, below). Golden results for queries 1 & 2 on the real bundle once it exists. Owner semantics (spatial-core M2) are not in yet: `isInterior`/`nearestWall`/`visibleFrom`/`sample.walls` throw until a `semantics` is passed.
 - Not yet verified on a real bundle (real data is local-only; run via `contracts` `check:real` style script once extractor output exists).
 
 ## Blockers / Requests to other modules
-- (none)
+- spatial-core: grid/spatial index for `NavMesh.nearestPoint` (used by `distanceField().costAt` for every lookup) before the real-map benchmark; the bundle's navmesh must be loaded via `NavMesh.load` by the builder worker and passed as `spatial.nav.mesh`.
 
 ## Decisions log
+- 2026-10-06 — Travel model defaults are proposals for the owner: hero speed 7 m/s, zipline 15 m/s, `maxSnap` 200 units (points farther than that from the mesh, e.g. elevated pickups, are unreachable). Costs are polygon-centroid hops, so error is about one polygon; no funnel smoothing yet (spatial-core). `seconds(n)` is the identity (fields are already in seconds); `heroSpeed` lives in `NavInput`, not `MapSettings`, to keep the settings signature stable.
+- 2026-10-06 — Directed costs: `a.travelTimeTo(b)` is the field from `a`; one-way links make it asymmetric.
 - 2026-10-06 — The active spatial backend is module-global (set by `fromBundle`; one map per worker) so `vec(...)` globals and entity positions can call `height()` etc. without carrying a context. Tests rebuild the map per test.
 - 2026-10-06 — `height()` is elevation above the map bounds' min z (not height above local floor), matching the plan's `grid(300).filter(p => p.height() > 800)`. `SemanticsParams` is a plain numeric record forwarded unchanged until spatial-core M2 fixes its shape. `EntityList.highGround` still uses absolute z (switch to `height()` when a backend is guaranteed).
 - 2026-10-06 — Lane numbers 1/2/3 stay yellow/blue/purple as the `laneColors` setting (per Malcolm via coordinator); still to verify on the real map.

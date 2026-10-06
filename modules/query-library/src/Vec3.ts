@@ -1,4 +1,5 @@
 import { requireSemantics, requireSpatial } from "./active.ts"
+import { travelCost } from "./nav.ts"
 import type { VisibleOpts } from "./spatial.ts"
 
 /**
@@ -69,6 +70,26 @@ export class Vec3 {
     const params = { ...(s.params ?? {}), ...(opts.eyeHeight === undefined ? {} : { eyeHeight: opts.eyeHeight }), ...(opts.targetHeight === undefined ? {} : { targetHeight: opts.targetHeight }), ...(opts.maxRange === undefined ? {} : { maxRange: opts.maxRange }) }
     for (const v of from instanceof Vec3 ? [from] : from) if (sem.isVisible(s.raycaster, v.toArray(), this.toArray(), params)) return true
     return false
+  }
+
+  /**
+   * Walking travel time to another point in seconds (navmesh, ziplines), `Infinity` if
+   * unreachable. Distance fields are cached per start point, so many targets from one start are cheap.
+   * @example map.guardians.first()!.position.travelTimeTo(map.healingOrbs.first()!.position)
+   * @category Navigation
+   */
+  travelTimeTo(other: Vec3): number {
+    return travelCost("travelTimeTo()", "time", this, other)
+  }
+
+  /**
+   * Length in Source units of the quickest route to another point (navmesh, ziplines),
+   * `Infinity` if unreachable. Compare with {@link Vec3.crowFliesTo}.
+   * @example vec(0, 0, 0).travelDistanceTo(vec(1000, 0, 0))
+   * @category Navigation
+   */
+  travelDistanceTo(other: Vec3): number {
+    return travelCost("travelDistanceTo()", "distance", this, other)
   }
 
   /**
