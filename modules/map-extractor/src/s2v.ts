@@ -14,8 +14,16 @@ export const bunRunner = (exe: string): S2VRunner => async (args) => {
 export const firstErrorLine = (r: RunResult): string =>
   (r.stderr + "\n" + r.stdout).split(/\r?\n/).map((l) => l.trim()).find((l) => l !== "" && !l.startsWith("at ") && !l.startsWith("---")) ?? `exit code ${r.code}`
 
+/** First line that names an exception or error (e.g. `IOException: not enough space`), even on exit 0. */
+export const firstExceptionLine = (r: RunResult): string | undefined =>
+  (r.stderr + "\n" + r.stdout).split(/\r?\n/).map((l) => l.trim()).find((l) => /exception|not enough space|no space left/i.test(l) && !l.startsWith("at "))
+
+/** Output of the most recent run per stage, so a later missing-output check can report the real cause. */
+export const lastRunOutput = new Map<string, RunResult>()
+
 export const run = async (runner: S2VRunner, stage: string, args: string[]): Promise<RunResult> => {
   const r = await runner(args)
+  lastRunOutput.set(stage, r)
   if (r.code !== 0) throw new ExportFailed({ stage, stderr: `exit ${r.code}: ${firstErrorLine(r)}` })
   return r
 }

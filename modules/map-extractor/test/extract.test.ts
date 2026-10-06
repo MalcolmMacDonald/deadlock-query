@@ -108,3 +108,19 @@ test("failed CLI run surfaces ExportFailed with the first error line", async () 
   const runner: S2VRunner = async () => ({ code: 2, stdout: "", stderr: "File not found in VPK\n  at X()" })
   await expect(extract({ vpk: "m.vpk", map: "dl_midtown", buildId: "1", s2vVersion: "20.0", tier: "lite", outRoot: root, runner })).rejects.toMatchObject({ _tag: "ExportFailed", stage: "entities" })
 })
+
+test("missing output after exit 0 reports the tool's exception line (disk full)", async () => {
+  const root = mkdtempSync(join(tmpdir(), "dlq-"))
+  const runner: S2VRunner = async (a) => {
+    const inner = a[a.indexOf("-f") + 1]!
+    const out = a[a.indexOf("-o") + 1]!
+    mkdirSync(dirname(out), { recursive: true })
+    if (inner.endsWith(".vents_c")) writeFileSync(out, VENTS)
+    else if (inner.endsWith("world_physics.vmdl_c")) writeFileSync(`${out}_physics.glb`, buildMiniMap().collisionGlb)
+    return { code: 0, stdout: "", stderr: inner.endsWith(".vwnod_c") ? "System.IO.IOException: There is not enough space on the disk.\n   at X()" : "" }
+  }
+  const err = await extract({ vpk: "m.vpk", map: "dl_midtown", buildId: "1", s2vVersion: "20.0", tier: "full", outRoot: root, runner }).catch((e) => e)
+  expect(err._tag).toBe("ExportFailed")
+  expect(err.stderr).toContain("not enough space")
+  expect(err.stderr).toContain("n0.gltf")
+})

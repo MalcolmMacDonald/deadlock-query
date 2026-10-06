@@ -3,7 +3,7 @@
 - **Status:** S2 spike complete — **GO** (render, collision, entities, nav all obtainable)
 - **Version:** 0.1.0
 - **Current milestone:** M1 code done (unit-tested with a fake S2V runner); real-install run pending
-- **Last updated:** 2026-10-05
+- **Last updated:** 2026-10-06
 
 ## Done
 - **S2 spike** (2026-10-05, Windows 11, Deadlock build `25712201`, Source2Viewer-CLI 20.0). Findings below. No game assets are committed; all outputs were written outside the repo.
@@ -116,7 +116,7 @@ Other (bulk, likely out of scope): `light_omni2` 1,968, `light_barn` 755, `citad
 ## M1 real-run findings (2026-10-05, PR #32, this machine, build 25712201)
 - `doctor`: passes after a fix. The CLI reports `20.0.6980+<sha>` and the pin was `20.0`, so `matchesPin` failed; it now accepts `20.0.x`.
 - **lite extract** of dl_midtown: 6 s. Bundle is 36 MB on disk (8.7 MB `entities.json`, 6.9 MB `collision/physics.glb`, 21 MB `.work` scratch that can be deleted). `inspect` passes: 6,075 entities (369 with a mapped kind), collision bounds in Source units X -17356..25600, Y -16384..21344, Z -1620..13824 overlap entity bounds.
-- **full extract: failed here, out of disk.** The `n0.gltf` export writes 3 bins (about 1.07 + 1.07 + 0.75 GB) and died with `IOException: not enough space` on the second bin; C: had only 7-9 GB free and shrinking. Nothing was published or uploaded. Rerun on a drive with 15+ GB free (S2 measured ~7 min and ~6 GB RAM). The CLI surfaces this as `export failed at render: expected output missing`; the real cause (the first `Exception` line) should be shown instead (follow-up).
+- **full extract: failed here, out of disk.** The `n0.gltf` export writes 3 bins (about 1.07 + 1.07 + 0.75 GB) and died with `IOException: not enough space` on the second bin; C: had only 7-9 GB free and shrinking. Nothing was published or uploaded. Rerun on a drive with 15+ GB free (S2 measured ~7 min and ~6 GB RAM). The CLI surfaces this as `export failed at render: expected output missing`; fixed in the follow-up: the message now appends the tool's first exception line plus a disk-space hint.
 - **Frame question settled (physics vs render): same frame.** Physics nodes carry a 0.0254 scale + axis permutation matrix: loaded = (y, z, x) * 0.0254, i.e. metres, glTF Y-up. A render aggregate (`n0_lr0_agg_merge_hideout_vertex_color_3.vmdl_c`, 179 MB glb, 1.10 M tris) has an identity node matrix and raw extents of about +/-290 m, which is metres. Physics loaded bounds [-416,-41,-441]..[542,351,650] sit inside the earlier n0 render bounds [-512,-92,-904]..[799,367,837]. So render is in the same metres/Y-up frame but with identity node matrices. Bug fixed: `extract` previously gave render `glbToWorld` = identity (wrongly "Source units"); it now reuses the physics file's matrix.
 - Open: hull completeness (b), per-entity volume models (c), triangle cut for `lite` (d) are unchanged.
 
