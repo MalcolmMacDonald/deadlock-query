@@ -10,11 +10,13 @@
 
 - M1: `src/runtime.ts` `composeModules` builds each module Layer in isolation (shared MemoMap, base = contracts mock SelectionBus/ViewerService/DevAuth), merges healthy ones into one `ManagedRuntime`; failed modules' panels render `ErrorPanel`. `src/panels.tsx` mounts React components or `{ mount(container) => dispose }` handles, each in an error boundary. Unit tests + `e2e/isolation.ts` (`?demoFailure` adds a module whose Layer dies).
 
+- 2026-10-06 — Deployed site fix: `src/modules.ts` now mounts the real map-viewer (lazy import, mini-map fixture via `MockMapDataService`) and the query editor (iframe to `./editor/index.html`, the query-builder standalone app, still on `MockQueryEngine`). `tools/build.ts` now runs the shell Vite build and the editor build, so deploy no longer publishes the placeholder page.
+
 ## In progress
 - (nothing yet)
 
 ## Next
-- M2: wire viewer + query editor + results panels, default Query preset, lazy loading (add real modules to `src/modules.ts`).
+- M2 (remaining): swap fixture/mock for published data-25712201 bundle once extractor emits MapBundles; real QueryEngine; wire viewer + query editor + results panels, default Query preset, lazy loading (add real modules to `src/modules.ts`).
 
 ## Blockers / Requests to other modules
 - map-viewer: confirmed — shell mounts a panel `component` that is `{ mount(container) => dispose }` (see `src/panels.tsx`); React components also work. `viewer.main` can use the handle as-is.
