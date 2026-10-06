@@ -121,6 +121,8 @@ Other (bulk, likely out of scope): `light_omni2` 1,968, `light_barn` 755, `citad
 - Render content: 12 material names recovered from mesh names (glass, black, cosmic_veil). The lite tier still has no render until the triangle cut (29.4 M tris) is settled.
 - Open: hull completeness (b), per-entity volume models (c), triangle cut for `lite` (d) are unchanged.
 
+- **Materials + in-repo output** (2026-10-06): render export now passes `--gltf_export_materials` (glTF materials + textures written beside `n0.gltf`); tile `bytes` counts every file under `render/`; extractor 0.2.0 (invalidates cached render stages). Default `--out` is `<repo>/data/bundles` regardless of cwd; `extract` drops a `.gitignore` (`*`) into the output root so bundles are never committed (the root `.gitignore` is out of module scope). **Not run against a real install:** texture volume/time of the full export is unknown, and the Source2Viewer `--gltf_export_materials` flag name comes from VRF docs, not a real run. Check `dlq-extract extract --tier full --force` on the dev machine and watch disk (render was already 2.8 GB).
+
 ## In progress
 - Real-install run on the dev machine (see "Next" 1).
 
@@ -130,7 +132,7 @@ Other (bulk, likely out of scope): `light_omni2` 1,968, `light_barn` 755, `citad
 3. Check `dl_hideout` / `new_player_basics` only if the owner wants them (not in Slice 1).
 
 ## Blockers / Requests to other modules
-- root: add `data/` to `.gitignore` (bundles are written to `data/bundles/`; not ignored today).
+- root (optional): add `data/` to `.gitignore`; the extractor already self-ignores its output root.
 - contracts: `Tile` has a single `file`; the render export is `n0.gltf` + 3 `.bin` (>1 GB each). Tile `bytes` currently sums the bins and `sha256` covers the `.gltf` only. Consider `Tile.files[]` or a size-limit/tiling note (M3).
 
 ## Decisions log

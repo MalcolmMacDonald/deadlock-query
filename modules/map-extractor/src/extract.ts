@@ -8,7 +8,7 @@ import { invertAffine } from "./mat4.ts"
 import { args, firstExceptionLine, lastRunOutput, run, type S2VRunner } from "./s2v.ts"
 import { toEntities, parseVents } from "./vents.ts"
 
-export const EXTRACTOR_VERSION = "0.1.0"
+export const EXTRACTOR_VERSION = "0.2.0"
 export type Tier = "full" | "lite"
 
 export interface ExtractOptions {
@@ -84,6 +84,9 @@ export const extract = async (o: ExtractOptions): Promise<ExtractResult> => {
   mkdirSync(join(dir, "collision"), { recursive: true })
   mkdirSync(join(dir, "render"), { recursive: true })
   mkdirSync(work, { recursive: true })
+  // Bundles are game-derived and huge: keep them out of git without a root .gitignore change (module-scope rule).
+  const ignore = join(o.outRoot, ".gitignore")
+  if (!existsSync(ignore)) writeFileSync(ignore, "*\n")
   const warnings: string[] = []
 
   const entitiesRaw = join(work, "default_ents.vents")
@@ -105,7 +108,7 @@ export const extract = async (o: ExtractOptions): Promise<ExtractResult> => {
   if (o.tier === "full") {
     const gltf = join(dir, "render", "n0.gltf")
     await stage(o, dir, "render", [gltf], async () => {
-      for (const f of readdirSync(join(dir, "render"))) rmSync(join(dir, "render", f), { force: true })
+      for (const f of readdirSync(join(dir, "render"))) rmSync(join(dir, "render", f), { recursive: true, force: true })
       await run(o.runner, "render", args.render(o.vpk, o.map, gltf))
     })
     renderInfo = gltfInfo(readGltfJson(gltf))
@@ -113,8 +116,10 @@ export const extract = async (o: ExtractOptions): Promise<ExtractResult> => {
     // loaded frame as the physics GLB (metres, Y-up; confirmed on the full dl_midtown render), so the render shares the
     // physics file's glbToWorld instead of inverting its own most common node matrix.
     renderMatrix = fileGlbToWorld(gltfInfo(readGltfJson(physOut))).matrix
-    const bins = readdirSync(join(dir, "render")).filter((f) => f.endsWith(".bin"))
-    const bytes = [gltf, ...bins.map((b) => join(dir, "render", b))].reduce((n, f) => n + statSync(f).size, 0)
+    // Everything the export wrote (gltf, bins, material textures) counts toward the tile size.
+    const bytes = readdirSync(join(dir, "render"), { recursive: true, withFileTypes: true })
+      .filter((e) => e.isFile())
+      .reduce((n, e) => n + statSync(join(e.parentPath, e.name)).size, 0)
     tiles.push({
       id: "n0", bounds: worldBounds(renderInfo, renderMatrix) ?? { min: [0, 0, 0], max: [0, 0, 0] },
       file: "render/n0.gltf", bytes, sha256: sha256(gltf), materials: renderInfo.materials

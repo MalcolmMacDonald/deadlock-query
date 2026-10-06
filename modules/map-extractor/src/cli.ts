@@ -8,12 +8,15 @@ import { extract, type Tier } from "./extract.ts"
 import { inspectBundle } from "./inspect.ts"
 import { bunRunner } from "./s2v.ts"
 import { findTool } from "./tool.ts"
-import { join } from "node:path"
+import { join, resolve } from "node:path"
+
+/** Repo-root `data/bundles`, independent of the cwd the CLI is launched from. */
+const DEFAULT_OUT = resolve(import.meta.dir, "..", "..", "..", "data", "bundles")
 
 const USAGE = `dlq-extract <command> [--json] [--game-dir <path>]
   doctor     check Deadlock install, build id and Source2Viewer CLI
   list-maps  maps present in the game paks
-  extract    --map <name> [--tier full|lite] [--force] [--out <dir>]   (default map ${lock.game.mainMap}, tier lite, out data/bundles)
+  extract    --map <name> [--tier full|lite] [--force] [--out <dir>]   (default map ${lock.game.mainMap}, tier lite, out <repo>/data/bundles)
   inspect    <bundle-dir>   validate manifest/entities against contracts, report sizes and frame sanity
 (bake, pack-lite, diff: not implemented yet)`
 
@@ -72,7 +75,7 @@ export const mainAsync = async (argv: ReadonlyArray<string>): Promise<number> =>
       if (!game.buildId) { console.error("Game build id unknown (no appmanifest); use the Steam install."); return EXIT.problem }
       const r = await extract({
         vpk: join(game.mapsDir, `${map}.vpk`), map, buildId: game.buildId, s2vVersion: tool.version ?? tool.pinnedVersion,
-        tier, outRoot: flag(rest, "--out") ?? join("data", "bundles"), runner: bunRunner(tool.path), force: rest.includes("--force"),
+        tier, outRoot: flag(rest, "--out") ?? DEFAULT_OUT, runner: bunRunner(tool.path), force: rest.includes("--force"),
         log: (m) => console.error(m)
       })
       emit({ dir: r.dir, warnings: r.warnings }, [`bundle: ${r.dir}`, ...r.warnings.map((w) => `! ${w}`)].join("\n"))
