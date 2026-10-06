@@ -1,9 +1,10 @@
 import { expect, test } from "bun:test"
 import {
   AnnotationStore, ToolMachine, LayerStore, ViewerController, annotationIdForFeature, annotationLayers,
-  featureIdForAnnotation, formatMeasurement, measure
+  featureIdForAnnotation, formatMeasurement, measure, memoryStorage
 } from "../src/index.ts"
-import type { Vec3 } from "@deadlock-query/contracts"
+import { Schema } from "effect"
+import { AnnotationDocument, validateAnnotationDocument, type Annotation, type Vec3 } from "@deadlock-query/contracts"
 
 const rig = () => {
   const store = new AnnotationStore()
@@ -30,7 +31,7 @@ test("point and label tools commit on click; label needs text", () => {
   expect(store.annotations).toHaveLength(1)
   tools.askText = () => "  mid  "
   click([7, 8, 9])
-  expect(store.annotations.map((a) => [a.kind, a.text])).toEqual([["point", undefined], ["label", "mid"]])
+  expect(store.annotations.map((a) => [a.kind, a.kind === "label" ? a.text : undefined])).toEqual([["point", undefined], ["label", "mid"]])
 })
 
 test("polyline finishes with Enter/dblclick; too-short shapes are dropped", () => {
@@ -166,4 +167,95 @@ test("controller: annotations become overlay layers, layers panel state replays 
   c.annotations.undo()
   expect(c.layers.list().map((l) => l.id)).toEqual(["ann.points"])
   detach()
+})
+
+const sample = (): ReadonlyArray<Annotation> => [
+  { id: "a1", kind: "point", points: [[1, 2, 3]] },
+  { id: "a2", kind: "label", points: [[0, 0, 0]], text: "mid boss", layer: "L1", properties: { note: "x" } },
+  { id: "a3", kind: "polyline", points: [[0, 0, 0], [1, 1, 1]] },
+  { id: "a4", kind: "polygon", points: [[0, 0, 0], [1, 0, 0], [0, 1, 0]], color: "#ff0000" },
+  { id: "a5", kind: "measure", points: [[0, 0, 0], [3, 4, 0]] }
+]
+const layers = [{ id: "L1", name: "Notes", visible: true }]
+
+test("store holds contract annotations: replace is one undo step, generated ids avoid imported ids", () => {
+  const store = new AnnotationStore()
+  store.add({ kind: "point", points: [[9, 9, 9]] })
+  store.replace(sample(), layers)
+  expect(store.annotations).toHaveLength(5)
+  expect(store.layers).toEqual(layers)
+  expect(store.add({ kind: "point", points: [[1, 1, 1]] }).id).toBe("a6")
+  store.undo()
+  expect(store.annotations.map((a) => a.id)).toEqual(["a1", "a2", "a3", "a4", "a5"])
+  store.undo()
+  expect(store.annotations.map((a) => a.points[0])).toEqual([[9, 9, 9]])
+  expect(store.annotations.map((a) => a.kind)).toEqual(["point"])
+})
+
+test("export produces a schema-valid document that imports back unchanged", () => {
+  const c = new ViewerController()
+  c.setMap({ mapName: "dl_midtown", gameBuildId: "123" })
+  c.annotations.replace(sample(), layers)
+  const text = c.exportJson()
+  const doc = Schema.decodeUnknownSync(AnnotationDocument)(JSON.parse(text))
+  expect(validateAnnotationDocument(doc)).toEqual([])
+  expect(doc.mapName).toBe("dl_midtown")
+  const other = new ViewerController()
+  other.setMap({ mapName: "dl_midtown", gameBuildId: "123" })
+  const r = other.importJson(text)
+  expect(r.ok && r.warnings).toEqual([])
+  expect(other.annotations.annotations).toEqual(sample())
+  expect(JSON.parse(other.exportJson())).toEqual(JSON.parse(text))
+})
+
+test("import rejects bad documents without touching the store and warns on a different map", () => {
+  const c = new ViewerController()
+  c.setMap({ mapName: "dl_midtown", gameBuildId: "123" })
+  c.annotations.add({ kind: "point", points: [[1, 1, 1]] })
+  expect(c.importJson("{nope").ok).toBe(false)
+  expect(c.importJson(JSON.stringify({ schemaVersion: "1.0.0", annotations: [{ id: "a", kind: "polyline", points: [[0, 0, 0]] }] })).ok).toBe(false)
+  expect(c.importJson(JSON.stringify({ schemaVersion: "9.0.0", annotations: [] })).ok).toBe(false)
+  const dup = c.importJson(JSON.stringify({ schemaVersion: "1.0.0", annotations: [{ id: "a", kind: "point", points: [[0, 0, 0]], layer: "x" }] }))
+  expect(dup.ok ? "" : dup.error).toContain('unknown layer "x"')
+  expect(c.annotations.annotations).toHaveLength(1)
+  const warn = c.importJson(JSON.stringify({ schemaVersion: "1.0.0", mapName: "dl_other", gameBuildId: "9", annotations: [] }))
+  expect(warn.ok && warn.warnings).toHaveLength(2)
+  expect(c.annotations.annotations).toHaveLength(0)
+})
+
+test("autosave writes the document per map and restores it into a fresh controller without an undo step", async () => {
+  const storage = memoryStorage()
+  const a = new ViewerController()
+  a.setMap({ mapName: "dl_midtown" })
+  a.useStorage(storage, 0)
+  await Promise.resolve()
+  await new Promise((r) => setTimeout(r, 0))
+  a.annotations.replace(sample(), layers)
+  await a.flushAutosave()
+  expect([...storage.entries.keys()]).toEqual(["annotations:dl_midtown"])
+
+  const b = new ViewerController()
+  b.setMap({ mapName: "dl_midtown" })
+  b.useStorage(storage, 0)
+  await new Promise((r) => setTimeout(r, 0))
+  expect(b.annotations.annotations).toEqual(sample())
+  expect(b.annotations.canUndo).toBe(false)
+
+  const other = new ViewerController()
+  other.setMap({ mapName: "dl_other" })
+  other.useStorage(storage, 0)
+  await new Promise((r) => setTimeout(r, 0))
+  expect(other.annotations.annotations).toHaveLength(0)
+})
+
+test("restore never overwrites annotations drawn before it finished, and corrupt saves are ignored", async () => {
+  const storage = memoryStorage()
+  storage.entries.set("annotations:m", "garbage")
+  const c = new ViewerController()
+  c.setMap({ mapName: "m" })
+  c.useStorage(storage, 0)
+  c.annotations.add({ kind: "point", points: [[1, 1, 1]] })
+  await new Promise((r) => setTimeout(r, 10))
+  expect(c.annotations.annotations).toHaveLength(1)
+  expect(JSON.parse(storage.entries.get("annotations:m")!).annotations).toHaveLength(1)
 })

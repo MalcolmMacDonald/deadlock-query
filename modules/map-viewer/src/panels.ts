@@ -98,7 +98,10 @@ export const makeToolsPanel = (controller: ViewerController): PanelComponent => 
     const actions = el("div", "display:flex;gap:4px;margin-bottom:6px")
     const hint = el("div", "opacity:.7;margin-bottom:6px;min-height:1.4em")
     const list = el("div", "display:flex;flex-direction:column;gap:2px")
-    root.append(toolBar, actions, hint, list)
+    const files = el("div", "display:flex;gap:4px;margin-bottom:6px")
+    const status = el("div", "margin-bottom:6px;min-height:1.4em")
+    status.dataset.role = "status"
+    root.append(toolBar, actions, files, hint, status, list)
     container.appendChild(root)
 
     const toolButtons = TOOL_IDS.map((t) => {
@@ -119,6 +122,34 @@ export const makeToolsPanel = (controller: ViewerController): PanelComponent => 
     const redo = action("redo", "Redo", () => controller.annotations.redo())
     const finish = action("finish", "Finish", () => controller.tools.finish())
     const del = action("delete", "Delete", () => controller.deleteSelected())
+
+    const fileInput = el("input", "display:none") as HTMLInputElement
+    fileInput.type = "file"
+    fileInput.accept = "application/json,.json"
+    fileInput.dataset.role = "import-file"
+    fileInput.onchange = async () => {
+      const file = fileInput.files?.[0]
+      fileInput.value = ""
+      if (!file) return
+      const result = controller.importJson(await file.text())
+      status.textContent = result.ok
+        ? `Imported ${result.doc.annotations.length} annotations${result.warnings.length ? ` (${result.warnings.join("; ")})` : ""}.`
+        : `Import failed: ${result.error}`
+    }
+    const fileButton = (name: string, text: string, fn: () => void) => {
+      const b = el("button", "", { textContent: text })
+      b.dataset.action = name
+      b.onclick = fn
+      files.appendChild(b)
+    }
+    fileButton("export", "Export", () => {
+      const url = URL.createObjectURL(new Blob([controller.exportJson()], { type: "application/json" }))
+      const a = el("a", "", { href: url, download: `annotations-${controller.mapIdentity.mapName ?? "map"}.json` })
+      a.click()
+      URL.revokeObjectURL(url)
+    })
+    fileButton("import", "Import", () => fileInput.click())
+    files.appendChild(fileInput)
 
     const HINTS: Record<ToolId, string> = {
       select: "Click an annotation to select it.",

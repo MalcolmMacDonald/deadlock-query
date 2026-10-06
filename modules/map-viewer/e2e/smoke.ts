@@ -1,6 +1,8 @@
 /** Playwright smoke: load fixture, pan/zoom/orbit/fly, reload restores camera, overlays, annotation tools + layers panel. Run: `bun run test:e2e`. */
 import { chromium } from "playwright-core"
 import { join } from "node:path"
+import { Schema } from "effect"
+import { AnnotationDocument, validateAnnotationDocument } from "@deadlock-query/contracts"
 
 const root = join(import.meta.dir, "..")
 const fixture = join(root, "../contracts/fixtures/mini-map")
@@ -180,6 +182,34 @@ try {
   await page.click('[data-testid="viewer-tools"] button[data-action="delete"]')
   await settle()
   if ((await annotationCount()) !== 1) fail("delete did not remove the selected polyline")
+  // M3: autosave survives a reload, export is a schema-valid document, import replaces the annotations.
+  await page.evaluate(() => (globalThis as any).__viewer.flushAutosave())
+  await page.reload()
+  await page.waitForSelector('[data-testid="viewer-canvas"][data-loaded="true"]', { timeout: 20000 })
+  await page.waitForFunction(() => (globalThis as any).__viewer.annotations.annotations.length === 1, undefined, { timeout: 5000 })
+    .catch(() => fail("autosaved annotation was not restored after reload"))
+  const restored = (await page.evaluate(() => (globalThis as any).__viewer.annotations.annotations)) as Array<{ kind: string }>
+  if (restored[0]?.kind !== "measure") fail(`restored ${JSON.stringify(restored)}`)
+  const exported = await page.evaluate(() => (globalThis as any).__viewer.exportJson() as string)
+  const doc = Schema.decodeUnknownSync(AnnotationDocument)(JSON.parse(exported))
+  if (validateAnnotationDocument(doc).length || doc.annotations.length !== 1 || doc.mapName === undefined) fail(`bad export ${exported}`)
+  const imported = JSON.stringify({
+    schemaVersion: "1.0.0",
+    annotations: [
+      { id: "i1", kind: "point", points: [[0, 0, 0]] },
+      { id: "i2", kind: "label", points: [[10, 10, 0]], text: "imported" }
+    ]
+  })
+  await page.setInputFiles('[data-testid="viewer-tools"] input[data-role="import-file"]', {
+    name: "annotations.json", mimeType: "application/json", buffer: Buffer.from(imported)
+  })
+  await page.waitForFunction(() => (globalThis as any).__viewer.annotations.annotations.length === 2, undefined, { timeout: 5000 })
+    .catch(() => fail("import did not replace the annotations"))
+  await page.setInputFiles('[data-testid="viewer-tools"] input[data-role="import-file"]', {
+    name: "bad.json", mimeType: "application/json", buffer: Buffer.from("{}")
+  })
+  await page.waitForSelector('[data-testid="viewer-tools"] [data-role="status"]:has-text("Import failed")', { timeout: 5000 })
+  if ((await annotationCount()) !== 2) fail("a rejected import changed the annotations")
   if (errors.length) fail(errors.join("; "))
   console.log("map-viewer e2e smoke: ok")
 } finally {
