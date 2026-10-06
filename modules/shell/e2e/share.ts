@@ -6,7 +6,7 @@ await withShell(4177, async ({ open }) => {
   await a.getByTestId("preset-explore").click()
   await expectPanels(a, EXPLORE, "Explore before sharing")
   await a.getByTestId("share-layout").click()
-  await a.getByTestId("notice").getByText("Layout link copied").waitFor()
+  await a.getByTestId("toast").getByText("Layout link copied").waitFor()
   const link = await a.evaluate(() => navigator.clipboard.readText())
   if (!link.includes("#layout=")) throw new Error(`clipboard has no layout link: ${link}`)
 

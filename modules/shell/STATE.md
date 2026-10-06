@@ -1,8 +1,8 @@
 # shell — state
 
-- **Status:** M4 done (dev-only modules, lock screen, live DevAuth); M3 done; M2 done except swapping the fixture for the published bundle (viewer + embedded query editor wired to the shared viewer/selection; rows overlay and highlight on the map, map picks select rows)
+- **Status:** M5 done except a Lighthouse run (axe audit is clean); M4 done (dev-only modules, lock screen, live DevAuth); M3 done; M2 done except swapping the fixture for the published bundle (viewer + embedded query editor wired to the shared viewer/selection; rows overlay and highlight on the map, map picks select rows)
 - **Version:** 0.1.0
-- **Current milestone:** M4 complete; M5 (theming, a11y, about panel, toasts) next; M2 fixture swap waits on a published bundle
+- **Current milestone:** M5 complete (see Next for the Lighthouse number); M2 fixture swap waits on a published bundle
 - **Last updated:** 2026-10-06
 
 ## Done
@@ -28,11 +28,14 @@
 - 2026-10-06 — M4 (dev lock screen): `src/modules.ts` now lists `ModuleEntry`s (`module` + `devOnly`); `modulesFor(entries, target)` leaves dev-only ones out of `prod`, and `loginRequired` is true only on a `dev` build that ships one. `src/target.ts`: `VITE_TARGET` (`dev`|`prod`) at shell build time, else `vite dev` is dev and any other build is prod, so a build that forgets the flag omits dev-only modules. `src/devAuth.ts` is the shell's own `DevAuth` over `/auth/session` + `/auth/login` (same protocol as infra's `DevAuthLive`; the shell may not import infra); `vite dev` uses `MockDevAuth` since it has no `/auth` functions. `AuthGate` in `src/App.tsx` renders nothing but `LockScreen` (`src/LockScreen.tsx`: labelled password form, error alert) until `DevAuth.status` is authenticated; prod and dev builds without dev-only modules never call `/auth`. `?demoDevOnly` adds a dev-only dummy panel on the dev target for demos and tests. `e2e/lock.ts` builds its own `VITE_TARGET=dev` copy with `/auth/*` stubbed: locked (no dock) -> wrong password -> right password shows the dev-only panel -> reload stays unlocked; plus the prod build ignoring `?demoDevOnly` with zero `/auth` requests.
 - 2026-10-06 — Query share links: the shell hands `location.hash` to the query-builder panel as `initialShare` on its first mount only (`takeInitialShare` in `src/editor.tsx`), so a `#q=…` link fills the editor without running it; reopening the panel does not reapply it. Adopting a `#layout=` link now strips only that parameter from the hash (`withoutLayoutParam`). `e2e/querylink.ts` (full site build, like `slice.ts`) covers it. A `#q=` link pasted into an already-open tab is not reapplied (the panel reads it at mount).
 
+- 2026-10-06 — M5 (polish): **Theming** — dark default, light via header button or the palette ("Toggle light or dark theme"); `src/theme.css` colour tokens (`:root` dark, `data-theme="light"` override, AA contrast), `src/theme.ts` (stored in `dlq.shell.theme`, survives throwing storage), dockview follows via its `theme` prop (`themeDark`/`themeLight`; the old `className` was ignored because dockview also applied its default Abyss theme). Monaco and the viewer panels keep their own colours. **Toasts** — `src/toasts.ts` store (identical toasts collapse into a count, max 5), `src/Toaster.tsx` (errors `role="alert"`, others `role="status"`, dismiss button, auto-dismiss), `src/errors.ts` turns uncaught errors and unhandled rejections into error toasts (ResizeObserver noise skipped); panel crashes, palette command failures, share-link feedback and "closed X" hints use it (the header notice text is gone). **About** — `shell.about` floating panel (`src/about.tsx`): git SHA + build time + target (stamped by `vite.config.ts` via `__BUILD_INFO__`: CI's `GITHUB_SHA`, else `git rev-parse`), game build id and map from the published manifest (fixture fallback), query-library `apiVersion` from `editor/library.json`; header button and palette open it; `shell.*` panels are never auto-placed by presets. **Keyboard / a11y** — `src/shortcuts.ts` registry (Ctrl/Cmd+K palette, Alt+. / Alt+, next/previous panel, Alt+Shift+W close active, Alt+Shift+M maximize/restore; labels shown in the palette); new palette commands for focus next/previous, close, maximize, move to next group, split right/below (`src/dock.ts`); skip link, `<h1>`/`<main>`/`<header>` landmarks, labelled controls, visible `:focus-visible` ring, palette as an ARIA combobox/listbox. Dockview 4.13 puts an invalid `aria-level="0"` on floating-group containers (axe: critical), so `src/dockviewAria.ts` strips it. E2E: `e2e/polish.ts` (theme, About, toasts, keyboard-only flow) and `e2e/a11y.ts` (axe-core, new devDependency, on the dock, About, toast and palette in both themes: zero violations).
+
 ## In progress
 - (nothing yet)
 
 ## Next
-- M5: theming, a11y (keyboard-only panel operation), about panel, error toasts (Lighthouse a11y >= 90).
+- M5 leftover: a real Lighthouse accessibility run (acceptance is >= 90). It is not installed here; the axe-core audit (same engine) is clean on the dock, About, toast and palette in both themes, so the score should be high, but it is unmeasured. Also no keyboard way to resize groups yet.
+- Optional: call `qb.prefetchQueryEditor({ getWorkerUrl })` when idle (query-builder M6) so the editor opens faster.
 - M2 (remaining): swap the fixture for the published MapBundle once Malcolm publishes a real one.
 - M3 leftovers: share links are uncompressed (a default layout is a few KB); compress if links get unwieldy. Review preset has nothing to show until map-metadata ships a `metadata.*` panel.
 - Infra follow-up: ship `library.json` without the standalone editor app (it is only published for that file now).
@@ -55,6 +58,8 @@
 - 2026-10-06 — M2: unrelated extra panels (e.g. `?demoFailure`) are split below the viewer rather than tabbed, so the map stays visible.
 
 - 2026-10-06 — M4: the lock screen gates the whole app (not individual panels), matching the dev site's server-side middleware; the client check is a UX layer, not the security boundary. Dev-only is a shell-side flag on the module list because contracts' `ModuleDefinition` has no such field (module.json carries `devOnly` for tooling).
+
+- 2026-10-06 — M5: About is a floating dockview panel rather than a modal so it follows the layout/palette conventions; shortcuts use Alt-based chords to stay clear of browser bindings (all are also palette commands). axe-core was added as a dev dependency instead of Lighthouse (far lighter, same rule engine) for an automated a11y gate.
 
 ## Open questions
 - (see PLAN.md §9)

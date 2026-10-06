@@ -1,5 +1,9 @@
 import { createRoot } from "react-dom/client"
 import { App } from "./App.tsx"
+import { installGlobalErrorToasts } from "./errors.ts"
+import { applyTheme, loadTheme } from "./theme.ts"
+import "./theme.css"
 
-document.body.style.cssText = "margin:0;background:#111;color:#ddd;font-family:system-ui,sans-serif"
+applyTheme(document, loadTheme(localStorage))
+installGlobalErrorToasts()
 createRoot(document.getElementById("root")!).render(<App />)
