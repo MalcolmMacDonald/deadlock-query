@@ -1,9 +1,9 @@
 # infra — state
 
-- **Status:** M0+M1+M3 done, M2 workflow written (needs Pages enabled), M4 live on Cloudflare (rate limit gap)
+- **Status:** M0–M4, M6 done; M5 code done (live needs PAT); M7 done in repo (merge queue ruleset, lockfile bot and prod rollback need Malcolm's settings/secret to go live)
 - **Version:** 0.0.0
 - **Current milestone:** none (see PLAN.md §6)
-- **Last updated:** 2026-10-05
+- **Last updated:** 2026-10-06
 
 ## Done
 - M0: root workspace, `new-module`, `verify:all`.
@@ -39,14 +39,25 @@
 ## Publish helper (2026-10-06)
 - `bun tools/publish-data.ts <bundle-dir> [--upload]` (logic in `tools/lib/publish.ts`, 3 tests): zips a bundle without `.work`/`.stage-*`, refuses oversize bundles (site budget), writes the sha256 into `data/current-build.json` (same tag merges assets by `dest`, new tag replaces), and with `--upload` creates/updates Release `data-<buildId>` via `gh`. Documented in `docs/dev-site.md`. The `data.yml` CI workflow is still deferred. Zipping uses a built-in writer (`tools/lib/zip.ts`, deflate, zip32: files < 2 GB, archive < 4 GB) so no `zip` binary is needed on Windows; tested with `unzip` and a `fetchData` roundtrip. Not run against a real bundle or Release.
 
+## M7 (2026-10-06)
+- Docs: `docs/runbook.md` (operations, incidents, one-time setup checklist), `docs/rollback.md`, `docs/dry-run.md` (what was run vs. what needs Malcolm), plus the earlier `secrets.md`/`takedown.md`.
+- Merge queue: `.github/rulesets/main.json` (importable ruleset: PR required, `verify` required, merge queue with merge commits, code-owner review, admin bypass) and a `merge_group` trigger on `ci.yml`. Not applied: importing the ruleset is Malcolm's step.
+- Lockfile conflicts: `tools/lib/lockfile.ts` + `tools/resolve-lockfile.ts` (takes main's `bun.lock`, `bun install`, stages; refuses if other files conflict; 4 tests on a real temp git repo). `lockfile.yml` runs it for conflicting same-repo PRs after a push to `main`; skipped until secret `LOCKFILE_BOT_TOKEN` exists. Workflow not yet exercised live.
+- `data.yml` (no secrets): `tools/check-data.ts` downloads the pointed Release, verifies sha256, unzips, applies budgets; runs on PRs touching the pointer, in the merge queue and on dispatch. Publishing itself stays local (`publish-data.ts --upload`) because the bundle comes from the game install; the plan's "publish" workflow is therefore a verify gate. Verified against the real `data-25738777` Release. `checkPointer` enforces `tag == data-<buildId>`.
+- `deploy.yml`: prod `promote` takes an optional `ref` to build an older commit (rollback). Concurrency moved from workflow level (a push to `main` cancelled an in-flight promote) to per-job: prod never cancels, dev cancels superseded runs.
+- `ci.yml`: PR title/labels/refs passed through env instead of inline expressions (actionlint script-injection warning).
+- Dry run: semantics guard, lockfile resolution, data gate and takedown failure mode run locally; the rest is listed for Malcolm in `docs/dry-run.md`.
+
 ## Next
+- Malcolm: import the ruleset, enable auto-merge, optional `LOCKFILE_BOT_TOKEN`, run the prod rollback dry run (see `docs/runbook.md` one-time setup).
 - Malcolm creates the fine-grained PAT and sets `GITHUB_TOKEN_PROXY` (see `docs/secrets.md`); then curl the live proxy with a session cookie, confirm the token never appears in a response.
-- M3 data release flow (after S2 produces a bundle).
 
 ## Blockers / Requests to other modules
 - (none)
 
 ## Decisions log
+- 2026-10-06 — Lockfile bot writes with a PAT secret, not `GITHUB_TOKEN`, because pushes by the built-in token do not trigger CI. Merge queue config ships as an importable ruleset file since rulesets cannot be applied from a workflow without an admin token.
+
 - 2026-10-05 — M6: prod deploy is promote-only (was every push to main), per "Promote to Prod" in the plan.
 
 - 2026-10-05 — CI treats a `[infra]` PR title like the `infra` label (label is added after PR creation, so the first CI run raced it).

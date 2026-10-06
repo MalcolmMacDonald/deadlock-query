@@ -8,23 +8,29 @@ on:
         description: "Promote to prod (deploy GitHub Pages)"
         type: boolean
         default: false
+      ref:
+        description: "Promote only: commit SHA, tag or branch to build (default: the dispatched ref). Use it to roll prod back."
+        type: string
+        default: ""
 permissions:
   contents: read
   pages: write
   id-token: write
-concurrency:
-  group: pages
-  cancel-in-progress: true
 jobs:
   prod:
     # Prod only moves on an explicit promote dispatch; pushes to main update dev.
     if: github.event_name == 'workflow_dispatch' && inputs.promote
     runs-on: ubuntu-latest
+    # Never cancel a prod deploy: a later push to main must not abort a promote or rollback in flight.
+    concurrency:
+      group: pages
+      cancel-in-progress: false
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+        with: { ref: "${{ inputs.ref || github.sha }}" }
       - uses: oven-sh/setup-bun@v2
       - run: bun install --frozen-lockfile
       - run: bun tools/build.ts --target prod
@@ -36,6 +42,9 @@ jobs:
         uses: actions/deploy-pages@v4
   dev:
     runs-on: ubuntu-latest
+    concurrency:
+      group: dev-deploy
+      cancel-in-progress: true
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

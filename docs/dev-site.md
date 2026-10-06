@@ -3,7 +3,7 @@
 `deploy.yml` builds `--target dev` and publishes `dist/` plus `functions/` to the Cloudflare Pages project `deadlock-query-dev` on every push to `main`. The job is skipped until `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` exist.
 
 - `functions/_middleware.ts` gates every request on a signed session cookie (HttpOnly, Secure, SameSite=Strict, 12 h). No cookie: HTML requests redirect to `/auth/login`, everything else gets 401 with no assets.
-- `functions/auth/login.ts`: PBKDF2-SHA256 check against `DEV_PASSWORD_HASH`, constant-time compare, 5 attempts/minute per IP.
+- `functions/auth/login.ts`: PBKDF2-SHA256 check against `DEV_PASSWORD_HASH`, constant-time compare (see the next bullet for brute-force protection).
 - Brute-force protection: PBKDF2 hashing, a 1 s delay on every failed attempt, and a random 20-character password. A per-IP counter was tried and removed: in-memory counters, the Cache API (no-op on `pages.dev`) and KV (eventually consistent, so the counter never advanced) all failed to throttle. If a hard limit is ever needed, use a Durable Object (needs a separate Worker) or a WAF rule on a custom domain.
 - Local run: `wrangler pages dev dist` with `.dev.vars` containing `DEV_PASSWORD_HASH` and `SESSION_HMAC_KEY`.
 
@@ -25,5 +25,5 @@ Behind the session cookie. Forwards an allowlist of repo-scoped endpoints (issue
 ## Publishing a new map bundle
 1. Extract locally: `bun run dlq-extract extract --tier lite` (output: `data/bundles/<buildId>/lite`; the `full` tier is over the site budget and is refused).
 2. `bun tools/publish-data.ts data/bundles/<buildId>/lite --upload` (needs `gh auth login`). It zips the bundle, uploads Release `data-<buildId>`, and rewrites `data/current-build.json` with the new sha256. Without `--upload` it only zips and prints the `gh` commands.
-3. Commit `data/current-build.json` on a branch and open a PR labelled `infra`. Merging to `main` redeploys the dev site, which downloads the Release into `dist/data/<map>/`.
-4. To un-publish, see `docs/takedown.md`.
+3. Commit `data/current-build.json` on a branch and open a PR with an `[infra]` title prefix. `data.yml` re-downloads the Release and checks the hash and budgets (`bun tools/check-data.ts` does the same locally). Merging to `main` redeploys the dev site, which downloads the Release into `dist/data/<map>/`.
+4. To un-publish, see `docs/takedown.md`; to go back to the previous bundle, see `docs/rollback.md`. Day-to-day operations: `docs/runbook.md`.

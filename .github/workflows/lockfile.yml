@@ -1,0 +1,53 @@
+name: lockfile
+# When a push to main leaves open PRs conflicting only in bun.lock (D13), merge main into the PR branch and
+# regenerate the lockfile. Needs the secret LOCKFILE_BOT_TOKEN (see docs/secrets.md): pushes made with the built-in
+# token do not trigger CI, so the PR would be left without checks. Skipped until the secret exists.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: lockfile
+  cancel-in-progress: false
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    env:
+      LOCKFILE_BOT_TOKEN: ${{ secrets.LOCKFILE_BOT_TOKEN }}
+      GH_TOKEN: ${{ secrets.LOCKFILE_BOT_TOKEN }}
+    steps:
+      - if: env.LOCKFILE_BOT_TOKEN == ''
+        run: echo "LOCKFILE_BOT_TOKEN not set; skipping (see docs/runbook.md, lockfile conflicts)"
+      - if: env.LOCKFILE_BOT_TOKEN != ''
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.LOCKFILE_BOT_TOKEN }}
+      - if: env.LOCKFILE_BOT_TOKEN != ''
+        uses: oven-sh/setup-bun@v2
+      - if: env.LOCKFILE_BOT_TOKEN != ''
+        shell: bash
+        run: |
+          set -uo pipefail
+          git config user.name "lockfile-bot"
+          git config user.email "lockfile-bot@users.noreply.github.com"
+          list() { gh pr list --state open --base main --json number,headRefName,mergeable,isCrossRepository \
+            --jq '.[] | select(.isCrossRepository == false)'; }
+          # GitHub computes mergeability lazily; give UNKNOWN a few chances to settle.
+          for _ in 1 2 3; do list | grep -q '"mergeable":"UNKNOWN"' && sleep 15 || break; done
+          list | jq -r 'select(.mergeable == "CONFLICTING") | "\(.number) \(.headRefName)"' | while read -r num branch; do
+            echo "::group::PR #$num ($branch)"
+            git merge --abort 2>/dev/null || true
+            git checkout -q -B "lockfile-work" "origin/$branch"
+            if git merge origin/main --no-edit; then
+              echo "merged cleanly; nothing lockfile-specific to fix"
+            elif bun tools/resolve-lockfile.ts --commit && bun install --frozen-lockfile; then
+              git push origin "HEAD:refs/heads/$branch" && echo "regenerated bun.lock on $branch"
+            else
+              git merge --abort 2>/dev/null || true
+              echo "::warning::PR #$num conflicts beyond bun.lock; needs a human or its author"
+            fi
+            echo "::endgroup::"
+          done

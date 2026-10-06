@@ -22,6 +22,21 @@ export const parsePointer = (raw: unknown): DataPointer => {
   return { buildId: raw.buildId, tag: raw.tag, assets }
 }
 
+/** Convention checks beyond shape: tag is `data-<buildId>`, dests and names are unique. */
+export const checkPointer = (p: DataPointer): string[] => {
+  const errors: string[] = []
+  if (p.tag !== `data-${p.buildId}`) errors.push(`tag ${p.tag} should be data-${p.buildId}`)
+  if (p.assets.length === 0) errors.push("no assets listed")
+  for (const key of ["name", "dest"] as const) {
+    const seen = new Set<string>()
+    for (const a of p.assets) {
+      if (seen.has(a[key])) errors.push(`duplicate asset ${key}: ${a[key]}`)
+      seen.add(a[key])
+    }
+  }
+  return errors
+}
+
 export const sha256Hex = (bytes: Uint8Array): string => createHash("sha256").update(bytes).digest("hex")
 
 export const assetUrl = (repo: string, tag: string, name: string) =>
