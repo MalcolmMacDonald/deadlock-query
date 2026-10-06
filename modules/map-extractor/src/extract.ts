@@ -105,8 +105,10 @@ export const extract = async (o: ExtractOptions): Promise<ExtractResult> => {
       await run(o.runner, "render", args.render(o.vpk, o.map, gltf))
     })
     renderInfo = gltfInfo(readGltfJson(gltf))
+    // Render nodes carry identity matrices but the data is in the same loaded frame as the physics GLB
+    // (metres, Y-up; confirmed on real dl_midtown data), so it shares the physics file's glbToWorld.
     const fm = fileGlbToWorld(renderInfo)
-    renderMatrix = fm.matrix
+    renderMatrix = renderInfo.nodeMatrices.length === 0 ? fileGlbToWorld(gltfInfo(readGltfJson(physOut))).matrix : fm.matrix
     if (fm.note) warnings.push(`render: ${fm.note}`)
     const bins = readdirSync(join(dir, "render")).filter((f) => f.endsWith(".bin"))
     const bytes = [gltf, ...bins.map((b) => join(dir, "render", b))].reduce((n, f) => n + statSync(f).size, 0)
