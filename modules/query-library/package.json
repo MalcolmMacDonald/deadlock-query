@@ -1,0 +1,17 @@
+{
+  "name": "@deadlock-query/query-library",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p .",
+    "test": "bun test",
+    "build": "bun scripts/build.ts",
+    "verify": "bun run typecheck && bun run test && bun run build"
+  },
+  "devDependencies": {
+    "@deadlock-query/contracts": "workspace:*"
+  }
+}

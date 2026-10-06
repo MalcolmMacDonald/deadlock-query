@@ -53,6 +53,13 @@
         "playwright-core": "^1.56.1",
       },
     },
+    "modules/query-library": {
+      "name": "@deadlock-query/query-library",
+      "version": "0.1.0",
+      "devDependencies": {
+        "@deadlock-query/contracts": "workspace:*",
+      },
+    },
     "modules/shell": {
       "name": "@deadlock-query/shell",
       "version": "0.0.0",
@@ -131,6 +138,8 @@
     "@deadlock-query/map-viewer": ["@deadlock-query/map-viewer@workspace:modules/map-viewer"],
 
     "@deadlock-query/query-builder": ["@deadlock-query/query-builder@workspace:modules/query-builder"],
+
+    "@deadlock-query/query-library": ["@deadlock-query/query-library@workspace:modules/query-library"],
 
     "@deadlock-query/shell": ["@deadlock-query/shell@workspace:modules/shell"],
 
