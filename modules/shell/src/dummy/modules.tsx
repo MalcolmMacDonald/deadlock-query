@@ -32,3 +32,12 @@ export const dummyBroken: ModuleDefinition = {
     { id: "broken", title: "Broken", component: () => <Dummy name="Broken" />, defaultPlacement: "center" },
   ],
 }
+
+/** A dev-only module, for demoing and testing the lock screen. */
+export const dummyDevOnly: ModuleDefinition = {
+  id: "dummy-dev-only",
+  layer: Layer.empty,
+  panels: [
+    { id: "devonly", title: "Dev tool", component: () => <Dummy name="Dev tool" />, defaultPlacement: "bottom" },
+  ],
+}

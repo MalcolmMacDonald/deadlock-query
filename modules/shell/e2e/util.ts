@@ -6,24 +6,26 @@ export interface Harness {
   readonly browser: Browser
   readonly url: string
   /** A fresh page (own localStorage) on the app, with the dock ready. */
-  readonly open: (hash?: string) => Promise<Page>
+  readonly open: (hash?: string, opts?: { readonly beforeLoad?: (page: Page) => Promise<void>; readonly waitForDock?: boolean }) => Promise<Page>
 }
 
-export const withShell = async (port: number, run: (h: Harness) => Promise<void>): Promise<void> => {
-  const server = spawn("bunx", ["vite", "preview", "--port", String(port), "--strictPort"], { stdio: "ignore" })
+/** `outDir`: serve that build instead of `dist` (e.g. a `VITE_TARGET=dev` build). */
+export const withShell = async (port: number, run: (h: Harness) => Promise<void>, outDir?: string): Promise<void> => {
+  const server = spawn("bunx", ["vite", "preview", "--port", String(port), "--strictPort", ...(outDir ? ["--outDir", outDir] : [])], { stdio: "ignore" })
   const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH ?? "/opt/pw-browsers/chromium", args: ["--use-gl=swiftshader", "--enable-unsafe-swiftshader"] })
   const url = `http://localhost:${port}/`
   try {
     await run({
       browser,
       url,
-      open: async (hash = "") => {
+      open: async (hash = "", opts = {}) => {
         const ctx = await browser.newContext({ permissions: ["clipboard-read", "clipboard-write"] })
         const page = await ctx.newPage()
+        await opts.beforeLoad?.(page)
         for (let i = 0; i < 50; i++) {
           try { await page.goto(url + hash); break } catch { await Bun.sleep(200) }
         }
-        await page.waitForFunction(() => ((globalThis as any).__dockview?.panels.length ?? 0) > 0, null, { timeout: 20000 })
+        if (opts.waitForDock !== false) await page.waitForFunction(() => ((globalThis as any).__dockview?.panels.length ?? 0) > 0, null, { timeout: 20000 })
         return page
       },
     })

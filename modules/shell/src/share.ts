@@ -34,3 +34,11 @@ export const shareUrl = (href: string, layout: unknown): string => {
   u.hash = encodeLayoutHash(layout)
   return u.toString()
 }
+
+/** `hash` without the layout parameter (other parameters, e.g. query-builder's `q=`, stay), as a `#…` string or "". */
+export const withoutLayoutParam = (hash: string): string => {
+  const params = new URLSearchParams(hash.replace(/^#/, ""))
+  params.delete(SHARE_PARAM)
+  const rest = params.toString()
+  return rest ? `#${rest}` : ""
+}
