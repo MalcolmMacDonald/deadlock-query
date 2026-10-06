@@ -1,6 +1,6 @@
 # infra — state
 
-- **Status:** M0+M1 done, M2 workflow written (needs Pages enabled), M4 live on Cloudflare, M5 code done (needs `GITHUB_TOKEN_PROXY` secret to go live), M6 done
+- **Status:** M0+M1+M3 done, M2 workflow written (needs Pages enabled), M4 live on Cloudflare (rate limit gap)
 - **Version:** 0.0.0
 - **Current milestone:** none (see PLAN.md §6)
 - **Last updated:** 2026-10-05
@@ -30,6 +30,11 @@
 - `deploy.yml`: `workflow_dispatch` input `promote`; prod job runs only on promote dispatch (pushes to main update dev only).
 - `preview.yml`: same-repo PRs deploy to dev Pages branch `pr-<n>`. Needs Preview-environment secrets in Cloudflare (Malcolm), see `docs/dev-site.md`.
 - Docs updated in `docs/dev-site.md`.
+
+## M3 (done)
+- `data/current-build.json` pins a Release tag plus per-asset sha256 and extract dir; `tools/lib/data.ts` + `tools/fetch-data.ts` download, verify the hash, and unzip into `dist/data/<dest>`; both `deploy.yml` jobs run it after `build`. Currently points at the interim raw bundle `data-25712201` (dl_midtown collision GLB + entities + manifest). Tests in `test/data.test.ts`; verified against the real Release.
+- Publishing a new bundle stays manual for now (extractor uploads a Release, then a PR bumps the pointer + hash). A `data.yml` publish workflow is deferred until the extractor emits the `lite` archive (M1).
+- To un-publish: delete the Release and the pointer (docs/takedown.md); builds then fail loudly instead of deploying stale data.
 
 ## Next
 - Malcolm creates the fine-grained PAT and sets `GITHUB_TOKEN_PROXY` (see `docs/secrets.md`); then curl the live proxy with a session cookie, confirm the token never appears in a response.

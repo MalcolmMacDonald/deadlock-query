@@ -1,0 +1,11 @@
+{
+  "buildId": "25712201",
+  "tag": "data-25712201",
+  "assets": [
+    {
+      "name": "dl_midtown-25712201-raw.zip",
+      "sha256": "50e4d66cf1c3754d8302657fb5effcdf7f72f1a9bd8e4ec3018773041d8df586",
+      "dest": "data/dl_midtown"
+    }
+  ]
+}

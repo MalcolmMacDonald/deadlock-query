@@ -4,9 +4,9 @@ Single source for "what should I do next?". Prompt Claude with: **"Do the next t
 
 | Module | Next task | Blocked on |
 |---|---|---|
-| infra | M3 data release flow; M5 live (set `GITHUB_TOKEN_PROXY`); M6 done (set Preview-env secrets in Cloudflare) | M3: a bundle from the extractor (M1). M5 live: PAT secret from Malcolm |
-| contracts | M2 real-data check: `bun run check:real -- <bundle-dir>` on the first real bundle (M1 shipped in #6) | a real bundle from map-extractor M1/M2 |
-| map-extractor | M0: CLI scaffold + `doctor`; then M1 open questions (see STATE.md) | none (S2 done, GO) |
+| infra | M5 live (set `GITHUB_TOKEN_PROXY`); then M6 budgets/promote/previews. M3 done (pointer + download in deploy) | M5 live: PAT secret from Malcolm |
+| contracts | M1 MapBundle/QueryResult/fixtures | S2 findings (human, local) |
+| map-extractor | S2 spike: run Source2Viewer on the game, record what exists in STATE.md | Human: game install (see below) |
 | query-builder | S1 spike: Monaco TS worker + custom `.d.ts` + sandboxed run/cancel | none |
 | spatial-core | S5 spike: three-mesh-bvh benchmark (1M tris, Bun + Worker) | none |
 | query-library, map-viewer, shell | contracts M1 is done; start against `modules/contracts/fixtures/mini-map` | none |
