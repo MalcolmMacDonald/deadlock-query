@@ -116,10 +116,9 @@ export class ViewerService extends Context.Service<
     readonly highlight: (ids: ReadonlyArray<string>) => Effect.Effect<void>
     /**
      * Adds a tool to the viewer's Tools panel; the effect's value unregisters it. Fails (defect) on a duplicate or
-     * built-in id. Optional while implementations catch up (additive, no schemaVersion change): call it as
-     * `viewer.registerTool?.(tool)` and degrade without the tool when absent. It becomes required in a later bump.
+     * built-in id.
      */
-    readonly registerTool?: (tool: ExternalTool) => Effect.Effect<() => void>
+    readonly registerTool: (tool: ExternalTool) => Effect.Effect<() => void>
   }
 >()("@deadlock-query/ViewerService") {}
 
@@ -148,15 +147,15 @@ const mockViewerService: (typeof ViewerService)["Service"] = {
   flyTo: () => Effect.void,
   setOverlay: () => Effect.void,
   removeOverlay: () => Effect.void,
-  highlight: () => Effect.void
+  highlight: () => Effect.void,
+  registerTool: () => Effect.succeed(() => {})
 }
 
 export const MockViewerService = Layer.succeed(ViewerService)(mockViewerService)
 
 /**
- * `MockViewerService` plus a recording `registerTool`, for modules that contribute tools (map-metadata, screenshots).
- * Kept apart from `MockViewerService` until map-viewer's real service implements `registerTool` (its parity test
- * requires the two to expose the same members); the registered tools are visible through `registeredTools`.
+ * `MockViewerService` with a `registerTool` that records the tools (visible through `registeredTools`) and rejects a
+ * duplicate id like the real viewer; for modules that contribute tools (map-metadata, screenshots).
  */
 export const makeMockViewerServiceWithTools = () => {
   const tools = new Map<string, ExternalTool>()
