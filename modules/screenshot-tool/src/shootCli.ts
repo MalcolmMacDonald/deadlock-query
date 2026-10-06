@@ -4,7 +4,7 @@ import { tmpdir } from "node:os"
 import { join, resolve } from "node:path"
 import { parseArgs } from "node:util"
 import { DEFAULT_NETCON, GameConsole, NetConPort } from "./console.ts"
-import { screenshotDirOf } from "./doctor.ts"
+import { gameRunning, screenshotDirOf } from "./doctor.ts"
 import { EXIT } from "./errors.ts"
 import { makeFakeGame } from "./fake.ts"
 import { parsePlan, PlanError } from "./plan.ts"
@@ -20,7 +20,10 @@ export const SHOOT_USAGE = `dlq-shoot shoot <plan.json> [options]   run a plan a
   --out <dir>               output folder (default <repo>/data/screenshots/<gameBuildId>)
   --build <gameBuildId>     overrides the plan's gameBuildId
   --force                   replace an existing run in the output folder
-  --settle-ms <n> (500)  --timeout-ms <n> (10000)  --host <h>  --port <n> (${DEFAULT_NETCON.port}, or DLQ_CONSOLE_PORT)`
+  --resume                  continue the run in the output folder: shots already taken are kept (use after a crash or Ctrl-C)
+  --json                    print progress as one JSON event per line on stdout instead of text on stderr
+  --settle-ms <n> (500)  --timeout-ms <n> (10000, wait for the screenshot file)  --attempts <n> (3, per shot)  --retry-delay-ms <n> (1000)
+  --host <h>  --port <n> (${DEFAULT_NETCON.port}, or DLQ_CONSOLE_PORT)`
 
 const int = (s: string | undefined, fallback: number, what: string): number => {
   if (s === undefined) return fallback
@@ -35,9 +38,9 @@ export const shootMain = async (argv: ReadonlyArray<string>, env: Record<string,
       args: [...argv],
       allowPositionals: true,
       options: {
-        offline: { type: "boolean" }, fake: { type: "boolean" }, force: { type: "boolean" },
+        offline: { type: "boolean" }, fake: { type: "boolean" }, force: { type: "boolean" }, resume: { type: "boolean" }, json: { type: "boolean" },
         "screenshot-dir": { type: "string" }, "game-dir": { type: "string" }, out: { type: "string" }, build: { type: "string" },
-        "settle-ms": { type: "string" }, "timeout-ms": { type: "string" }, host: { type: "string" }, port: { type: "string" }
+        "settle-ms": { type: "string" }, "timeout-ms": { type: "string" }, attempts: { type: "string" }, "retry-delay-ms": { type: "string" }, host: { type: "string" }, port: { type: "string" }
       }
     })
     const [file] = positionals
@@ -65,9 +68,13 @@ export const shootMain = async (argv: ReadonlyArray<string>, env: Record<string,
       layer = NetConPort({ host: values.host ?? DEFAULT_NETCON.host, port })
     }
 
+    const json = values.json === true
     const onProgress = (e: ShootProgress) => {
-      if (e._tag === "start") console.error(`shooting ${e.total} shots into ${e.outDir}`)
+      if (json) console.log(JSON.stringify(e))
+      else if (e._tag === "start") console.error(`shooting ${e.total} shots into ${e.outDir}`)
       else if (e._tag === "shot") console.error(`[${e.index + 1}/${e.total}] ${e.id} -> ${e.file}`)
+      else if (e._tag === "resumed") console.error(`resuming: ${e.done} of ${e.total} shots already taken`)
+      else if (e._tag === "retry") console.error(`! ${e.shotId}: attempt ${e.attempt}/${e.attempts} failed (${e.reason}); retrying`)
       else if (e._tag === "warning") console.error(`! ${e.shotId ? `${e.shotId}: ` : ""}${e.message}`)
     }
     const set = await Effect.runPromise(shoot(plan, {
@@ -75,14 +82,17 @@ export const shootMain = async (argv: ReadonlyArray<string>, env: Record<string,
       screenshotDir, gameBuildId,
       settleMs: int(values["settle-ms"], fake ? 0 : 500, "settle-ms"),
       pickupTimeoutMs: int(values["timeout-ms"], 10_000, "timeout-ms"),
-      force: values.force === true, placeholder: fake, onProgress
+      force: values.force === true, resume: values.resume === true, placeholder: fake, onProgress,
+      attempts: int(values.attempts, 3, "attempts"), retryDelayMs: int(values["retry-delay-ms"], 1000, "retry-delay-ms"),
+      ...(fake ? {} : { gameRunning: () => gameRunning() })
     }).pipe(Effect.provide(layer), Effect.result))
     if (set._tag === "Failure") {
       const e = set.failure
+      if (json) console.log(JSON.stringify({ _tag: "failed", kind: e.kind, shotId: e.shotId, detail: e.detail, remediation: e.remediation }))
       console.error(`✗ ${e.shotId ? `${e.shotId}: ` : ""}${e.detail}\n  fix: ${e.remediation}`)
       return EXIT.problem
     }
-    console.log(`wrote ${set.success.shots.length} shots${fake ? " (placeholder images)" : ""}`)
+    if (!json) console.log(`wrote ${set.success.shots.length} shots${fake ? " (placeholder images)" : ""}`)
     return EXIT.ok
   } catch (e) {
     if (e instanceof PlanError) { console.error(e.problems.map((p) => `✗ ${p}`).join("\n")); return EXIT.problem }

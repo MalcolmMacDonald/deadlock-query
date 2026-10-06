@@ -18,14 +18,19 @@ export interface FakeConsoleOptions {
   readonly imageSize?: { readonly width: number; readonly height: number }
   /** The file shows up this long after the command replies, like a game that writes the image a frame later. */
   readonly fileDelayMs?: number
-  /** Reply "Wrote ..." but never write the file (pickup timeout tests). */
-  readonly dropFiles?: boolean
+  /** Reply "Wrote ..." but never write the file (pickup timeout tests): always when `true`, for the first N screenshots when a number. */
+  readonly dropFiles?: boolean | number
+  /** Apply `poseDrift` to the first N `setpos` calls only (a pose that settles on retry). */
+  readonly driftFor?: number
 }
 
 export interface FakeGame {
   /** Every command received, in order. */
   readonly log: string[]
-  readonly state: { pos: [number, number, number]; ang: [number, number, number]; screenshots: number }
+  readonly state: { pos: [number, number, number]; ang: [number, number, number]; screenshots: number; up: boolean }
+  /** The game dies: every command fails like a refused connection until `restart()`. */
+  readonly crash: () => void
+  readonly restart: () => void
   readonly layer: Layer.Layer<GameConsole>
 }
 
@@ -40,8 +45,12 @@ const nums = (args: ReadonlyArray<string>, n: number): number[] | undefined => {
  */
 export const makeFakeGame = (opts: FakeConsoleOptions = {}): FakeGame => {
   const log: string[] = []
-  const state: FakeGame["state"] = { pos: [0, 0, 0], ang: [0, 0, 0], screenshots: 0 }
+  const state: FakeGame["state"] = { pos: [0, 0, 0], ang: [0, 0, 0], screenshots: 0, up: true }
+  let drifted = 0
   const handle = (command: string): Effect.Effect<string, ConsoleError> => {
+    if (!state.up) {
+      return Effect.fail(new ConsoleError({ kind: "connect", detail: "connection refused (fake game is down)", remediation: "start Deadlock with -netconport" }))
+    }
     log.push(command)
     const [name = "", ...args] = command.trim().split(/\s+/)
     if (opts.rejected?.includes(name)) {
@@ -52,7 +61,7 @@ export const makeFakeGame = (opts: FakeConsoleOptions = {}): FakeGame => {
       case "setpos": {
         const p = nums(args, 3)
         if (!p) return Effect.succeed("Usage: setpos <x> <y> <z>")
-        const d = opts.poseDrift ?? [0, 0, 0]
+        const d = opts.poseDrift !== undefined && drifted++ < (opts.driftFor ?? Infinity) ? opts.poseDrift : [0, 0, 0]
         state.pos = [p[0]! + d[0], p[1]! + d[1], p[2]! + d[2]]
         return Effect.succeed("")
       }
@@ -66,7 +75,8 @@ export const makeFakeGame = (opts: FakeConsoleOptions = {}): FakeGame => {
       case "screenshot": {
         state.screenshots += 1
         const name = `screenshot${String(state.screenshots).padStart(4, "0")}.png`
-        if (opts.screenshotDir !== undefined && !opts.dropFiles) {
+        const dropped = opts.dropFiles === true || (typeof opts.dropFiles === "number" && state.screenshots <= opts.dropFiles)
+        if (opts.screenshotDir !== undefined && !dropped) {
           const dir = opts.screenshotDir, size = opts.imageSize ?? { width: 64, height: 36 }
           const png = placeholderPng(size.width, size.height, (state.screenshots * 37) % 256)
           const write = () => { mkdirSync(dir, { recursive: true }); writeFileSync(join(dir, name), png) }
@@ -79,5 +89,5 @@ export const makeFakeGame = (opts: FakeConsoleOptions = {}): FakeGame => {
     }
   }
   const send = (command: string) => (opts.delayMs ? Effect.delay(handle(command), opts.delayMs) : handle(command))
-  return { log, state, layer: Layer.succeed(GameConsole)({ send }) }
+  return { log, state, crash: () => { state.up = false }, restart: () => { state.up = true }, layer: Layer.succeed(GameConsole)({ send }) }
 }

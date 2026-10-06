@@ -20,7 +20,7 @@ const setup = (fake: FakeConsoleOptions = {}, extra: Partial<ShootOptions> = {})
   const shots = join(root, "game-shots"), out = join(root, "out")
   const game = makeFakeGame({ screenshotDir: shots, ...fake })
   const events: ShootProgress[] = []
-  const opts: ShootOptions = { outDir: out, screenshotDir: shots, gameBuildId: "7", settleMs: 0, pickupTimeoutMs: 2000, placeholder: true, onProgress: (e) => events.push(e), ...extra }
+  const opts: ShootOptions = { outDir: out, screenshotDir: shots, gameBuildId: "7", settleMs: 0, pickupTimeoutMs: 2000, retryDelayMs: 0, placeholder: true, onProgress: (e) => events.push(e), ...extra }
   const run = (p = plan(), layer: Layer.Layer<GameConsole> = game.layer, o = opts) => Effect.runPromise(shoot(p, o).pipe(Effect.provide(layer), Effect.result))
   return { root, shots, out, game, events, opts, run }
 }
