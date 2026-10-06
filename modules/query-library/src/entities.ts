@@ -3,6 +3,7 @@ import { Seq } from "./Seq.ts"
 import { timeField } from "./nav.ts"
 import { Vec3 } from "./Vec3.ts"
 import type { VisibleOpts } from "./spatial.ts"
+import type { RecordProvenance } from "./metadata.ts"
 
 /**
  * Lane colour. Lane numbers 1-3 map to colours through `MapSettings.laneColors`.
@@ -17,7 +18,7 @@ export type Lane = "yellow" | "blue" | "purple"
 export type EntityKind =
   | "guardian" | "walker" | "patron" | "barracks" | "baseSentry" | "healingOrb" | "creepCamp"
   | "zipline" | "jumpPad" | "climbRope" | "interior" | "shop" | "spawn" | "trooperSpawn"
-  | "capturePoint" | "powerup" | "crate" | "laneMarker"
+  | "capturePoint" | "powerup" | "crate" | "laneMarker" | "sinnersSacrifice"
 
 /** Structural shape of an extractor entity (matches contracts `Entity`).
  * @category Entities */
@@ -49,7 +50,11 @@ export class MapEntity {
     /** Lane number (1-3) as in the game data. */
     readonly laneNumber: number | undefined,
     /** Raw extra key/values from the extractor. */
-    readonly properties: Readonly<Record<string, unknown>>
+    readonly properties: Readonly<Record<string, unknown>>,
+    /** `"metadata"` for entities merged from accepted metadata, `"extractor"` otherwise. */
+    readonly source: "extractor" | "metadata" = "extractor",
+    /** Submitter and reviewer of a metadata entity; `undefined` for extractor entities. */
+    readonly provenance?: RecordProvenance
   ) {}
 
   /**
@@ -126,6 +131,15 @@ export class EntityList extends Seq<MapEntity> {
    */
   inLane(lane: Lane | 1 | 2 | 3): EntityList {
     return this.where((e) => (typeof lane === "number" ? e.laneNumber === lane : e.lane === lane))
+  }
+
+  /**
+   * Entities from one source: the game data (`"extractor"`) or accepted user metadata (`"metadata"`).
+   * @example map.creepCamps.fromSource("metadata").select(c => c.provenance?.submitter?.name)
+   * @category Entities
+   */
+  fromSource(source: "extractor" | "metadata"): EntityList {
+    return this.where((e) => e.source === source)
   }
 
   /**
