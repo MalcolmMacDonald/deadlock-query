@@ -44,6 +44,19 @@ Also verified: library-class member completions with TSDoc signature, string-lit
   - **Adversarial corpus:** `test/adversarial.test.ts` (Bun Worker, same worker source: global/constructor/Function escapes, scrub immutability, protocol forgery, loops, huge allocs, row/value caps, circular/DAG/hostile results) and `test/sandbox.e2e.test.ts` (real iframe + CSP in Chromium: opaque origin, no window/DOM/storage/network, `import()` of data:/blob:/https: blocked, nested Worker blocked, timeout + recovery, alloc refusal, row cap, render cap). Verified the Chromium corpus fails when the CSP is loosened.
   - **Known limits (accepted):** total heap use is not capped (only single allocations, the result, and the 30 s timeout); a query can poison built-in prototypes for later runs until the worker respawns (cancel/timeout); a microtask-flood after the result is posted starves the worker until the next run times out. Revisit with respawn-per-run or frozen intrinsics if needed.
 
+- **Embeddable panel** (`src/index.ts`, `src/panel/QueryEditorPanel.ts`, `src/engine/prelude.ts`, `src/app/standaloneServices.ts`; requested by the shell, see `modules/shell/STATE.md`). `package.json` now has `exports: { ".": "./src/index.ts" }`. The standalone app is the same panel with a recording viewer + in-memory bus.
+  - **Shell wiring:** `const qb = await import("@deadlock-query/query-builder")` (lazy: it pulls in Monaco), then
+    `qb.makeQueryEditorPanel({ library, bundle, viewer, selection, getWorkerUrl? })` → `{ mount(container) => dispose }`, usable directly as a panel `component` (like map-viewer's `viewer.main`).
+    - `library`: a `LibraryArtifact` (or promise); `qb.fetchLibraryArtifact("./editor/library.json")` reads the one the standalone build already writes (`.app-dist/library.json`, shipped as `editor/` by `tools/build.ts`).
+    - `bundle`: `{ manifest: { mapName, gameBuildId }, entities }` (or promise), e.g. from `MapDataService.manifest/entities`.
+    - `viewer` / `selection`: the **service values** (`yield* ViewerService`, `yield* SelectionBus` from the shell's runtime), not layers, so the shell's shared instances are used.
+    - `getWorkerUrl(label)`: where `editor.worker.js` and `ts.worker.js` are served (default: next to the page; `.app-dist/` has both). The shell must publish them (e.g. next to `editor/`).
+    - Monaco CSS comes with the module's imports (Vite) or `main.css` (standalone Bun build).
+  - **Behaviour:** each successful run sets overlay layer `query-result` (features labelled `<rowId>:<geometryColumn>`; a result with no geometry removes the overlay); clicking a row publishes `selection.select([rowId])` and `viewer.highlight(featureIds)`; viewer `pick` events for those feature ids select the row; changes to `selection.current` from elsewhere are polled (250 ms) into the table. `dispose` removes the iframe, editor, TS extra libs, overlay and highlight. One instance at a time (second `mount` shows an error message).
+  - **Row ids** are entity ids only when the query returns entities; otherwise row indexes (M2 rule), so selections from other panels only match entity-returning queries.
+  - Removed the unused `syncSelectionToViewer`/`syncViewerToSelection` helpers (hard-coded `:position`/`:geometry` feature ids; superseded by the panel logic).
+  - Tests: Chromium e2e drives overlay/highlight/pick/bus via the standalone services; `test/entry.test.ts` checks the entry bundles for the browser without node built-ins.
+
 ## In progress
 - (nothing)
 
@@ -51,7 +64,8 @@ Also verified: library-class member completions with TSDoc signature, string-lit
 - M4: Docs panel from `apiCatalog.json`, gallery with 3 PLAN.md queries, snippets, friendly errors (PLAN.md §6).
 
 ## Blockers / Requests to other modules
-- None at this time. Shell e2e will wire the real `ViewerService` and `SelectionBus` from the module system.
+- contracts (nice to have): `SelectionBus` has no change stream, so the panel polls `current` every 250 ms. A `changes: Stream<ReadonlyArray<string>>` would remove the polling.
+- shell: wire `makeQueryEditorPanel` per "Embeddable panel" above (replaces the iframe `editor/` panel) and serve the two Monaco workers.
 
 ## Decisions log
 - 2026-10-05 — Module scaffolded (rev 2 of IMPLEMENTATION_PLAN.md).
@@ -67,6 +81,8 @@ Also verified: library-class member completions with TSDoc signature, string-lit
 - 2026-10-06 — M2: Extended `QueryResult` schema to include `rowIds` field (array of strings, one per row). Row IDs are derived from entity.id if the original item is an entity, otherwise from row index. Feature labels are `{rowId}:{geometryColumnName}` to enable round-trip row selection ↔ feature highlight. Viewer overlay is keyed by `"query-result"` and set on every successful run (failures degrade gracefully with mock services). Selection bus integration is prepared for shell e2e where real services will replace mocks.
 
 - 2026-10-06 — M3: limits live in one place (`LIMITS`) and are enforced in the worker first (cheapest), with `projectResult` and the table as backstops. Allocation guards are per-allocation, not cumulative, to avoid false positives on library churn. The `NEXT.md` row is not updated here: it is outside `modules/query-builder/` and `check:scope` rejects it, so it needs a follow-up infra change.
+
+- 2026-10-06 — Embeddable panel takes service *values*, not layers: the shell's `ManagedRuntime` owns the shared instances, and rebuilding a layer per `Effect.provide` would hand the panel a fresh bus.
 
 ## Open questions
 - (see PLAN.md §9)

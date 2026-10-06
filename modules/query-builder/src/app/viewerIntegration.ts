@@ -1,5 +1,5 @@
-import { Effect, Stream } from "effect"
-import { SelectionBus, ViewerService, type OverlayFeature, type QueryResult, type Vec3 } from "@deadlock-query/contracts"
+import { Effect } from "effect"
+import { ViewerService, type OverlayFeature, type QueryResult, type Vec3 } from "@deadlock-query/contracts"
 
 /** Convert a geometry value to OverlayFeatures, one per row for that geometry column. */
 export const geometryToFeatures = (
@@ -37,52 +37,27 @@ export const geometryToFeatures = (
   return features
 }
 
-/** Set overlay on the viewer for all geometry in the result. Generates feature IDs from row IDs. */
+/** Overlay features for every geometry column of a result, with the feature-id ↔ row-id mapping both ways. */
+export const overlayFeatures = (result: QueryResult) => {
+  const features: OverlayFeature[] = []
+  const featureToRow = new Map<string, string>()
+  const rowToFeatures = new Map<string, string[]>()
+  for (const geomCol of result.geometryColumns) {
+    for (const { rowId, feature } of geometryToFeatures(result, geomCol)) {
+      const featureId = `${rowId}:${geomCol}`
+      featureToRow.set(featureId, rowId)
+      rowToFeatures.set(rowId, [...(rowToFeatures.get(rowId) ?? []), featureId])
+      features.push({ ...feature, label: featureId })
+    }
+  }
+  return { features, featureToRow, rowToFeatures }
+}
+
+/** Set overlay on the viewer for all geometry in the result; clears a stale overlay when the result has none. */
 export const setResultOverlay = (layerId: string, result: QueryResult): Effect.Effect<void, Error, ViewerService> =>
   Effect.gen(function* () {
     const viewer = yield* ViewerService
-    const features: OverlayFeature[] = []
-    const featureToRow: Record<string, string> = {} // maps feature ID to row ID
-
-    for (const geomCol of result.geometryColumns) {
-      const converted = geometryToFeatures(result, geomCol)
-      for (const { rowId, feature } of converted) {
-        const featureId = `${rowId}:${geomCol}`
-        featureToRow[featureId] = rowId
-        features.push({ ...feature, label: featureId })
-      }
-    }
-
-    if (features.length > 0) {
-      yield* viewer.setOverlay(layerId, features)
-    }
+    const { features } = overlayFeatures(result)
+    if (features.length > 0) yield* viewer.setOverlay(layerId, features)
+    else yield* viewer.removeOverlay(layerId)
   })
-
-/** When a row is selected, highlight the corresponding features on the map. */
-export const syncSelectionToViewer = (): Effect.Effect<void, never, ViewerService | SelectionBus> =>
-  Effect.gen(function* () {
-    const bus = yield* SelectionBus
-    const viewer = yield* ViewerService
-
-    const ids = yield* bus.current
-    const featureIds = ids.flatMap((rowId) => [`${rowId}:position`, `${rowId}:geometry`])
-    if (featureIds.length > 0) {
-      yield* viewer.highlight(featureIds)
-    }
-  })
-
-/** Listen to viewer events and sync pick events to SelectionBus. */
-export const syncViewerToSelection = (): Stream.Stream<never, never, ViewerService | SelectionBus> =>
-  Stream.fromEffect(ViewerService).pipe(
-    Stream.flatMap((viewer) => viewer.events),
-    Stream.tap((event) =>
-      event._tag === "pick"
-        ? Effect.gen(function* () {
-          const bus = yield* SelectionBus
-          const rowId = event.id.split(":")[0]! // Extract rowId from "rowId:colName"
-          yield* bus.select([rowId])
-        })
-        : Effect.void
-    ),
-    Stream.drain
-  )
