@@ -1,8 +1,8 @@
 # shell — state
 
-- **Status:** M2 mostly done (viewer + embedded query editor wired to the shared viewer/selection; rows overlay and highlight on the map)
+- **Status:** M3 done; M2 done except swapping the fixture for the published bundle (viewer + embedded query editor wired to the shared viewer/selection; rows overlay and highlight on the map, map picks select rows)
 - **Version:** 0.1.0
-- **Current milestone:** M1 complete; M2 next (needs real viewer/editor/results modules)
+- **Current milestone:** M3 complete; M4 (dev lock screen) next; M2 fixture swap waits on a published bundle
 - **Last updated:** 2026-10-06
 
 ## Done
@@ -22,11 +22,16 @@
 
 - 2026-10-06 — M2 (editor ↔ viewer): the iframe `editor/` panel is replaced by query-builder's `makeQueryEditorPanel` (`src/editor.tsx`), mounted in-page (Monaco lazy via dynamic import, only once the panel is visible). The module's Layer captures the runtime's shared `ViewerService` / `SelectionBus` values and hands them to the panel, so a run sets the `query-result` overlay on the real map (listed in the Layers panel) and a row click highlights its features. The panel's bundle is the published `./data/dl_midtown` entities when present, else the mini-map fixture (same choice as the Map panel). Monaco's two workers are bundled by Vite (`src/monacoWorkers.ts`, `?worker&url`, `worker.format: "es"`) and served from the site's assets; `monaco-editor` is now a shell dependency for that. The library artifact is still read from `./editor/library.json`, which `tools/build.ts` keeps shipping from the standalone editor build. `e2e/slice.ts` now runs a query in the embedded editor and asserts the overlay layer and the viewer highlight (via a `__viewerController` window hook, like `__dockview`). `bun run e2e` passes all four scripts.
 
+- 2026-10-06 — M3 (presets, palette, share): `src/presets.ts` now has Query (default), Explore (map + tools + layers) and Review (adds `metadata.*` panels; offered only when such a panel is registered) behind `PRESETS` / `availablePresets`; header buttons apply one (`src/dock.ts` `applyPreset` clears the dock and re-adds). "Reset layout" now re-applies the default preset in place (and clears the saved layout) instead of reloading. Ctrl/Cmd+K opens `src/CommandPalette.tsx` (capture-phase shortcut, so Monaco cannot swallow it; ARIA combobox/listbox, arrows/Enter/Escape, focus returns on close); `src/commands.ts` builds its entries from the module list: "Show panel: X" (focuses an open panel, else reopens at its `defaultPlacement`), "Layout preset: X", Reset, Copy share link, plus each module's own `commands`. `src/share.ts`: `#layout=<base64url of the versioned layout>`; opening such a link (fresh load or pasted into an open tab) adopts it, persists it, and clears the hash. Saved and shared layouts naming a panel that is not registered are ignored (`isRestorable`) so a renamed panel falls back to the default preset instead of breaking `fromJSON`. E2E: new `e2e/presets.ts`, `e2e/palette.ts`, `e2e/share.ts` (shared harness `e2e/util.ts`), all in `bun run e2e`; unit tests for presets, commands, share, restorability.
+- 2026-10-06 — M2 (selection sync): the results table lives inside the query-editor panel (query-builder owns it), and it already syncs both ways with the map through the shared `ViewerService`/`SelectionBus`. `e2e/slice.ts` now also asserts the clicked row is the only `.selected` row and that a map `pick` event selects its row. No separate shell results panel was added (feature UI is a shell non-goal).
+
 ## In progress
 - (nothing yet)
 
 ## Next
-- M2 (remaining): swap the fixture for the published MapBundle once the extractor emits a real one; selection sync with a results panel (the editor panel carries its own table).
+- M4: dev lock screen + `DevAuth` integration; dev-only panels.
+- M2 (remaining): swap the fixture for the published MapBundle once Malcolm publishes a real one.
+- M3 leftovers: share links are uncompressed (a default layout is a few KB); compress if links get unwieldy. Review preset has nothing to show until map-metadata ships a `metadata.*` panel.
 - Infra follow-up: ship `library.json` without the standalone editor app (it is only published for that file now).
 
 ## Blockers / Requests to other modules
@@ -42,6 +47,7 @@
 
 - 2026-10-06 — M1: base services use contracts mocks until real layers exist; `MockMapDataService`/`MockQueryEngine` get added to the base in M2 when panels need them.
 
+- 2026-10-06 — M3: Explore is the map with its Tools/Layers sidebar rather than the bare map (those are map-viewer panels); Review is hidden until a `metadata.*` panel exists, since without one it would duplicate Explore. Palette uses the Ctrl+K shortcut in the capture phase, which shadows Monaco's Ctrl+K chords.
 - 2026-10-06 — M2: unrelated extra panels (e.g. `?demoFailure`) are split below the viewer rather than tabbed, so the map stays visible.
 
 ## Open questions
