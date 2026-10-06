@@ -2,6 +2,7 @@ import { QueryEngine, type QueryDiagnostic, type QueryOutput } from "@deadlock-q
 import { Effect, Layer, Stream } from "effect"
 import type { RunOutcome } from "../sandbox/runner.ts"
 import { LIMITS } from "../sandbox/limits.ts"
+import { PROVISIONAL_WARNING_PREFIX } from "../export/exports.ts"
 import type { Friendly } from "./friendly.ts"
 import { projectResult } from "./project.ts"
 
@@ -67,6 +68,7 @@ export const makeQueryEngine = (deps: { compiler: Compiler; runner: Runner; frie
                   throw new QueryFailed(message, out.reason)
                 }
                 const warnings = diagnostics.map((d) => `${formatDiagnostic(d)} (${d.severity})`)
+                if (out.provisional) warnings.push(`${PROVISIONAL_WARNING_PREFIX} this map's interior, visibility and wall rules are placeholders, so results that depend on them are not final.`)
                 if (out.totalRows !== undefined) warnings.push(`Result truncated to ${LIMITS.maxRows} of ${out.totalRows} rows.`)
                 return {
                   _tag: "result",

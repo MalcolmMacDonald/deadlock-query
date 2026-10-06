@@ -1,10 +1,14 @@
 import { searchDocs, type DocIndex, type DocItem } from "../docs/catalog.ts"
 import { GALLERY, type GalleryQuery } from "../gallery/queries.ts"
 
-export type SidebarTab = "docs" | "gallery"
+export type SidebarTab = "docs" | "gallery" | "saved" | "history"
 
 export interface SidebarOptions {
-  readonly index: DocIndex
+  /** The API catalog; without it (artifacts built before M4) there is no Docs tab. */
+  readonly index?: DocIndex
+  /** Saved-queries and history panes (see `renderSavedPanes`). */
+  readonly saved: HTMLElement
+  readonly history: HTMLElement
   /** Insert `text` at the editor cursor and put the cursor `cursorBack` characters before its end. */
   readonly onInsert: (item: DocItem) => void
   readonly onInsertExample: (source: string) => void
@@ -38,16 +42,22 @@ export const renderSidebar = (doc: Document, opts: SidebarOptions): Sidebar => {
   const root = el(doc, "aside", "qb-side")
   root.dataset.testid = "sidebar"
   const tabs = el(doc, "div", "tabs")
-  const docsTab = button(doc, "Docs", "tab-docs", () => show("docs"))
-  const galleryTab = button(doc, "Gallery", "tab-gallery", () => show("gallery"))
-  tabs.append(docsTab, galleryTab)
+  const tabButtons = new Map<SidebarTab, HTMLButtonElement>()
+  const panes = new Map<SidebarTab, HTMLElement>()
+  const addTab = (tab: SidebarTab, label: string, pane: HTMLElement) => {
+    const b = button(doc, label, `tab-${tab}`, () => show(tab))
+    tabButtons.set(tab, b)
+    panes.set(tab, pane)
+    tabs.append(b)
+  }
 
   // --- Docs ---------------------------------------------------------------
   const docsPane = el(doc, "div", "pane docs")
   docsPane.dataset.testid = "docs-pane"
+  const index = opts.index
   const search = el(doc, "input")
   search.type = "search"
-  search.placeholder = `Search ${opts.index.items.length} entries (name, category, text)`
+  search.placeholder = `Search ${index?.items.length ?? 0} entries (name, category, text)`
   search.dataset.testid = "docs-search"
   const list = el(doc, "div", "doc-list")
   list.dataset.testid = "docs-list"
@@ -59,7 +69,7 @@ export const renderSidebar = (doc: Document, opts: SidebarOptions): Sidebar => {
   let selectedId: string | undefined
   const renderList = () => {
     list.replaceChildren()
-    const items = searchDocs(opts.index, search.value)
+    const items = index ? searchDocs(index, search.value) : []
     if (items.length === 0) list.append(el(doc, "div", "empty", "No entries match."))
     let category: string | undefined
     for (const i of items) {
@@ -76,7 +86,7 @@ export const renderSidebar = (doc: Document, opts: SidebarOptions): Sidebar => {
     }
   }
   const select = (id: string) => {
-    const item = opts.index.byId.get(id)
+    const item = index?.byId.get(id)
     if (!item) return
     selectedId = id
     for (const r of Array.from(list.querySelectorAll<HTMLElement>(".doc-item"))) r.classList.toggle("selected", r.dataset.docId === id)
@@ -116,16 +126,19 @@ export const renderSidebar = (doc: Document, opts: SidebarOptions): Sidebar => {
     galleryPane.append(card)
   }
 
-  root.append(tabs, docsPane, galleryPane)
+  if (index) addTab("docs", "Docs", docsPane)
+  addTab("gallery", "Gallery", galleryPane)
+  addTab("saved", "Saved", opts.saved)
+  addTab("history", "History", opts.history)
+  root.append(tabs, ...panes.values())
 
   const show = (tab: SidebarTab) => {
-    docsPane.hidden = tab !== "docs"
-    galleryPane.hidden = tab !== "gallery"
-    docsTab.classList.toggle("active", tab === "docs")
-    galleryTab.classList.toggle("active", tab === "gallery")
+    if (!panes.has(tab)) tab = "gallery"
+    for (const [t, pane] of panes) pane.hidden = t !== tab
+    for (const [t, b] of tabButtons) b.classList.toggle("active", t === tab)
     root.dataset.tab = tab
   }
-  show("docs")
+  show(index ? "docs" : "gallery")
   return {
     el: root,
     show,

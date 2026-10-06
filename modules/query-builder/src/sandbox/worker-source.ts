@@ -116,7 +116,10 @@ self.onmessage = async (e) => {
     let out = normalize(value);
     if (Array.isArray(out) && out.length > LIMITS.maxRows) { totalRows ??= out.length; out = out.slice(0, LIMITS.maxRows) }
     clearTimers();
-    post({ type: "result", runId: m.runId, value: out, ms: performance.now() - t0, totalRows });
+    // Map-wide flag: placeholder semantics are loaded, so anything that used them is provisional. Only a hint, so a query that redefines map just loses the banner.
+    let provisional = false;
+    try { provisional = self.map != null && self.map.provisional === true } catch {}
+    post({ type: "result", runId: m.runId, value: out, ms: performance.now() - t0, totalRows, provisional });
   } catch (err) {
     clearTimers();
     post({ type: "error", runId: m.runId, message: describe(err) });

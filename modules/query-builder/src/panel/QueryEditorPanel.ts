@@ -11,10 +11,16 @@ import { overlayFeatures, setResultOverlay } from "../app/viewerIntegration.ts"
 import { buildDocIndex, insertionFor, type DocIndex, type DocItem } from "../docs/catalog.ts"
 import { makeQueryEngine } from "../engine/engine.ts"
 import { makeFriendly } from "../engine/friendly.ts"
+import { buildExport, isProvisional, type ExportFile, type ExportFormat, type ExportMeta } from "../export/exports.ts"
 import { globalsShim, toPrelude, type LibraryArtifact } from "../engine/prelude.ts"
 import type { GalleryQuery } from "../gallery/queries.ts"
+import { checkApiVersion, decodeShare, encodeShare } from "../share/shareLink.ts"
+import { makeQueryStore, type KeyValueStorage, type QueryStore } from "../store/queryStore.ts"
 import { SandboxRunner } from "../sandbox/runner.ts"
+import { downloadBlob } from "../ui/download.ts"
+import { renderExportBar } from "../ui/exportBar.ts"
 import { registerDocsHover } from "../ui/docsHover.ts"
+import { renderSavedPanes } from "../ui/savedPanes.ts"
 import { renderSidebar, type Sidebar, type SidebarTab } from "../ui/sidebar.ts"
 import { registerSnippetCompletions } from "../ui/snippetCompletions.ts"
 
@@ -42,6 +48,12 @@ export interface QueryEditorPanelOptions {
   readonly overlayLayerId?: string
   /** Open the docs/gallery sidebar on this tab at mount. Default: closed (the header buttons toggle it). */
   readonly initialSidebar?: SidebarTab
+  /** URL fragment of a share link (`q=…&api=…`, with or without `#`). It fills the editor; it is never run. */
+  readonly initialShare?: string
+  /** Page URL (without fragment) that "Share" appends the query to. Default: the current page. */
+  readonly shareBaseUrl?: () => string
+  /** Where saved queries and history live. Default: `localStorage` (memory only when it is unavailable). */
+  readonly storage?: KeyValueStorage
 }
 
 export interface QueryEditorHandle {
@@ -50,8 +62,11 @@ export interface QueryEditorHandle {
   readonly run: () => Promise<void>
   readonly cancel: () => void
   readonly runner: SandboxRunner
-  /** Docs/gallery sidebar; absent when the library artifact carries no `apiCatalog`. */
-  readonly sidebar?: Sidebar
+  /** Docs/gallery/saved/history sidebar (no Docs tab when the library artifact carries no `apiCatalog`). */
+  readonly sidebar: Sidebar
+  readonly store: QueryStore
+  /** The share link for the current editor content. */
+  readonly shareUrl: () => Promise<string>
 }
 
 const DEFAULT_SOURCE = `map.guardians
@@ -81,6 +96,13 @@ const STYLE = `
 .dlq-qb .doc-detail .kind{color:#999}
 .dlq-qb .qb-side pre{background:#252526;padding:6px;margin:4px 0;overflow:auto;white-space:pre-wrap;font:12px ui-monospace,monospace}
 .dlq-qb .card{border:1px solid #333;padding:8px;display:flex;flex-direction:column;gap:4px}
+.dlq-qb .export-bar{display:flex;flex-wrap:wrap;gap:4px;align-items:center;margin-bottom:6px}
+.dlq-qb .export-bar .provisional{color:#e2c08d}
+.dlq-qb .notices .notice{padding:4px 8px;border-bottom:1px solid #333;display:flex;gap:8px;align-items:center}
+.dlq-qb .notices .notice.warning{background:#5a4a1a}.dlq-qb .notices .notice.error{background:#5a1d1d}.dlq-qb .notices .notice.info{background:#1f3a52}
+.dlq-qb .notices .notice input{flex:1;min-width:0}
+.dlq-qb .notices .notice button{margin-left:auto}
+.dlq-qb .qb-side input{min-width:0}.dlq-qb .qb-side .actions{flex-wrap:wrap}.dlq-qb .qb-side .empty{color:#999}
 .dlq-qb .card p{margin:0}.dlq-qb .card .needs{color:#999}.dlq-qb .card .actions{display:flex;gap:6px}
 .dlq-qb table{border-collapse:collapse}.dlq-qb th,.dlq-qb td{border:1px solid #333;padding:2px 8px;text-align:left}.dlq-qb th{background:#252526}
 .dlq-qb tr.selected td{background:#264f78}
@@ -97,6 +119,13 @@ const configureMonacoOnce = () => {
   const ts = monaco.languages.typescript
   ts.typescriptDefaults.setCompilerOptions({ target: ts.ScriptTarget.ES2020, allowNonTsExtensions: true, strict: true })
   ts.typescriptDefaults.setEagerModelSync(true)
+}
+
+const defaultStorage = (): KeyValueStorage | undefined => { try { return localStorage } catch { return undefined } }
+
+/** Clipboard write that reports failure instead of throwing (blocked in iframes without permission, insecure pages). */
+const copyText = async (doc: Document, text: string): Promise<boolean> => {
+  try { await doc.defaultView!.navigator.clipboard.writeText(text); return true } catch { return false }
 }
 
 const sameIds = (a: ReadonlyArray<string>, b: ReadonlyArray<string>) => a.length === b.length && a.every((x, i) => x === b[i])
@@ -131,7 +160,7 @@ export const mountQueryEditor = async (container: HTMLElement, opts: QueryEditor
     }
     const rootEl = doc.createElement("div")
     rootEl.className = "dlq-qb"
-    rootEl.innerHTML = `<header><button id="run" type="button">Run (Ctrl+Enter)</button><button id="cancel" type="button" disabled>Cancel</button><span id="status">idle</span><span style="flex:1"></span><span id="side-toggles"></span></header><div class="qb-body"><div class="qb-main"><div id="editor" class="qb-editor"></div><div id="results" class="qb-results"></div></div></div>`
+    rootEl.innerHTML = `<header><button id="run" type="button">Run (Ctrl+Enter)</button><button id="cancel" type="button" disabled>Cancel</button><span id="status">idle</span><span style="flex:1"></span><button id="share" type="button" data-testid="share" title="Copy a link to this query">Share</button><span id="side-toggles"></span></header><div class="qb-body"><div class="qb-main"><div id="notices" class="notices"></div><div id="editor" class="qb-editor"></div><div id="results" class="qb-results"></div></div></div>`
     container.append(rootEl)
     cleanups.push(() => rootEl.remove())
     const q = <T extends HTMLElement>(sel: string) => rootEl.querySelector<T>(sel)!
@@ -162,57 +191,114 @@ export const mountQueryEditor = async (container: HTMLElement, opts: QueryEditor
     const { viewer, selection } = opts
     const fire = (e: Effect.Effect<unknown>) => void Effect.runPromise(e.pipe(Effect.ignore))
 
-    // Docs/gallery sidebar, hover links into the docs, snippet completions.
+    // Notices above the editor: share-link and library-version warnings, export problems.
+    const notices = q("#notices")
+    const clearNotices = () => notices.replaceChildren()
+    const notify = (kind: "info" | "warning" | "error", text: string, extra?: HTMLElement) => {
+      const n = doc.createElement("div")
+      n.className = `notice ${kind}`
+      n.dataset.testid = "notice"
+      const t = doc.createElement("span")
+      t.textContent = text
+      const x = doc.createElement("button")
+      x.type = "button"
+      x.textContent = "Dismiss"
+      x.addEventListener("click", () => n.remove())
+      n.append(t, ...(extra ? [extra] : []), x)
+      notices.replaceChildren(n)
+    }
+
+    const store = makeQueryStore(opts.storage ?? defaultStorage())
+    const download = (filename: string, mime: string, text: string) => downloadBlob(doc, filename, new Blob([text], { type: mime }))
+    /** Puts `source` in the editor as an edit (Ctrl+Z restores the previous text); never runs it. */
+    const loadSource = (source: string, apiVersion?: string) => {
+      clearNotices()
+      editor.executeEdits("dlq-load", [{ range: model.getFullModelRange(), text: source }])
+      editor.setPosition({ lineNumber: 1, column: 1 })
+      editor.focus()
+      if (apiVersion !== undefined) {
+        const v = checkApiVersion(apiVersion, lib.apiVersion)
+        if (v.kind !== "same") notify("warning", v.message)
+      }
+    }
+
+    // Docs/gallery/saved/history sidebar, hover links into the docs, snippet completions.
     cleanups.push(registerSnippetCompletions(monaco, modelUri).dispose)
-    let sidebar: Sidebar | undefined
-    if (docIndex) {
-      const insertAtCursor = (text: string, cursorBack: number) => {
-        const sel = editor.getSelection() ?? model.getFullModelRange()
-        editor.executeEdits("dlq-docs", [{ range: sel, text, forceMoveMarkers: true }])
-        const end = editor.getPosition()
-        if (end && cursorBack > 0) editor.setPosition({ lineNumber: end.lineNumber, column: end.column - cursorBack })
-        editor.focus()
+    const insertAtCursor = (text: string, cursorBack: number) => {
+      const sel = editor.getSelection() ?? model.getFullModelRange()
+      editor.executeEdits("dlq-docs", [{ range: sel, text, forceMoveMarkers: true }])
+      const end = editor.getPosition()
+      if (end && cursorBack > 0) editor.setPosition({ lineNumber: end.lineNumber, column: end.column - cursorBack })
+      editor.focus()
+    }
+    const panes = renderSavedPanes(doc, { store, apiVersion: lib.apiVersion, getSource: () => model.getValue(), loadSource, download })
+    const sidebar: Sidebar = renderSidebar(doc, {
+      ...(docIndex ? { index: docIndex } : {}),
+      saved: panes.saved,
+      history: panes.history,
+      onInsert: (item: DocItem) => {
+        const pos = editor.getPosition() ?? model.getFullModelRange().getEndPosition()
+        const ins = insertionFor(item, model.getValueInRange({ startLineNumber: 1, startColumn: 1, endLineNumber: pos.lineNumber, endColumn: pos.column }))
+        insertAtCursor(ins.text, ins.cursorBack)
+      },
+      onInsertExample: (source) => insertAtCursor(source, 0),
+      onLoadQuery: (query: GalleryQuery, runNow: boolean) => {
+        loadSource(query.source)
+        if (runNow) void run()
+      },
+    })
+    sidebar.el.hidden = true
+    const toggles = q("#side-toggles")
+    const syncToggles = () => {
+      for (const b of Array.from(toggles.querySelectorAll("button"))) b.classList.toggle("active", !sidebar.el.hidden && b.dataset.tab === sidebar.el.dataset.tab)
+    }
+    const toggle = (tab: SidebarTab) => {
+      const closing = !sidebar.el.hidden && sidebar.el.dataset.tab === tab
+      sidebar.el.hidden = closing
+      if (!closing) sidebar.show(tab)
+      syncToggles()
+    }
+    const tabs: ReadonlyArray<readonly [SidebarTab, string]> = [...(docIndex ? [["docs", "Docs"] as const] : []), ["gallery", "Gallery"], ["saved", "Saved"], ["history", "History"]]
+    for (const [tab, label] of tabs) {
+      const b = doc.createElement("button")
+      b.type = "button"
+      b.textContent = label
+      b.dataset.tab = tab
+      b.dataset.testid = `toggle-${tab}`
+      b.addEventListener("click", () => toggle(tab))
+      toggles.append(b)
+    }
+    q(".qb-body").append(sidebar.el)
+    if (docIndex) cleanups.push(registerDocsHover(monaco, docIndex, modelUri, (id) => { sidebar.el.hidden = false; sidebar.showDoc(id); syncToggles() }).dispose)
+    if (opts.initialSidebar) toggle(opts.initialSidebar)
+
+    // Share links: the query and the library version it was written for, in the URL fragment.
+    const shareUrl = async () => {
+      const base = (opts.shareBaseUrl ?? (() => `${doc.defaultView!.location.origin}${doc.defaultView!.location.pathname}${doc.defaultView!.location.search}`))()
+      return `${base}#${await encodeShare({ source: model.getValue(), apiVersion: lib.apiVersion })}`
+    }
+    q("#share").addEventListener("click", () => {
+      void shareUrl().then(async (url) => {
+        const field = doc.createElement("input")
+        field.readOnly = true
+        field.value = url
+        field.dataset.testid = "share-url"
+        const copied = await copyText(doc, url)
+        notify("info", copied ? "Link copied. Opening it fills the editor but never runs the query:" : "Copy this link. Opening it fills the editor but never runs the query:", field)
+        field.select()
+      }).catch((e) => notify("error", `Could not make a share link: ${e instanceof Error ? e.message : String(e)}`))
+    })
+    if (opts.initialShare) {
+      try {
+        const shared = await decodeShare(opts.initialShare)
+        if (shared) {
+          editor.executeEdits("dlq-share", [{ range: model.getFullModelRange(), text: shared.source }])
+          const v = checkApiVersion(shared.apiVersion, lib.apiVersion)
+          notify("warning", `Loaded from a share link. It has not been run: read it, then press Run.${v.kind === "same" ? "" : ` ${v.message}`}`)
+        }
+      } catch (e) {
+        notify("error", e instanceof Error ? e.message : String(e))
       }
-      sidebar = renderSidebar(doc, {
-        index: docIndex,
-        onInsert: (item: DocItem) => {
-          const pos = editor.getPosition() ?? model.getFullModelRange().getEndPosition()
-          const ins = insertionFor(item, model.getValueInRange({ startLineNumber: 1, startColumn: 1, endLineNumber: pos.lineNumber, endColumn: pos.column }))
-          insertAtCursor(ins.text, ins.cursorBack)
-        },
-        onInsertExample: (source) => insertAtCursor(source, 0),
-        onLoadQuery: (query: GalleryQuery, runNow: boolean) => {
-          // An edit (not setValue) so Ctrl+Z brings the previous query back.
-          editor.executeEdits("dlq-gallery", [{ range: model.getFullModelRange(), text: query.source }])
-          editor.setPosition({ lineNumber: 1, column: 1 })
-          editor.focus()
-          if (runNow) void run()
-        },
-      })
-      sidebar.el.hidden = true
-      const side = sidebar
-      const toggles = q("#side-toggles")
-      const syncToggles = () => {
-        for (const b of Array.from(toggles.querySelectorAll("button"))) b.classList.toggle("active", !side.el.hidden && b.dataset.tab === side.el.dataset.tab)
-      }
-      const toggle = (tab: SidebarTab) => {
-        const closing = !side.el.hidden && side.el.dataset.tab === tab
-        side.el.hidden = closing
-        if (!closing) side.show(tab)
-        syncToggles()
-      }
-      for (const [tab, label] of [["docs", "Docs"], ["gallery", "Gallery"]] as const) {
-        const b = doc.createElement("button")
-        b.type = "button"
-        b.textContent = label
-        b.dataset.tab = tab
-        b.dataset.testid = `toggle-${tab}`
-        b.addEventListener("click", () => toggle(tab))
-        toggles.append(b)
-      }
-      q(".qb-body").append(side.el)
-      cleanups.push(registerDocsHover(monaco, docIndex, modelUri, (id) => { side.el.hidden = false; side.showDoc(id); syncToggles() }).dispose)
-      if (opts.initialSidebar) toggle(opts.initialSidebar)
     }
 
     // Live diagnostics as markers on the visible model (same service the engine uses).
@@ -228,14 +314,34 @@ export const mountQueryEditor = async (container: HTMLElement, opts: QueryEditor
 
     // Result ↔ viewer ↔ shared selection.
     let currentResult: QueryResult | null = null
+    let lastRunSource = model.getValue()
     let features = overlayFeatures({ columns: [], rows: [], rowIds: [], geometryColumns: [] } as unknown as QueryResult)
     let selectedRowIds: ReadonlyArray<string> = []
     const renderTable = () => {
       if (!currentResult) return
-      out.replaceChildren(renderResults(doc, currentResult, {
-        selectedRows: new Set(selectedRowIds),
-        onRowSelect: (rowId: string) => applySelection([rowId], true)
-      }))
+      const result = currentResult
+      const meta: ExportMeta = { source: lastRunSource, apiVersion: lib.apiVersion, mapName: bundle.manifest.mapName, gameBuildId: bundle.manifest.gameBuildId }
+      const attempt = (f: () => void | Promise<void>) => { void Promise.resolve().then(f).catch((e) => notify("error", e instanceof Error ? e.message : String(e))) }
+      const saveFile = (f: ExportFile) => downloadBlob(doc, f.filename, new Blob([f.text], { type: f.mime }))
+      out.replaceChildren(
+        renderExportBar(doc, {
+          provisional: isProvisional(result),
+          onExport: (format: ExportFormat) => attempt(() => saveFile(buildExport(result, format, meta))),
+          onCopy: (format) => attempt(async () => {
+            if (!(await copyText(doc, buildExport(result, format, meta).text))) throw new Error("The browser did not allow copying to the clipboard.")
+            notify("info", `Copied the result as ${format.toUpperCase()}.`)
+          }),
+          onPng: () => attempt(async () => {
+            const png = await Effect.runPromise(viewer.captureImage)
+            if (png.length === 0) throw new Error("The map view returned no image (is the map visible?).")
+            downloadBlob(doc, `query-result${isProvisional(result) ? ".provisional" : ""}.png`, new Blob([png as BlobPart], { type: "image/png" }))
+          })
+        }),
+        renderResults(doc, result, {
+          selectedRows: new Set(selectedRowIds),
+          onRowSelect: (rowId: string) => applySelection([rowId], true)
+        })
+      )
     }
     /** Adopts `ids` as the selection: table highlight, viewer highlight, and (when it came from here) the shared bus. */
     const applySelection = (ids: ReadonlyArray<string>, publish: boolean) => {
@@ -265,8 +371,12 @@ export const mountQueryEditor = async (container: HTMLElement, opts: QueryEditor
       runBtn.disabled = true
       cancelBtn.disabled = false
       status.textContent = "running…"
+      clearNotices()
+      const source = model.getValue()
+      lastRunSource = source
       try {
-        const { result } = await runQuery(engineLayer, model.getValue())
+        const { result } = await runQuery(engineLayer, source)
+        store.record({ source, status: "ok", rows: result.stats.rowCount })
         currentResult = result
         features = overlayFeatures(result)
         await Effect.runPromise(setResultOverlay(layerId, result).pipe(Effect.provide(servicesLayer))).catch(() => {})
@@ -279,18 +389,20 @@ export const mountQueryEditor = async (container: HTMLElement, opts: QueryEditor
         err.dataset.testid = "error"
         err.textContent = e instanceof Error ? e.message : String(e)
         out.replaceChildren(err)
+        if (!(e instanceof Error && e.message === "Query cancelled.")) store.record({ source, status: "error", error: err.textContent ?? "" })
         status.textContent = "error"
         currentResult = null
       } finally {
         runBtn.disabled = false
         cancelBtn.disabled = true
+        panes.refresh()
       }
     }
     const cancel = () => void Effect.runPromise(Effect.gen(function* () { yield* (yield* QueryEngine).cancel }).pipe(Effect.provide(engineLayer)))
     runBtn.addEventListener("click", () => void run())
     cancelBtn.addEventListener("click", cancel)
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => void run())
-    return { dispose, editor, run, cancel, runner, ...(sidebar ? { sidebar } : {}) }
+    return { dispose, editor, run, cancel, runner, sidebar, store, shareUrl }
   } catch (e) {
     dispose()
     throw e

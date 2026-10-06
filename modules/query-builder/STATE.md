@@ -1,8 +1,8 @@
 # query-builder — state
 
-- **Status:** M4 done
+- **Status:** M5 done
 - **Version:** 0.0.0
-- **Current milestone:** M4 complete; next is M5 (see PLAN.md §6)
+- **Current milestone:** M5 complete; next is M6 (see PLAN.md §6)
 - **Last updated:** 2026-10-06
 
 ## Done
@@ -65,11 +65,17 @@ Also verified: library-class member completions with TSDoc signature, string-lit
   - **Friendly errors** (`engine/friendly.ts`, wired through `makeQueryEngine({ friendly })`): TS diagnostics get advice in front and the original in parentheses: unknown globals (`guardians` → `map.guardians`, near-miss names), misspelled members (nearest name on the owning class, `Seq` members included for `EntityList`), Array habits on sequences (`filter`→`where`, `map`→`select`, `length`→`count()` …), bad lane/position arguments, top-level `return`/`await`. A source lint warns on `withinTravelTime(<number>, …)` ("write `seconds(10)`"; `seconds` is the identity, so the type checker cannot catch it). Runtime messages for missing navmesh/spatial/semantics data and `undefined` reads are expanded; timeouts suggest narrowing the input.
   - **Tests:** every gallery query and every snippet (placeholders at their defaults) is type-checked against the library's types (`test/librarySource.ts` builds the catalog and checks types from library *source*, so unit tests never read `dist/`, which the library's own build rewrites); friendly-error rewrites run on real TypeScript messages; Chromium e2e covers docs search + insert, hover link, snippet completion, gallery load/run/undo and the advice in the error panel.
 
+- **M5** (`src/export/`, `src/share/`, `src/store/`, `src/ui/{exportBar,savedPanes,download}.ts`, panel wiring, `test/{exports,share,store}.test.ts`, e2e additions). Exports, share links, saved queries and history:
+  - **Exports** (`export/exports.ts`, export bar above the result): CSV, JSON, GeoJSON and annotations download as files; PNG saves `ViewerService.captureImage` (an empty image, e.g. the standalone viewer, shows an error notice instead of a file); Copy CSV / Copy JSON use the clipboard. CSV/JSON/GeoJSON reuse contracts `exportResult`. JSON is the `QueryResult` plus a `metadata` member; GeoJSON gets `metadata` as a foreign member; both carry `provisional`, `apiVersion`, `mapName`, `gameBuildId` and the query source. CSV has no room for metadata, so a provisional result is flagged in the file name (`query-result.provisional.csv`; same for every format). The annotation export is a contracts `AnnotationDocument` (one annotation per row and geometry column on layer `query-result`; points, polylines/segments, polygons; non-geometry cells as `properties`; ids made unique with `#n` when a row repeats an entity); checked with `validateAnnotationDocument` and decoded with the contracts schema in tests. PLAN §5.3's provisional banner/flag is plumbed end to end: the worker reports `map.provisional` with each result, the engine adds a "Provisional semantics: …" warning, exports read that warning. Nothing sets it today because the shell does not yet load a spatial backend; the flag is map-wide, so once placeholder semantics are loaded every result is marked, whether or not it used them.
+  - **Share links** (`share/shareLink.ts`): `#q=<deflate-raw + base64url source>&api=<apiVersion>` via the platform `CompressionStream` (no dependency). Decoding caps the inflated size (200 kB) so a tiny hostile fragment cannot expand; damaged links give a readable message. A link only fills the editor and shows "has not been run"; it never runs. `checkApiVersion` compares with the loaded library: different major → "incompatible", newer link → "may call functions that do not exist here", older → "should still run", missing → "unknown". The same check flags saved/imported queries. The Share button shows (and tries to copy) the URL; `shareBaseUrl` decides the page part (default: current origin+path+query), `initialShare` takes the fragment at mount (standalone passes `location.hash`).
+  - **Saved queries and history** (`store/queryStore.ts`, `store/dlqFile.ts`, Saved and History tabs): saved queries (named, replace by name, up to 200, 100k chars each) and the last 50 runs (newest first, an immediate repeat of the same source and outcome only refreshes its time) live in `localStorage` under one key, sanitised on read; storage that is missing, full or blocked degrades to memory. `.dlq.json` (`{kind:"deadlock-query", version:1, queries:[{name, source, apiVersion?}]}`, Effect Schema) imports/exports one or all queries. Loading from saved, history, gallery or a link is an editor edit (Ctrl+Z restores) and never runs.
+  - **Tests:** CSV is parsed back with an RFC 4180 reader and compared with the table; JSON decodes as `QueryResult`; annotations decode as `AnnotationDocument`; share links round-trip (unicode, 50 kB), reject damage and an inflate bomb; store limits and corrupt storage; Chromium e2e for the four downloads, the PNG message, share → reload (never runs, stale `api` warns), save/reload/load/import/export/delete and history.
+
 ## In progress
 - (nothing)
 
 ## Next
-- M5: exports (CSV/JSON/GeoJSON/annotation/PNG), share links with `apiVersion` warning, saved queries/history (PLAN.md §6). The docs sidebar already knows `apiVersion` (`DocIndex.apiVersion`) for the stale-link warning.
+- M6: perf/loading: lazy Monaco, caching, bundle-load progress, worker pool prep (PLAN.md §6).
 
 ## Blockers / Requests to other modules
 - contracts (nice to have): `SelectionBus` has no change stream, so the panel polls `current` every 250 ms. A `changes: Stream<ReadonlyArray<string>>` would remove the polling.
@@ -94,6 +100,9 @@ Also verified: library-class member completions with TSDoc signature, string-lit
 
 - 2026-10-06 — M4: the sidebar lives inside the embeddable panel (not separate shell panels `query.docs`/`query.gallery`), so the shell needs no change; split them out later only if the shell wants them docked. Gallery wall-pair query uses `sample.walls(600).take(300)` to bound the quadratic `pairs()`; the 2× ratio and spacing are proposals. Friendly-error rules are text matches on TypeScript's English messages (the TS worker's language is fixed), each unit-tested against real compiler output.
 - 2026-10-06 — M4: the starter gallery entry was added beyond the three PLAN.md queries so the gallery has one query that runs today on the fixture bundle.
+
+- 2026-10-06 — M5: the shell owns the page URL, so the panel takes `initialShare` (a fragment) and `shareBaseUrl` instead of reading `location` itself; the shell should pass `location.hash` at mount and, if it uses the hash for its own routing, a `shareBaseUrl` that makes the two coexist. Annotation, GeoJSON and PNG exports are included now although PLAN.md marks GeoJSON/annotation "Phase 2"; the contracts for them already exist. `captureImage` is the viewer's job; the panel does nothing beyond saving the bytes.
+- 2026-10-06 — M5: query files use their own envelope (`kind`/`version`) rather than a contracts schema, since contracts has none; if the shell or kanban ever needs to read `.dlq.json`, ask contracts to adopt `DlqFile`.
 
 ## Open questions
 - (see PLAN.md §9)

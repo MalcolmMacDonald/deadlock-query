@@ -8,5 +8,5 @@ const [library, bundle] = await Promise.all([
   fetch("bundle.json").then((r) => r.json())
 ])
 const host = makeStandaloneServices()
-const handle = await mountQueryEditor(document.getElementById("root")!, { library, bundle, viewer: host.viewer, selection: host.selection })
-;(self as any).__qb = { editor: handle.editor, run: handle.run, cancel: handle.cancel, runner: handle.runner, host }
+const handle = await mountQueryEditor(document.getElementById("root")!, { library, bundle, viewer: host.viewer, selection: host.selection, initialShare: location.hash })
+;(self as any).__qb = { editor: handle.editor, run: handle.run, cancel: handle.cancel, runner: handle.runner, store: handle.store, shareUrl: handle.shareUrl, host }
