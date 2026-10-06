@@ -1,4 +1,4 @@
-import { Layer } from "effect"
+import { Effect, Layer } from "effect"
 import type { ModuleDefinition } from "@deadlock-query/contracts"
 
 const Dummy = ({ name }: { name: string }) => (
@@ -21,5 +21,14 @@ export const dummyBeta: ModuleDefinition = {
   layer: Layer.empty,
   panels: [
     { id: "beta", title: "Beta", component: () => <Dummy name="Beta" />, defaultPlacement: "right" },
+  ],
+}
+
+/** Demonstrates per-module isolation: its Layer dies, so its panel renders as an error panel. */
+export const dummyBroken: ModuleDefinition = {
+  id: "dummy-broken",
+  layer: Layer.effectDiscard(Effect.die(new Error("dummy-broken failed to start"))),
+  panels: [
+    { id: "broken", title: "Broken", component: () => <Dummy name="Broken" />, defaultPlacement: "center" },
   ],
 }

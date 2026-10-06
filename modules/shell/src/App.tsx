@@ -1,18 +1,15 @@
+import type { PanelDefinition } from "@deadlock-query/contracts"
 import { DockviewReact, type DockviewReadyEvent, type IDockviewPanelProps } from "dockview"
 import "dockview/dist/styles/dockview.css"
-import type { FunctionComponent } from "react"
-import { useCallback } from "react"
+import { type FunctionComponent, useCallback, useEffect, useMemo, useState } from "react"
 import { loadLayout, resetLayout, saveLayout } from "./layout.ts"
 import { modules } from "./modules.ts"
-
-const panels = modules.flatMap((m) => m.panels)
-const components: Record<string, FunctionComponent<IDockviewPanelProps>> = Object.fromEntries(
-  panels.map((p) => [p.id, p.component as FunctionComponent<IDockviewPanelProps>]),
-)
+import { ErrorPanel, toDockviewComponent } from "./panels.tsx"
+import { composeModules, type Composition } from "./runtime.ts"
 
 const directions = { left: "left", right: "right", top: "above", bottom: "below", float: "within" } as const
 
-const addDefaults = (e: DockviewReadyEvent) => {
+const addDefaults = (e: DockviewReadyEvent, panels: ReadonlyArray<PanelDefinition>) => {
   let prev: string | undefined
   for (const p of panels) {
     const position =
@@ -25,6 +22,31 @@ const addDefaults = (e: DockviewReadyEvent) => {
 }
 
 export const App = () => {
+  const [composition, setComposition] = useState<Composition>()
+  const [fatal, setFatal] = useState<string>()
+  useEffect(() => {
+    composeModules(modules).then(setComposition, (e) => setFatal(String(e)))
+  }, [])
+  if (fatal) return <ErrorPanel moduleId="shell" message={fatal} />
+  if (!composition) return <div style={{ padding: 12 }}>Loading…</div>
+  return <Shell composition={composition} />
+}
+
+const Shell = ({ composition }: { composition: Composition }) => {
+  const panels = useMemo(() => modules.flatMap((m) => m.panels), [])
+  const components = useMemo(() => {
+    const failures = new Map(composition.failed.map((f) => [f.moduleId, f.message]))
+    const out: Record<string, FunctionComponent<IDockviewPanelProps>> = {}
+    for (const m of modules) {
+      const message = failures.get(m.id)
+      for (const p of m.panels) {
+        out[p.id] = message === undefined
+          ? toDockviewComponent(m.id, p)
+          : () => <ErrorPanel moduleId={m.id} message={message} />
+      }
+    }
+    return out
+  }, [composition])
   const onReady = useCallback((e: DockviewReadyEvent) => {
     const saved = loadLayout(localStorage)
     let restored = false
@@ -36,10 +58,10 @@ export const App = () => {
         e.api.clear()
       }
     }
-    if (!restored) addDefaults(e)
+    if (!restored) addDefaults(e, panels)
     e.api.onDidLayoutChange(() => saveLayout(localStorage, e.api.toJSON()))
     ;(window as unknown as { __dockview: unknown }).__dockview = e.api
-  }, [])
+  }, [panels])
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100vh" }}>

@@ -7,7 +7,7 @@
     "build": "vite build",
     "typecheck": "tsc -p .",
     "test": "bun test",
-    "e2e": "bun e2e/layout.ts",
+    "e2e": "bun e2e/layout.ts && bun e2e/isolation.ts",
     "verify": "bun run typecheck && bun run test && bun run build"
   },
   "dependencies": {
