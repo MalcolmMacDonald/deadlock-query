@@ -104,12 +104,12 @@ test.skipIf(!haveBrowser)("an oversize result is cut to the row cap with the rea
   expect((out as any).value.length).toBe(LIMITS.maxRows)
 }, 60_000)
 
-test.skipIf(!haveBrowser)("the results table only renders the first rows of a large result", async () => {
+test.skipIf(!haveBrowser)("the results table only renders one page of a large result", async () => {
   await page.evaluate(() => (self as any).__qb.editor.setValue("Array.from({ length: 5000 }, (_, i) => i)"))
   await page.click("#run")
   await page.waitForSelector("[data-testid=results-table] tbody tr", { timeout: 30_000 })
-  expect(await page.$$eval("[data-testid=results-table] tbody tr", (r) => r.length)).toBe(LIMITS.maxRenderedRows)
-  expect(await page.textContent("[data-testid=render-cap]")).toContain(`first ${LIMITS.maxRenderedRows} of 5000`)
+  expect(await page.$$eval("[data-testid=results-table] tbody tr", (r) => r.length)).toBe(100)
+  expect(await page.textContent("[data-testid=page-info]")).toContain("Rows 1–100 of 5000")
   expect(await page.textContent("[data-testid=stats]")).toMatch(/5000 rows/)
 }, 60_000)
 

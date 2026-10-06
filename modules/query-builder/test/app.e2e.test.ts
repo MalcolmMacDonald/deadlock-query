@@ -370,3 +370,173 @@ test.skipIf(!haveBrowser)("timings: editor ready and first suggestion", async ()
   expect(firstSuggestion).toBeLessThan(4_000)
   await page.close()
 }, 60_000)
+
+// M7: accessibility and polish.
+const rowsText = (page: Awaited<ReturnType<typeof open>>["page"]) => page.$$eval("[data-testid=results-table] tbody tr", (trs) => trs.map((tr) => (tr as HTMLTableRowElement).cells[0]!.textContent ?? ""))
+const runSource = async (page: Awaited<ReturnType<typeof open>>["page"], src: string) => {
+  await setSource(page, src)
+  await page.click("#run")
+  await page.waitForSelector("[data-testid=results-table] tbody tr", { timeout: 20_000 })
+}
+
+test.skipIf(!haveBrowser)("results table sorts, filters and pages without losing its place", async () => {
+  const { page, errors } = await open()
+  await runSource(page, "Array.from({ length: 250 }, (_, i) => [`r${(i * 37) % 250}`, i])")
+  expect(await rowsText(page)).toHaveLength(100)
+  expect(await page.textContent("[data-testid=page-info]")).toBe("Rows 1–100 of 250")
+  await page.click("[data-testid=page-next]")
+  expect(await page.textContent("[data-testid=page-info]")).toBe("Rows 101–200 of 250")
+  await page.selectOption("[data-testid=page-size]", "500")
+  expect(await rowsText(page)).toHaveLength(250)
+
+  // Sort: natural order on text, with aria-sort on the header; a second click reverses, a third clears.
+  await page.click("[data-testid=sort][data-col='0']")
+  expect(await page.getAttribute("th[aria-sort=ascending]", "aria-sort")).toBe("ascending")
+  expect((await rowsText(page)).slice(0, 3)).toEqual(["r0", "r1", "r2"])
+  await page.click("[data-testid=sort][data-col='0']")
+  expect((await rowsText(page))[0]).toBe("r249")
+  await page.click("[data-testid=sort][data-col='0']")
+  expect(await page.$("th[aria-sort=ascending], th[aria-sort=descending]")).toBeNull()
+  expect((await rowsText(page))[0]).toBe("r0") // query order: i = 0 → r0
+  expect(await page.evaluate(() => document.activeElement?.getAttribute("data-col"))).toBe("0") // focus stayed on the header
+
+  // Filter on the number column with a comparison, then on text.
+  await page.fill("[data-testid=filter][data-col='1']", ">=240")
+  await page.waitForFunction(() => document.querySelectorAll("[data-testid=results-table] tbody tr").length === 10)
+  expect(await page.textContent("[data-testid=page-info]")).toBe("Rows 1–10 of 10 (filtered from 250)")
+  await page.fill("[data-testid=filter][data-col='1']", "")
+  await page.fill("[data-testid=filter][data-col='0']", "r24")
+  await page.waitForFunction(() => document.querySelectorAll("[data-testid=results-table] tbody tr").length === 11)
+  await page.fill("[data-testid=filter][data-col='0']", "nothing matches this")
+  await page.waitForSelector("[data-testid=no-rows]:not([hidden])")
+  expect(await page.textContent("[data-testid=no-rows]")).toBe("No rows match the filters.")
+  expect(errors).toEqual([])
+  await page.close()
+}, 90_000)
+
+test.skipIf(!haveBrowser)("an empty result says so", async () => {
+  const { page } = await open()
+  await setSource(page, "[]")
+  await page.click("#run")
+  await page.waitForSelector("[data-testid=no-rows]:not([hidden])")
+  expect(await page.textContent("[data-testid=no-rows]")).toBe("The query returned no rows.")
+  await page.close()
+}, 60_000)
+
+test.skipIf(!haveBrowser)("the results table works from the keyboard and keeps selection across sorting", async () => {
+  const { page, errors } = await open()
+  await runSource(page, "map.guardians.select((g) => [g.id, g.position]).toArray()")
+  const first = await page.$eval("tbody tr", (tr) => (tr as HTMLElement).dataset.rowId)
+  // One Tab stop for the whole table: the first row is tabbable, the others are reachable with arrows.
+  expect(await page.$$eval("tbody tr[tabindex='0']", (r) => r.length)).toBe(1)
+  await page.focus("tbody tr[tabindex='0']")
+  await page.keyboard.press("ArrowDown")
+  expect(await page.evaluate(() => (document.activeElement as HTMLElement).dataset.rowId)).not.toBe(first)
+  await page.keyboard.press("Enter")
+  const selected = await page.evaluate(() => (document.activeElement as HTMLElement).dataset.rowId)
+  expect(await page.$$eval("tr.selected", (r) => r.map((x) => (x as HTMLElement).dataset.rowId))).toEqual([selected])
+  expect(await page.getAttribute("tr.selected", "aria-selected")).toBe("true")
+  // Selection reaches the shared bus like a click does.
+  expect(await page.evaluate(() => (self as any).__qb.host.log.highlights.at(-1)?.length)).toBeGreaterThan(0)
+  await page.keyboard.press("End")
+  await page.keyboard.press("Home")
+  expect(await page.evaluate(() => (document.activeElement as HTMLElement).dataset.rowId)).toBe(first)
+  // Sorting rebuilds the rows; the selected one stays marked.
+  await page.click("[data-testid=sort][data-col='0']")
+  expect(await page.$$eval("tr.selected", (r) => r.map((x) => (x as HTMLElement).dataset.rowId))).toEqual([selected])
+  expect(errors).toEqual([])
+  await page.close()
+}, 90_000)
+
+test.skipIf(!haveBrowser)("problems list summarises diagnostics and jumps to them", async () => {
+  const { page, errors } = await open()
+  expect(await page.textContent("[data-testid=problems-toggle]")).toBe("No problems")
+  await setSource(page, "map.guardians\n  .nope()\n  .toArray()")
+  await page.waitForFunction(() => /Problems: 1 error/.test(document.querySelector("[data-testid=problems-toggle]")?.textContent ?? ""), undefined, { timeout: 20_000 })
+  expect(await page.getAttribute("[data-testid=problems-toggle]", "aria-expanded")).toBe("false")
+  await page.click("[data-testid=problems-toggle]")
+  expect(await page.getAttribute("[data-testid=problems-toggle]", "aria-expanded")).toBe("true")
+  const text = await page.textContent("[data-testid=problem]")
+  expect(text).toMatch(/^Error at line 2, column \d+: .*nope/)
+  await page.click("[data-testid=problem]")
+  expect(await page.evaluate(() => (self as any).__qb.editor.getPosition().lineNumber)).toBe(2)
+  await setSource(page, "map.guardians.count()")
+  await page.waitForFunction(() => document.querySelector("[data-testid=problems-toggle]")?.textContent === "No problems", undefined, { timeout: 20_000 })
+  expect(errors).toEqual([])
+  await page.close()
+}, 60_000)
+
+test.skipIf(!haveBrowser)("Ctrl+M lets Tab leave the editor, and the sidebar is a keyboard-operable tab list", async () => {
+  const { page, errors } = await open()
+  // Without Ctrl+M, Tab stays in the editor (it indents).
+  await page.click(".monaco-editor")
+  await page.keyboard.press("Tab")
+  expect(await page.evaluate(() => !!document.activeElement?.closest(".monaco-editor"))).toBe(true)
+  await page.keyboard.press("Control+m")
+  await page.keyboard.press("Tab")
+  expect(await page.evaluate(() => !!document.activeElement?.closest(".monaco-editor"))).toBe(false)
+
+  await page.click("[data-testid=toggle-gallery]")
+  expect(await page.getAttribute("[data-testid=toggle-gallery]", "aria-expanded")).toBe("true")
+  expect(await page.getAttribute("[role=tablist]", "aria-label")).toBe("Sidebar sections")
+  expect(await page.$$eval("[role=tab]", (t) => t.map((x) => [x.textContent, x.getAttribute("aria-selected"), (x as HTMLElement).tabIndex]))).toEqual([
+    ["Docs", "false", -1], ["Gallery", "true", 0], ["Saved", "false", -1], ["History", "false", -1]
+  ])
+  await page.focus("[data-testid=tab-gallery]")
+  await page.keyboard.press("ArrowRight")
+  expect(await page.evaluate(() => document.activeElement?.id)).toBe("qb-tab-saved")
+  expect(await page.isVisible("[data-testid=saved-pane]")).toBe(true)
+  await page.keyboard.press("End")
+  expect(await page.evaluate(() => document.activeElement?.id)).toBe("qb-tab-history")
+  await page.keyboard.press("ArrowRight") // wraps around
+  expect(await page.evaluate(() => document.activeElement?.id)).toBe("qb-tab-docs")
+  expect(await page.getAttribute("[data-testid=docs-pane]", "role")).toBe("tabpanel")
+  expect(await page.getAttribute("[data-testid=docs-pane]", "aria-labelledby")).toBe("qb-tab-docs")
+
+  // Escape closes the sidebar and returns focus to the toggle that opened it.
+  await page.keyboard.press("Escape")
+  expect(await page.isVisible("[data-testid=sidebar]")).toBe(false)
+  expect(await page.evaluate(() => (document.activeElement as HTMLElement | null)?.dataset.testid)).toBe("toggle-docs")
+  expect(errors).toEqual([])
+  await page.close()
+}, 60_000)
+
+// A scripted audit of the rules that matter most for screen readers; it runs over every part of the panel that can be open.
+test.skipIf(!haveBrowser)("every control has an accessible name, ids are unique, and ARIA references resolve", async () => {
+  const { page, errors } = await open()
+  await runSource(page, "map.guardians.select((g) => [g.id, g.position]).toArray()")
+  await page.click("[data-testid=problems-toggle]")
+  const audit = () => page.evaluate(() => {
+    const root = document.querySelector(".dlq-qb")!
+    const name = (e: Element): string => {
+      const labelledby = e.getAttribute("aria-labelledby")
+      if (labelledby) return labelledby.split(/\s+/).map((id) => document.getElementById(id)?.textContent ?? "").join(" ").trim()
+      return (e.getAttribute("aria-label") ?? "").trim() || ((e as HTMLElement).innerText ?? e.textContent ?? "").trim() || (e.getAttribute("title") ?? "").trim() ||
+        ((e as HTMLInputElement).labels ? Array.from((e as HTMLInputElement).labels!).map((l) => l.textContent ?? "").join(" ").trim() : "")
+    }
+    const problems: string[] = []
+    const visible = (e: Element) => !!(e as HTMLElement).offsetParent || getComputedStyle(e).position === "fixed"
+    for (const e of Array.from(root.querySelectorAll("button, input, select, textarea, [role=button], [role=tab], [role=grid], [role=region]"))) {
+      if (!visible(e) || e.closest(".monaco-editor")) continue
+      if (!name(e)) problems.push(`no accessible name: <${e.tagName.toLowerCase()} ${e.getAttribute("data-testid") ?? e.className}>`)
+    }
+    const ids = Array.from(root.querySelectorAll("[id]")).map((e) => e.id)
+    for (const id of new Set(ids.filter((x, i) => ids.indexOf(x) !== i))) problems.push(`duplicate id ${id}`)
+    for (const e of Array.from(root.querySelectorAll("[aria-controls], [aria-labelledby]"))) {
+      for (const id of `${e.getAttribute("aria-controls") ?? ""} ${e.getAttribute("aria-labelledby") ?? ""}`.split(/\s+/).filter(Boolean)) if (!document.getElementById(id)) problems.push(`dangling reference ${id}`)
+    }
+    for (const t of Array.from(root.querySelectorAll("th")).filter((x) => x.getAttribute("role") === "columnheader" && x.scope === "col")) {
+      if (!t.hasAttribute("aria-sort")) problems.push("sortable header without aria-sort")
+    }
+    if (!root.querySelector("[role=status]")) problems.push("no live status region")
+    return problems
+  })
+  expect(await audit()).toEqual([])
+  for (const tab of ["docs", "gallery", "saved", "history"]) {
+    await page.click(`[data-testid=toggle-${tab}]`).catch(() => {})
+    if (!(await page.isVisible("[data-testid=sidebar]"))) await page.click(`[data-testid=toggle-${tab}]`)
+    expect({ tab, problems: await audit() }).toEqual({ tab, problems: [] })
+  }
+  expect(errors).toEqual([])
+  await page.close()
+}, 60_000)

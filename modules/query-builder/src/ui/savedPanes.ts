@@ -44,8 +44,10 @@ export const renderSavedPanes = (doc: Document, opts: SavedPanesOptions): SavedP
   const name = el(doc, "input")
   name.placeholder = "Name for the current query"
   name.dataset.testid = "saved-name"
+  name.setAttribute("aria-label", "Name for the current query")
   const status = el(doc, "div", "empty")
   status.dataset.testid = "saved-status"
+  status.setAttribute("role", "status")
   const say = (text: string) => { status.textContent = text }
   const fileInput = el(doc, "input")
   fileInput.type = "file"
@@ -95,6 +97,8 @@ export const renderSavedPanes = (doc: Document, opts: SavedPanesOptions): SavedP
       const card = el(doc, "div", "card")
       card.dataset.testid = "saved-item"
       card.dataset.name = s.name
+      card.setAttribute("role", "group")
+      card.setAttribute("aria-label", `Saved query ${s.name}`)
       card.append(el(doc, "strong", undefined, s.name), el(doc, "div", "needs", `${firstLine(s.source)} · ${when(s.savedAt)}`))
       const check = checkApiVersion(s.apiVersion, opts.apiVersion)
       if (check.kind !== "same") {
@@ -117,6 +121,8 @@ export const renderSavedPanes = (doc: Document, opts: SavedPanesOptions): SavedP
     for (const h of runs) {
       const card = el(doc, "div", "card")
       card.dataset.testid = "history-item"
+      card.setAttribute("role", "group")
+      card.setAttribute("aria-label", `${when(h.at)}: ${h.status === "ok" ? `${h.rows ?? 0} rows` : "error"}`)
       card.append(
         el(doc, "strong", undefined, h.status === "ok" ? `${h.rows ?? 0} rows` : "Error"),
         el(doc, "div", "needs", when(h.at)),

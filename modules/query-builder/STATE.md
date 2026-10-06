@@ -1,8 +1,8 @@
 # query-builder — state
 
-- **Status:** M6 done (real-data parts deferred, see below)
+- **Status:** M7 done (real-data parts of M6 still deferred, see below)
 - **Version:** 0.0.0
-- **Current milestone:** M6 complete; next is M7 (see PLAN.md §6)
+- **Current milestone:** all of PLAN.md §6 done except the real-data leftovers; see Next
 - **Last updated:** 2026-10-06
 
 ## Done
@@ -80,15 +80,26 @@ Also verified: library-class member completions with TSDoc signature, string-lit
   - **Index API change:** `buildExport` / `resultToAnnotations` are no longer exported from the entry (they pull in Effect/contracts, ~1 MB, which would defeat the lazy split); the panel uses them internally. `fetchLibraryArtifact` returns a progress-reporting `Loadable` rather than a promise; the shell passes it straight to `makeQueryEditorPanel`, which is unchanged for callers.
   - **Not done (needs the real map, or a decision):** transferring the real bundle's large buffers (collision BVH, navmesh, sample grid) to the sandbox worker without copying: the shape of those buffers in the loaded bundle is not settled and there is no real bundle to measure, so `SandboxRunner.load` still structured-clones `{manifest, entities}` (fine for the entity JSON; revisit with real data, ideally transfer `ArrayBuffer`s parent → frame → worker and keep the replay-on-respawn). Loading `NavMesh.load`/spatial backends in the worker (query-library "Blockers") belongs with it. Worker pool: kept as a seam only (`Runner` is an interface; one worker per frame today); a pool needs SharedArrayBuffer for the map data (COOP/COEP on Pages, `coi-serviceworker`) and real query timings to size it, so it waits for Phase 3 and real data. The library-artifact cache across visits is left to HTTP caching (the shell controls the headers); only in-page memoisation is implemented.
 
+- **M7** (`src/results/`, `src/ui/{problems,styles}.ts`, sidebar/saved panes/panel changes, `test/{tableModel,contrast}.test.ts`, e2e additions). Accessibility and polish. **Checklist** (PLAN.md §5.4; each line names the test that guards it):
+  - [x] **Results table: sort, filter, paging** (`results/tableModel.ts`, `results/resultsTable.ts`; replaces the 2,000-row cap). Click a header to sort (ascending, descending, off; natural order on text, numeric on numbers, blanks last, stable), a filter box per column (case-insensitive contains; `>5`, `<=3`, `=4` on number columns), pages of 50/100/200/500 (default 100) with "Rows a–b of n (filtered from m)". 100 000 rows sort in well under 3 s and filter in under 0.5 s (`tableModel.test.ts`, runs in CI). Sorting/filtering/paging rebuild only the rows; focus stays on the header; selection marks survive (`app.e2e`). Large results are still all in memory (exports and the overlay use every row); only the page is in the DOM, so no virtual scrolling is needed.
+  - [x] **Keyboard-only operable.** Run (Ctrl+Enter, `aria-keyshortcuts`), cancel, share, sidebar toggles, problems, sort/filter/paging controls are real buttons/inputs in tab order. The table is one Tab stop (roving tabindex): Up/Down/Home/End move between rows, Enter or Space selects (publishes to the viewer like a click), PageUp/PageDown change page. Monaco's Tab-trap is escapable with **Ctrl+M** (the `toggleTabFocusMode` contribution was added back; announced in the editor's aria label). The sidebar is a real tab list (arrow keys, Home/End, wrap-around; Escape closes it and returns focus to the toggle that opened it). A "Keys" button lists all shortcuts. (`app.e2e`: Ctrl+M, tab list, table keyboard.)
+  - [x] **Problems list.** A header button summarises diagnostics ("Problems: 1 error, 2 warnings", coloured, `aria-expanded`) and opens a list; each entry jumps to its position in the editor. Checked once at mount and 300 ms after edits (`problems.ts`, `app.e2e`).
+  - [x] **Screen-reader semantics.** Results are `role="grid"` with `aria-sort`, `aria-selected`, `aria-rowcount/rowindex`; regions are labelled (editor, problems, results); status text, page info and saved-pane messages are live regions; notices are `role="status"` (errors `role="alert"`); sidebar panes are `tabpanel`s tied to their tabs; every card is a labelled group. `app.e2e` runs a scripted audit over every sidebar tab: every visible control has an accessible name, ids are unique, `aria-controls/labelledby` resolve, sortable headers carry `aria-sort`.
+  - [x] **Dark theme and contrast.** `color-scheme: dark`, explicit control styling matching the editor (`ui/styles.ts`). `contrast.test.ts` (CI) checks every text/background pair the stylesheet uses against WCAG AA 4.5:1 and the focus ring against 3:1. Not checked against the shell's own palette: the shell has no shared theme tokens yet (see Requests).
+  - [x] **Focus, forced colours, reduced motion.** `:focus-visible` ring on every control; `forced-colors` outlines selected rows and focus; `prefers-reduced-motion` disables transitions (the only motion is the browser's indeterminate `<progress>`).
+  - [x] **Empty and edge states.** "The query returned no rows.", "No rows match the filters.", filters show their count, long cells get a tooltip, numbers right-align with tabular figures.
+  - [ ] **Not done:** manual testing with a real screen reader (NVDA/VoiceOver/JAWS): only the structure above is verified automatically. Parameter-name inlay hints in the editor (PLAN §5.1; the contribution is loaded but the TS option is not switched on, and the effect on suggestions/legibility wants a look at real queries). A row selected from the viewer on another page of the table is marked but not scrolled into view (the table does not jump pages). Column resizing/reordering, per-column colour/size for the map overlay (PLAN §5.3 "coloured/sized by a user-chosen column") and pinned result layers were never in M0–M7 scope above and remain open (they need the real viewer's overlay styling API).
+
 ## In progress
 - (nothing)
 
 ## Next
-- M7: accessibility and polish (PLAN.md §6). Then, with real data: buffer transfer to the worker, worker pool, real-network load numbers (M6 leftovers above).
+- With real data: buffer transfer to the worker, `NavMesh`/spatial loading in the worker, worker pool, real-network load numbers (M6 leftovers above); gallery queries 1-3 on the real map; the PLAN.md §10 definition-of-done check ("the three PLAN.md queries run on the real map").
+- Open from M7: real screen-reader pass, inlay hints, overlay styling by column, pinned result layers (see the M7 checklist).
 
 ## Blockers / Requests to other modules
 - contracts (nice to have): `SelectionBus` has no change stream, so the panel polls `current` every 250 ms. A `changes: Stream<ReadonlyArray<string>>` would remove the polling.
-- shell (nice to have): call `qb.prefetchQueryEditor({ getWorkerUrl })` when idle, and pass `qb.fetchQueryBundle(url)` instead of its own promise so the Map data step shows a progress bar.
+- shell (nice to have): expose shared theme tokens (colours) so the panel can match the shell instead of hard-coding the editor-dark palette; call `qb.prefetchQueryEditor({ getWorkerUrl })` when idle, and pass `qb.fetchQueryBundle(url)` instead of its own promise so the Map data step shows a progress bar.
 
 ## Decisions log
 - 2026-10-05 — Module scaffolded (rev 2 of IMPLEMENTATION_PLAN.md).
@@ -114,6 +125,8 @@ Also verified: library-class member completions with TSDoc signature, string-lit
 - 2026-10-06 — M5: query files use their own envelope (`kind`/`version`) rather than a contracts schema, since contracts has none; if the shell or kanban ever needs to read `.dlq.json`, ask contracts to adopt `DlqFile`.
 
 - 2026-10-06 — M6: the lazy split lives inside the package (loader vs. panel) so every consumer, including the shell's existing `await import("@deadlock-query/query-builder")`, gets a loading view for free and the shell needs no change. Monaco features are an allowlist rather than `editor.all.js`; unlisted features simply do not exist, so check `monacoContributions.ts` first when a Monaco feature seems missing.
+
+- 2026-10-06 — M7: paging replaced the render cap instead of virtual scrolling. At most 500 rows are in the DOM, which keeps every row a real, focusable, labelled element (virtual scrolling would break row-by-row screen-reader and keyboard navigation) and removes the need for a scroll container hack; `LIMITS.maxRenderedRows` is gone. Filtering matches the displayed text (numbers rounded to 3 places, geometry as its JSON).
 
 ## Open questions
 - (see PLAN.md §9)
