@@ -37,15 +37,15 @@ test("OverlayScene: set/remove/highlight manage objects; 10k points is one draw 
   s.set("pts", pts, { color: "#ff0000", size: 4 })
   expect(performance.now() - t0).toBeLessThan(500)
   expect(s.layerIds).toEqual(["pts"])
-  expect(s.root.children.length).toBe(2) // highlight group + layer group
-  expect(s.root.children[1]!.children.length).toBe(1) // one Points draw call for 10k points
+  expect(s.root.children.length).toBe(3) // highlight group + draft group + layer group
+  expect(s.root.children[2]!.children.length).toBe(1) // one Points draw call for 10k points
   expect(s.root.children[0]!.children.length).toBe(0)
   s.highlight(["pts:5", "missing:0"])
   expect(s.root.children[0]!.children.length).toBe(1)
   s.remove("pts")
   expect(s.layerIds).toEqual([])
   expect(s.root.children[0]!.children.length).toBe(0)
-  expect(s.root.children.length).toBe(1)
+  expect(s.root.children.length).toBe(2)
   expect(changes).toBe(3)
 })
 
@@ -68,6 +68,7 @@ test("ViewerService: overlays set before a panel mounts replay on attach; camera
   c.attach({
     setOverlay: (id) => calls.push(`set:${id}`), removeOverlay: (id) => calls.push(`rm:${id}`),
     highlight: (ids) => calls.push(`hl:${ids}`), getPose: () => ({ target: [9, 9, 9], yaw: 0, pitch: 0, distance: 1 }),
+    setAppearance: () => {}, setDraft: () => {},
     setPose: () => {}, capture: async () => new Uint8Array([1]), loadBundle: async () => {}
   })
   expect(calls).toEqual(["set:a", "hl:a:0"])

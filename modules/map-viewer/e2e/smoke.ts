@@ -1,4 +1,4 @@
-/** Playwright smoke: load fixture, pan/zoom/orbit/fly, reload restores camera. Run: `bun run test:e2e`. */
+/** Playwright smoke: load fixture, pan/zoom/orbit/fly, reload restores camera, overlays, annotation tools + layers panel. Run: `bun run test:e2e`. */
 import { chromium } from "playwright-core"
 import { join } from "node:path"
 
@@ -131,6 +131,55 @@ try {
     return bytes[0] === 0x89 && bytes[1] === 0x50
   })
   if (!pngOk) fail("capture is not a PNG")
+  // M3: draw with the line tool, undo/redo, layers panel visibility, measure.
+  await page.evaluate(() => { const v = (globalThis as any).__viewer; v.removeOverlay("perf"); v.removeOverlay("marker"); v.highlight([]) })
+  const annotationCount = () => page.evaluate(() => (globalThis as any).__viewer.annotations.annotations.length as number)
+  const orange = () => page.evaluate(() => {
+    const c = document.querySelector("canvas")!
+    const d = document.createElement("canvas"); d.width = c.width; d.height = c.height
+    const ctx = d.getContext("2d")!; ctx.drawImage(c, 0, 0)
+    const px = ctx.getImageData(0, 0, d.width, d.height).data
+    let n = 0
+    for (let i = 0; i < px.length; i += 4) if (px[i]! - px[i + 2]! > 35 && px[i]! > px[i + 1]!) n++
+    return n
+  })
+  await settle()
+  const base = await orange() // warm-coloured entity markers are always in the frame
+  await page.click('[data-testid="viewer-tools"] button[data-tool="polyline"]')
+  await page.mouse.click(350, 250)
+  await page.mouse.click(550, 250)
+  await page.mouse.click(550, 400)
+  await page.keyboard.press("Enter")
+  await settle()
+  if ((await annotationCount()) !== 1) fail(`polyline not committed (${await annotationCount()})`)
+  const lineRow = page.locator('[data-testid="viewer-layers"] [data-layer="ann.lines"]')
+  if ((await lineRow.count()) !== 1) fail("annotation layer missing from layers panel")
+  if ((await orange()) - base < 100) fail(`drawn polyline not visible (${(await orange()) - base} px)`)
+  await lineRow.locator('input[data-role="visible"]').uncheck()
+  await settle()
+  if ((await orange()) - base > 20) fail("hiding the layer did not hide the polyline")
+  await lineRow.locator('input[data-role="visible"]').check()
+  await settle()
+  if ((await orange()) - base < 100) fail("showing the layer did not restore the polyline")
+  await canvas.focus()
+  await page.keyboard.press("Control+z")
+  await settle()
+  if ((await annotationCount()) !== 0) fail("undo did not remove the polyline")
+  if ((await orange()) - base > 20) fail("undo left the polyline drawn")
+  await page.click('[data-testid="viewer-tools"] button[data-action="redo"]')
+  await settle()
+  if ((await annotationCount()) !== 1 || (await orange()) - base < 100) fail("redo did not restore the polyline")
+  await page.click('[data-testid="viewer-tools"] button[data-tool="measure"]')
+  await page.mouse.click(300, 450)
+  await page.mouse.click(500, 450)
+  await settle()
+  const annotations = (await page.evaluate(() => (globalThis as any).__viewer.annotations.annotations)) as Array<{ kind: string }>
+  if (annotations.map((a) => a.kind).join() !== "polyline,measure") fail(`unexpected annotations ${JSON.stringify(annotations.map((a) => a.kind))}`)
+  await page.click('[data-testid="viewer-tools"] button[data-tool="select"]')
+  await page.click('[data-testid="viewer-tools"] button[data-annotation]:has-text("polyline")')
+  await page.click('[data-testid="viewer-tools"] button[data-action="delete"]')
+  await settle()
+  if ((await annotationCount()) !== 1) fail("delete did not remove the selected polyline")
   if (errors.length) fail(errors.join("; "))
   console.log("map-viewer e2e smoke: ok")
 } finally {

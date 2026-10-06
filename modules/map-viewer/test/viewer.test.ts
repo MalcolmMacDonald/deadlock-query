@@ -3,12 +3,12 @@ import { Effect } from "effect"
 import { MockMapDataService } from "@deadlock-query/contracts"
 import { boundsOf, fitTopDown, loadViewerData, makeViewerModule, VIEWER_PANEL_ID } from "../src/index.ts"
 
-test("module exposes the viewer.main panel backed by the mock MapDataService", async () => {
+test("module exposes the viewer panels backed by the mock MapDataService", async () => {
   const data = await Effect.runPromise(loadViewerData.pipe(Effect.provide(MockMapDataService)))
   expect(data.entities.length).toBeGreaterThan(0)
   const mod = makeViewerModule(data)
   expect(mod.id).toBe("map-viewer")
-  expect(mod.panels.map((p) => p.id)).toEqual([VIEWER_PANEL_ID])
+  expect(mod.panels.map((p) => p.id)).toEqual([VIEWER_PANEL_ID, "viewer.layers", "viewer.tools"])
   expect(typeof (mod.panels[0]!.component as { mount: unknown }).mount).toBe("function")
 })
 

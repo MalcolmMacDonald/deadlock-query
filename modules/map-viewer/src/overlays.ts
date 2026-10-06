@@ -1,6 +1,8 @@
 import * as THREE from "three"
 import type { OverlayFeature, OverlayStyle, Vec3 } from "@deadlock-query/contracts"
 import { WORLD_TO_THREE } from "./scene.ts"
+import { DRAFT_COLOR } from "./tools.ts"
+import { DEFAULT_APPEARANCE, type LayerAppearance } from "./layers.ts"
 
 export const DEFAULT_COLOR = "#ffcc00"
 export const DEFAULT_SIZE = 6
@@ -145,18 +147,24 @@ export const buildFeatureObjects = (
 export class OverlayScene {
   readonly root = new THREE.Group()
   private readonly layers = new Map<string, OverlayLayerData & { readonly group: THREE.Group }>()
+  private readonly appearances = new Map<string, LayerAppearance>()
   private readonly highlightGroup = new THREE.Group()
+  private readonly draftGroup = new THREE.Group()
   private highlighted: ReadonlyArray<string> = []
 
   constructor(private readonly onChange: () => void = () => {}) {
     this.root.matrixAutoUpdate = false
     this.root.matrix.fromArray([...WORLD_TO_THREE])
     this.root.add(this.highlightGroup)
-    this.highlightGroup.renderOrder = 20
+    this.root.add(this.draftGroup)
   }
 
   get layerIds(): ReadonlyArray<string> { return [...this.layers.keys()] }
-  layerData(): Iterable<readonly [string, OverlayLayerData]> { return this.layers.entries() }
+  /** Visible layers in draw order (bottom to top); hidden layers cannot be picked. */
+  layerData(): Iterable<readonly [string, OverlayLayerData]> {
+    return [...this.layers.entries()].filter(([id]) => this.appearance(id).visible)
+  }
+  private appearance(id: string): LayerAppearance { return this.appearances.get(id) ?? DEFAULT_APPEARANCE }
   feature(id: string): OverlayFeature | undefined {
     const p = parseFeatureId(id)
     return p ? this.layers.get(p.layerId)?.features[p.index] : undefined
@@ -165,17 +173,48 @@ export class OverlayScene {
   set(layerId: string, features: ReadonlyArray<Vec3> | ReadonlyArray<OverlayFeature>, style: OverlayStyle = {}) {
     this.dropGroup(layerId)
     const norm = normalizeFeatures(features)
-    const group = new THREE.Group()
-    for (const o of buildFeatureObjects(norm, style)) group.add(o)
-    this.root.add(group)
-    this.layers.set(layerId, { features: norm, style, group })
+    this.layers.set(layerId, { features: norm, style, group: this.buildGroup(layerId, norm, style) })
     this.rebuildHighlight()
     this.onChange()
+  }
+
+  /** Visibility, opacity, colour override and draw order for a layer; applies now or when the layer is set. */
+  setAppearance(layerId: string, a: LayerAppearance) {
+    this.appearances.set(layerId, a)
+    const l = this.layers.get(layerId)
+    if (!l) return
+    this.dropGroup(layerId)
+    this.layers.set(layerId, { ...l, group: this.buildGroup(layerId, l.features, l.style) })
+    this.rebuildHighlight()
+    this.onChange()
+  }
+
+  /** Transient preview geometry (tool rubber band); not a layer, never picked. */
+  setDraft(features: ReadonlyArray<OverlayFeature>) {
+    disposeTree(this.draftGroup)
+    this.draftGroup.clear()
+    for (const o of buildFeatureObjects(features, { color: DRAFT_COLOR, size: 8 })) { o.renderOrder = 15; this.draftGroup.add(o) }
+    this.onChange()
+  }
+
+  private buildGroup(layerId: string, features: ReadonlyArray<OverlayFeature>, style: OverlayStyle): THREE.Group {
+    const a = this.appearance(layerId)
+    const group = new THREE.Group()
+    group.visible = a.visible
+    // Layer order only ranks layers against each other; it stays below the draft (15) and highlight (20) passes.
+    const rank = 10 + Math.min(Math.max(a.order, 0), 1000) * 0.004
+    for (const o of buildFeatureObjects(features, a.color ? { ...style, color: a.color } : style, { opacity: a.opacity })) {
+      o.renderOrder = rank
+      group.add(o)
+    }
+    this.root.add(group)
+    return group
   }
 
   remove(layerId: string) {
     this.dropGroup(layerId)
     this.layers.delete(layerId)
+    this.appearances.delete(layerId)
     this.rebuildHighlight()
     this.onChange()
   }
@@ -189,6 +228,7 @@ export class OverlayScene {
   dispose() {
     for (const id of [...this.layers.keys()]) this.dropGroup(id)
     this.clearHighlight()
+    disposeTree(this.draftGroup)
   }
 
   private dropGroup(layerId: string) {
@@ -209,11 +249,11 @@ export class OverlayScene {
     let size = DEFAULT_SIZE
     for (const id of this.highlighted) {
       const f = this.feature(id)
-      if (!f) continue
+      if (!f || !this.appearance(parseFeatureId(id)!.layerId).visible) continue
       feats.push(f)
       size = Math.max(size, (this.layers.get(parseFeatureId(id)!.layerId)!.style.size ?? DEFAULT_SIZE))
     }
-    for (const o of buildFeatureObjects(feats, { color: HIGHLIGHT_COLOR, size: size * 1.8 })) this.highlightGroup.add(o)
+    for (const o of buildFeatureObjects(feats, { color: HIGHLIGHT_COLOR, size: size * 1.8 })) { o.renderOrder = 20; this.highlightGroup.add(o) }
   }
 }
 
