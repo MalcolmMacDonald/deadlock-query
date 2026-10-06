@@ -1,5 +1,6 @@
-import { Triangle, Vector3 } from "three"
 import type { Vec3 } from "@deadlock-query/contracts"
+import { funnelPath, type Portal } from "./funnel.ts"
+import { NavIndex } from "./navIndex.ts"
 
 /** Convex polygon soup in world space (Z-up). Polygon `i` uses `indices[offsets[i]..offsets[i+1])`. */
 export interface NavMeshData {
@@ -22,13 +23,20 @@ export interface NavOverrides {
   readonly costMultipliers?: Readonly<Record<number, number>>
 }
 export interface NearestPoint { readonly point: Vec3; readonly poly: number; readonly distance: number }
-export interface NavPath { readonly points: Vec3[]; readonly polys: number[]; readonly cost: number }
+export interface NavPath {
+  /** From → to. Funnel-smoothed (bends only at polygon corners and link ends) unless `smooth: false`. */
+  readonly points: Vec3[]
+  readonly polys: number[]
+  /** Travel time over the polygon graph (centroid hops); identical to `distanceField` costs, whatever `smooth` says. */
+  readonly cost: number
+}
 export interface DistanceField {
   /** Cost (seconds under the model) at the polygon containing/nearest `p`; Infinity if unreachable. */
   costAt(p: Vec3, maxSnap?: number): number
   readonly costs: Float64Array
 }
 
+const indexes = new WeakMap<NavMeshData, NavIndex>()
 const MAGIC = 0x314d564e // "NVM1"
 
 class Heap {
@@ -65,7 +73,7 @@ class Heap {
 const dist = (a: Vec3, b: Vec3) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2])
 
 type Edge = { to: number; a: number; b: number } // shared edge vertex indices
-type LinkEdge = { to: number; kind: string; len: number }
+type LinkEdge = { to: number; kind: string; len: number; from3: Vec3; to3: Vec3 }
 
 export class NavMesh {
   readonly polyCount: number
@@ -107,8 +115,8 @@ export class NavMesh {
       const a = this.nearestPoly(l.from), b = this.nearestPoly(l.to)
       if (a < 0 || b < 0) continue
       const len = dist(l.from, l.to)
-      this.links[a]!.push({ to: b, kind: l.kind, len })
-      if (l.bidirectional ?? true) this.links[b]!.push({ to: a, kind: l.kind, len })
+      this.links[a]!.push({ to: b, kind: l.kind, len, from3: l.from, to3: l.to })
+      if (l.bidirectional ?? true) this.links[b]!.push({ to: a, kind: l.kind, len, from3: l.to, to3: l.from })
     }
   }
 
@@ -121,34 +129,22 @@ export class NavMesh {
 
   private nearestPoly(p: Vec3): number { return this.nearestPoint(p)?.poly ?? -1 }
 
+  /** Closest point on the mesh (any polygon), via an XY grid index built on first use and shared by `withOverrides` copies. */
   nearestPoint(p: Vec3, opts: { maxDist?: number } = {}): NearestPoint | null {
-    const { vertices: V, offsets: O, indices: I } = this.data
-    const tri = new Triangle(), t = new Vector3(), q = new Vector3(p[0], p[1], p[2]), best = new Vector3()
-    let bd = Infinity, bp = -1
-    for (let poly = 0; poly < this.polyCount; poly++) {
-      const s = O[poly]!, e = O[poly + 1]!
-      const v0 = I[s]! * 3
-      for (let k = s + 1; k + 1 < e; k++) {
-        const v1 = I[k]! * 3, v2 = I[k + 1]! * 3
-        tri.a.fromArray(V, v0); tri.b.fromArray(V, v1); tri.c.fromArray(V, v2)
-        tri.closestPointToPoint(q, t)
-        const d = t.distanceTo(q)
-        if (d < bd) { bd = d; bp = poly; best.copy(t) }
-      }
-    }
-    if (bp < 0 || bd > (opts.maxDist ?? Infinity)) return null
-    return { point: [best.x, best.y, best.z], poly: bp, distance: bd }
+    let ix = indexes.get(this.data)
+    if (!ix) indexes.set(this.data, (ix = new NavIndex(this.data)))
+    return ix.nearest(p, opts.maxDist)
   }
 
   private edgeCost(from: number, to: number, speed: number): number {
     return (dist(this.centroid(from), this.centroid(to)) * this.mult[to]!) / speed
   }
 
-  private neighbours(p: number, m: MovementModel, f: (to: number, cost: number) => void) {
+  private neighbours(p: number, m: MovementModel, f: (to: number, cost: number, link?: LinkEdge) => void) {
     for (const e of this.adj[p]!) if (!this.blocked[e.to]) f(e.to, this.edgeCost(p, e.to, m.speed))
     for (const l of this.links[p]!) {
       const sp = m.linkSpeeds?.[l.kind]
-      if (sp && !this.blocked[l.to]) f(l.to, (l.len * this.mult[l.to]!) / sp)
+      if (sp && !this.blocked[l.to]) f(l.to, (l.len * this.mult[l.to]!) / sp, l)
     }
   }
 
@@ -178,12 +174,16 @@ export class NavMesh {
     } }
   }
 
-  /** A* over polygons; points run from → shared-edge midpoints → to (no funnel smoothing). */
-  findPath(from: Vec3, to: Vec3, model: MovementModel, opts?: { signal?: AbortSignal }): NavPath | null {
+  /**
+   * A* over polygons. `points` are funnel-smoothed by default; `smooth: false` gives from → shared-edge
+   * midpoints → to. Smoothing ignores agent radius (corners sit on polygon vertices).
+   */
+  findPath(from: Vec3, to: Vec3, model: MovementModel, opts?: { signal?: AbortSignal; smooth?: boolean }): NavPath | null {
     if (opts?.signal?.aborted) throw new DOMException("aborted", "AbortError")
     const a = this.nearestPoly(from), b = this.nearestPoly(to)
     if (a < 0 || b < 0 || this.blocked[a] || this.blocked[b]) return null
     const g = new Float64Array(this.polyCount).fill(Infinity), prev = new Int32Array(this.polyCount).fill(-1)
+    const via: (LinkEdge | undefined)[] = new Array(this.polyCount)
     const goal = this.centroid(b), h = new Heap()
     const hf = (p: number) => dist(this.centroid(p), goal) / Math.max(model.speed, ...Object.values(model.linkSpeeds ?? {}))
     g[a] = 0; h.push(hf(a), a)
@@ -191,23 +191,58 @@ export class NavMesh {
       if (opts?.signal?.aborted) throw new DOMException("aborted", "AbortError")
       const [, p] = h.pop()
       if (p === b) break
-      this.neighbours(p, model, (n, w) => {
-        if (g[p]! + w < g[n]!) { g[n] = g[p]! + w; prev[n] = p; h.push(g[n]! + hf(n), n) }
+      this.neighbours(p, model, (n, w, link) => {
+        if (g[p]! + w < g[n]!) { g[n] = g[p]! + w; prev[n] = p; via[n] = link; h.push(g[n]! + hf(n), n) }
       })
     }
     if (!Number.isFinite(g[b]!)) return null
     const polys: number[] = []
     for (let p = b; p >= 0; p = prev[p]!) polys.push(p)
     polys.reverse()
-    const points: Vec3[] = [from]
+    const points = opts?.smooth === false ? this.midpointRoute(from, to, polys, via) : this.funnelRoute(from, to, polys, via)
+    return { points, polys, cost: g[b]! }
+  }
+
+  private edgeMidpoint(a: number, b: number): Vec3 {
     const V = this.data.vertices
+    return [(V[a * 3]! + V[b * 3]!) / 2, (V[a * 3 + 1]! + V[b * 3 + 1]!) / 2, (V[a * 3 + 2]! + V[b * 3 + 2]!) / 2]
+  }
+
+  private midpointRoute(from: Vec3, to: Vec3, polys: readonly number[], via: readonly (LinkEdge | undefined)[]): Vec3[] {
+    const points: Vec3[] = [from]
     for (let i = 0; i + 1 < polys.length; i++) {
-      const e = this.adj[polys[i]!]!.find((x) => x.to === polys[i + 1])
-      if (e) points.push([(V[e.a * 3]! + V[e.b * 3]!) / 2, (V[e.a * 3 + 1]! + V[e.b * 3 + 1]!) / 2, (V[e.a * 3 + 2]! + V[e.b * 3 + 2]!) / 2])
-      else points.push(this.centroid(polys[i + 1]!)) // off-mesh link
+      const link = via[polys[i + 1]!]
+      if (link) points.push(link.from3, link.to3)
+      else {
+        const e = this.adj[polys[i]!]!.find((x) => x.to === polys[i + 1])!
+        points.push(this.edgeMidpoint(e.a, e.b))
+      }
     }
     points.push(to)
-    return { points, polys, cost: g[b]! }
+    return points
+  }
+
+  /** Funnel each stretch of polygons between off-mesh links; a link contributes its two end points. */
+  private funnelRoute(from: Vec3, to: Vec3, polys: readonly number[], via: readonly (LinkEdge | undefined)[]): Vec3[] {
+    const V = this.data.vertices
+    const out: Vec3[] = []
+    let start = from, portals: Portal[] = []
+    for (let i = 0; i + 1 < polys.length; i++) {
+      const link = via[polys[i + 1]!]
+      if (link) {
+        out.push(...funnelPath(start, link.from3, portals))
+        start = link.to3; portals = []
+        continue
+      }
+      const e = this.adj[polys[i]!]!.find((x) => x.to === polys[i + 1])!
+      const c = this.centroid(polys[i]!), m = this.edgeMidpoint(e.a, e.b)
+      const A: Vec3 = [V[e.a * 3]!, V[e.a * 3 + 1]!, V[e.a * 3 + 2]!], B: Vec3 = [V[e.b * 3]!, V[e.b * 3 + 1]!, V[e.b * 3 + 2]!]
+      // Left of the travel direction (centroid → edge midpoint) is counter-clockwise in XY.
+      const side = (m[0] - c[0]) * (A[1] - c[1]) - (m[1] - c[1]) * (A[0] - c[0])
+      portals.push(side > 0 ? [A, B] : [B, A])
+    }
+    out.push(...funnelPath(start, to, portals))
+    return out.filter((p, i) => i === 0 || p[0] !== out[i - 1]![0] || p[1] !== out[i - 1]![1] || p[2] !== out[i - 1]![2])
   }
 
   /** Header (magic, vertexCount, polyCount, indexCount, linkCount), vertices, offsets, indices, links (6 f32 + kind id + flags). */
