@@ -34,7 +34,8 @@ export const makeStandaloneServices = () => {
     removeOverlay: (layerId) => Effect.sync(() => void log.overlays.delete(layerId)),
     highlight: (ids) => Effect.sync(() => void log.highlights.push(ids)),
     events: Stream.fromAsyncIterable(events.iterable, (e) => new Error(String(e))).pipe(Stream.orDie),
-    captureImage: Effect.succeed(new Uint8Array())
+    captureImage: Effect.succeed(new Uint8Array()),
+    registerTool: () => Effect.succeed(() => {})
   }
   const selection: SelectionBusShape = {
     select: (ids) => Effect.sync(() => void (selected = ids)),
