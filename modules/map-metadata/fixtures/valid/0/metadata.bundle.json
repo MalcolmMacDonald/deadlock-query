@@ -1,0 +1,226 @@
+{
+  "schemaVersion": "1.0.0",
+  "gameBuildId": "0",
+  "mapName": "mini_map",
+  "contentHash": "3ef77b65b7d5ab57192cf759d7673118353f87ca993b55bd44fec7bc7c1981d1",
+  "records": [
+    {
+      "status": "accepted",
+      "provenance": {
+        "submitter": {
+          "name": "Ada",
+          "github": "ada"
+        },
+        "submissionId": "sub-1",
+        "submittedAt": "2026-10-06T12:00:00Z",
+        "reviewer": "Malcolm",
+        "reviewedAt": "2026-10-06T13:00:00Z"
+      },
+      "id": "camp-1",
+      "kind": "creepCamp",
+      "position": [
+        -1000,
+        -1000,
+        20
+      ],
+      "tier": "medium"
+    },
+    {
+      "status": "accepted",
+      "provenance": {
+        "submitter": {
+          "name": "Ada",
+          "github": "ada"
+        },
+        "submissionId": "sub-1",
+        "submittedAt": "2026-10-06T12:00:00Z",
+        "reviewer": "Malcolm",
+        "reviewedAt": "2026-10-06T13:00:00Z"
+      },
+      "id": "camp-2",
+      "kind": "creepCamp",
+      "position": [
+        1000,
+        1000,
+        20
+      ],
+      "tier": "strong",
+      "name": "East camp"
+    },
+    {
+      "status": "accepted",
+      "provenance": {
+        "submitter": {
+          "name": "Ada",
+          "github": "ada"
+        },
+        "submissionId": "sub-1",
+        "submittedAt": "2026-10-06T12:00:00Z",
+        "reviewer": "Malcolm",
+        "reviewedAt": "2026-10-06T13:00:00Z"
+      },
+      "id": "trap-1",
+      "kind": "custom",
+      "label": "trap",
+      "geometry": {
+        "type": "point",
+        "at": [
+          100,
+          100,
+          20
+        ]
+      },
+      "properties": {
+        "armed": true
+      }
+    },
+    {
+      "status": "accepted",
+      "provenance": {
+        "submitter": {
+          "name": "Ada",
+          "github": "ada"
+        },
+        "submissionId": "sub-1",
+        "submittedAt": "2026-10-06T12:00:00Z",
+        "reviewer": "Malcolm",
+        "reviewedAt": "2026-10-06T13:00:00Z"
+      },
+      "id": "orb-1",
+      "kind": "healingOrb",
+      "position": [
+        500,
+        500,
+        20
+      ],
+      "respawnSeconds": 180
+    },
+    {
+      "status": "accepted",
+      "provenance": {
+        "submitter": {
+          "name": "Ada",
+          "github": "ada"
+        },
+        "submissionId": "sub-1",
+        "submittedAt": "2026-10-06T12:00:00Z",
+        "reviewer": "Malcolm",
+        "reviewedAt": "2026-10-06T13:00:00Z"
+      },
+      "id": "zip-1",
+      "kind": "navLink",
+      "from": [
+        -2500,
+        -2000,
+        20
+      ],
+      "to": [
+        2500,
+        -2000,
+        20
+      ],
+      "linkKind": "zipline",
+      "bidirectional": true
+    },
+    {
+      "status": "accepted",
+      "provenance": {
+        "submitter": {
+          "name": "Ada",
+          "github": "ada"
+        },
+        "submissionId": "sub-1",
+        "submittedAt": "2026-10-06T12:00:00Z",
+        "reviewer": "Malcolm",
+        "reviewedAt": "2026-10-06T13:00:00Z"
+      },
+      "id": "ss-1",
+      "kind": "sinnersSacrifice",
+      "position": [
+        0,
+        -2500,
+        20
+      ]
+    },
+    {
+      "status": "accepted",
+      "provenance": {
+        "submitter": {
+          "name": "Ada",
+          "github": "ada"
+        },
+        "submissionId": "sub-1",
+        "submittedAt": "2026-10-06T12:00:00Z",
+        "reviewer": "Malcolm",
+        "reviewedAt": "2026-10-06T13:00:00Z"
+      },
+      "id": "bldg-nogo",
+      "kind": "walkableRegion",
+      "ring": [
+        [
+          -300,
+          700,
+          0
+        ],
+        [
+          300,
+          700,
+          0
+        ],
+        [
+          300,
+          1300,
+          0
+        ],
+        [
+          -300,
+          1300,
+          0
+        ]
+      ],
+      "floorZ": 0,
+      "flag": "noGo",
+      "costMultiplier": 2
+    },
+    {
+      "status": "accepted",
+      "provenance": {
+        "submitter": {
+          "name": "Ada",
+          "github": "ada"
+        },
+        "submissionId": "sub-1",
+        "submittedAt": "2026-10-06T12:00:00Z",
+        "reviewer": "Malcolm",
+        "reviewedAt": "2026-10-06T13:00:00Z"
+      },
+      "id": "ledge-ramp",
+      "kind": "walkableRegion",
+      "ring": [
+        [
+          1300,
+          -1200,
+          560
+        ],
+        [
+          1700,
+          -1200,
+          560
+        ],
+        [
+          1700,
+          -800,
+          560
+        ],
+        [
+          1300,
+          -800,
+          560
+        ]
+      ],
+      "floorZ": 600,
+      "flag": "walkable",
+      "name": "Ledge"
+    }
+  ]
+}

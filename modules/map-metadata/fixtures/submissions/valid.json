@@ -1,0 +1,63 @@
+{
+  "schemaVersion": "1.0.0",
+  "id": "sub-2",
+  "gameBuildId": "0",
+  "mapName": "mini_map",
+  "createdAt": "2026-10-06T12:00:00Z",
+  "submitter": {
+    "name": "Ada",
+    "github": "ada"
+  },
+  "records": [
+    {
+      "status": "proposed",
+      "provenance": {
+        "submitter": {
+          "name": "Ada"
+        }
+      },
+      "id": "p-camp",
+      "kind": "creepCamp",
+      "position": [
+        3000,
+        0,
+        20
+      ],
+      "tier": "weak"
+    },
+    {
+      "status": "proposed",
+      "provenance": {
+        "submitter": {
+          "name": "Ada"
+        }
+      },
+      "id": "p-region",
+      "kind": "walkableRegion",
+      "ring": [
+        [
+          2000,
+          2000,
+          0
+        ],
+        [
+          2400,
+          2000,
+          0
+        ],
+        [
+          2400,
+          2400,
+          0
+        ],
+        [
+          2000,
+          2400,
+          0
+        ]
+      ],
+      "floorZ": 0,
+      "flag": "walkable"
+    }
+  ]
+}
