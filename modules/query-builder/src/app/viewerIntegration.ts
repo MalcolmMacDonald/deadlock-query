@@ -70,6 +70,14 @@ export const rowLabel = (result: QueryResult, row: number, geometryColumnName: s
   return `#${row + 1}`
 }
 
+/** The other columns of a result row (everything but its geometry columns), keyed by column name, for the viewer's inspector. */
+export const rowProperties = (result: QueryResult, row: number): Record<string, unknown> => {
+  const geometry = new Set(result.geometryColumns)
+  const out: Record<string, unknown> = {}
+  result.columns.forEach((c, i) => { if (!geometry.has(c.name)) out[c.name] = result.rows[row]![i] })
+  return out
+}
+
 export interface ResultLayer {
   readonly id: string
   readonly column: string
@@ -86,6 +94,8 @@ export const overlayFeatures = (result: QueryResult, layerId: string = RESULT_LA
   const layers: ResultLayer[] = []
   const featureToRow = new Map<string, string>()
   const rowToFeatures = new Map<string, string[]>()
+  const props = new Map<number, Record<string, unknown>>() // shared by a row's features, one per geometry column
+  const propsOf = (row: number) => { let p = props.get(row); if (!p) props.set(row, p = rowProperties(result, row)); return p }
   result.geometryColumns.forEach((geomCol, n) => {
     const id = columnLayerId(layerId, n)
     const features: OverlayFeature[] = []
@@ -93,7 +103,7 @@ export const overlayFeatures = (result: QueryResult, layerId: string = RESULT_LA
       const featureId = `${id}:${features.length}`
       featureToRow.set(featureId, rowId)
       rowToFeatures.set(rowId, [...(rowToFeatures.get(rowId) ?? []), featureId])
-      features.push({ ...feature, label: rowLabel(result, row, geomCol) })
+      features.push({ ...feature, label: rowLabel(result, row, geomCol), properties: propsOf(row) })
     }
     if (features.length > 0) layers.push({ id, column: geomCol, style: { color: COLUMN_COLORS[n % COLUMN_COLORS.length]! }, features })
   })

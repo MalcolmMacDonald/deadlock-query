@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import { makeResult } from "@deadlock-query/contracts"
-import { COLUMN_COLORS, columnLayerId, overlayFeatures, rowLabel } from "../src/app/viewerIntegration.ts"
+import { COLUMN_COLORS, columnLayerId, overlayFeatures, rowLabel, rowProperties } from "../src/app/viewerIntegration.ts"
 
 const result = makeResult(
   [{ name: "g", type: "string" }, { name: "g.pos", type: "point" }, { name: "orb", type: "string" }, { name: "orb.pos", type: "point" }, { name: "d", type: "number" }],
@@ -32,4 +32,12 @@ test("labels name what the geometry belongs to", () => {
   expect(layers[1]!.features.map((f) => f.label)).toEqual(["orb-9"])
   expect(rowLabel(makeResult([{ name: "p", type: "point" }], [[[0, 0, 0]]]), 0, "p")).toBe("#1")
   expect(rowLabel(makeResult([{ name: "p", type: "point" }, { name: "n", type: "number" }], [[[0, 0, 0], 12.3456]]), 0, "p")).toBe("12.35")
+})
+
+test("features carry the row's other columns as properties for the inspector", () => {
+  expect(rowProperties(result, 0)).toEqual({ g: "guardian-1", orb: "orb-9", d: 12.3456 })
+  const { layers } = overlayFeatures(result, "q")
+  expect(layers[0]!.features.map((f) => f.properties)).toEqual([{ g: "guardian-1", orb: "orb-9", d: 12.3456 }, { g: "guardian-2", orb: "orb-8", d: 3 }])
+  // The orb point of row 1 shares the row's properties with the guardian point of the same row.
+  expect(layers[1]!.features[0]!.properties).toBe(layers[0]!.features[0]!.properties)
 })

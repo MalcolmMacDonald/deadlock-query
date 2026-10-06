@@ -92,6 +92,8 @@ Also verified: library-class member completions with TSDoc signature, string-lit
 
 - 2026-10-06 — Map points from results made readable (checked on the real dl_midtown bundle in the shell). Bugs: the ids the panel handed `highlight` and matched against `pick` were `<rowId>:<column>`, but the viewer's feature ids are `<layer>:<index>`, so row clicks highlighted nothing and map picks selected no row (the e2e encoded the wrong ids); labels read `0:c2` (row id + auto column name); entities in a result collapsed to an id string and were never drawn. Fixes: `overlayFeatures` now uses the viewer's ids; one overlay layer per geometry column (`query-result`, `query-result~1`, …) in distinct colours; labels are the nearest string/number cell left of the geometry (entity id, name, distance), else `#<row>`; `projectResult` adds a `<name>.position` point column after every entityRef column, so `map.healingOrbs.toArray()` plots each orb. Tests: `test/viewerIntegration.test.ts`, updated `project.test.ts` and the panel e2e.
 
+- 2026-10-06 — Result features carry `properties`: every non-geometry column of the row, keyed by column name (`rowProperties` in `viewerIntegration.ts`; one object shared by a row's features), so the viewer inspector (map-viewer `viewer.inspector`, contracts 0.5.1 `OverlayFeature.properties`) shows the whole result row when a point is selected.
+
 ## In progress
 - (nothing)
 
