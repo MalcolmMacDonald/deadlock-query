@@ -179,7 +179,7 @@ Other (bulk, likely out of scope): `light_omni2` 1,968, `light_barn` 755, `citad
 
 | Step | Wall time | Output |
 |---|---|---|
-| `extract --tier lite` | about 7 to 8 min: Source2Viewer render export about 7 min 45 s (peak about 3 GB RAM, 1.1 GB per `.bin`), reduction about 1 to 2 min | `render/tiles`: 63 tiles, **281 MB**, 5.0 M of 30.0 M triangles; `collision/physics.glb` 6.9 MB; `entities.json` 6,076 entities |
+| `extract --tier lite` | **8 min 54 s** wall on a clean default-flag rerun (Source2Viewer render export about 7 min 45 s, peak about 3 GB RAM, 1.1 GB per `.bin`; reduction about 1 min) | `render/tiles`: 63 tiles, **281 MB**, 5.0 M of 30.0 M triangles; `collision/physics.glb` 6.9 MB; `entities.json` 6,076 entities |
 | `tile` | 14 s | 126 files (63 LOD0 + 63 LOD1): LOD0 **63.1 MB**, LOD1 **39.8 MB**, total **102.9 MB** (281 MB before: 2.7x smaller), largest tile **4.2 MB**; quantiser skips `TEXCOORD_0` outside [0,1] (harmless: lite has no textures) |
 | `bake` (BVH + grid) | 24 s | BVH 5.4 MB (103,174 triangles after dropping `sky` and `Citadel_Skyclip`, 2 nodes skipped), grid **333 x 385 cells of 64** (origin -10368,-12288), 1.1 MB, **109,090 / 128,205 cells (85.1 %) have a floor** |
 | `bake` navmesh (M5) | about 3 s | `baked/navmesh.bin` 0.4 MB: 49,504 input triangles, 307 Recast tiles, **9,185 polygons, 821 components, largest only 2.8 %**, 1 stitched edge, **7 links** (3 zipline, 4 jump pad; 13 dropped for being over 256 units from the mesh); QA OBJ at `<bundle>.qa/navmesh.obj` (not run through sign-off) |
