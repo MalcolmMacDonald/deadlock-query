@@ -1,0 +1,225 @@
+import * as THREE from "three"
+import type { OverlayFeature, OverlayStyle, Vec3 } from "@deadlock-query/contracts"
+import { WORLD_TO_THREE } from "./scene.ts"
+
+export const DEFAULT_COLOR = "#ffcc00"
+export const DEFAULT_SIZE = 6
+export const HIGHLIGHT_COLOR = "#ffffff"
+
+export interface OverlayLayerData {
+  readonly features: ReadonlyArray<OverlayFeature>
+  readonly style: OverlayStyle
+}
+
+/** A bare `Vec3[]` is shorthand for a layer of points. */
+export const normalizeFeatures = (
+  input: ReadonlyArray<Vec3> | ReadonlyArray<OverlayFeature>
+): ReadonlyArray<OverlayFeature> =>
+  input.map((f) => (Array.isArray(f) ? { type: "point", at: f as unknown as Vec3 } : f) as OverlayFeature)
+
+export const featureId = (layerId: string, index: number): string => `${layerId}:${index}`
+
+export const parseFeatureId = (id: string): { readonly layerId: string; readonly index: number } | undefined => {
+  const i = id.lastIndexOf(":")
+  const index = Number(id.slice(i + 1))
+  return i < 0 || !Number.isInteger(index) ? undefined : { layerId: id.slice(0, i), index }
+}
+
+const ringOf = (f: OverlayFeature): ReadonlyArray<Vec3> =>
+  f.type === "point" ? [f.at] : f.type === "polygon" ? f.ring : f.points
+
+/** Camera-independent projection used for CPU picking: world position -> pixel (or undefined if behind the eye). */
+export type Project = (p: Vec3) => readonly [x: number, y: number] | undefined
+
+const segDist = (px: number, py: number, a: readonly [number, number], b: readonly [number, number]): number => {
+  const dx = b[0] - a[0], dy = b[1] - a[1]
+  const len2 = dx * dx + dy * dy
+  const t = len2 === 0 ? 0 : Math.min(1, Math.max(0, ((px - a[0]) * dx + (py - a[1]) * dy) / len2))
+  return Math.hypot(px - (a[0] + t * dx), py - (a[1] + t * dy))
+}
+
+const insidePolygon = (px: number, py: number, pts: ReadonlyArray<readonly [number, number]>): boolean => {
+  let inside = false
+  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+    const [xi, yi] = pts[i]!, [xj, yj] = pts[j]!
+    if ((yi > py) !== (yj > py) && px < ((xj - xi) * (py - yi)) / (yj - yi) + xi) inside = !inside
+  }
+  return inside
+}
+
+/** Nearest feature to a pixel within `radiusPx`, searching layers in the given order (later layers win ties). */
+export const pickFeature = (
+  layers: Iterable<readonly [string, OverlayLayerData]>,
+  project: Project,
+  px: number,
+  py: number,
+  radiusPx = 8
+): string | null => {
+  let best: string | null = null
+  let bestD = Infinity
+  for (const [layerId, layer] of layers) {
+    const pointR = Math.max(radiusPx, (layer.style.size ?? DEFAULT_SIZE) / 2)
+    layer.features.forEach((f, i) => {
+      let d = Infinity
+      let limit = radiusPx
+      if (f.type === "point") {
+        const s = project(f.at)
+        if (s) d = Math.hypot(s[0] - px, s[1] - py)
+        limit = pointR
+      } else {
+        const pts = ringOf(f).map(project)
+        if (pts.some((p) => !p)) return
+        const sp = pts as Array<readonly [number, number]>
+        const n = f.type === "polygon" ? sp.length : sp.length - 1
+        for (let k = 0; k < n; k++) d = Math.min(d, segDist(px, py, sp[k]!, sp[(k + 1) % sp.length]!))
+        if (f.type === "polygon" && insidePolygon(px, py, sp)) d = Math.min(d, 0)
+      }
+      if (d <= limit && d <= bestD) { bestD = d; best = featureId(layerId, i) }
+    })
+  }
+  return best
+}
+
+const flat = (pts: Iterable<Vec3>, n: number): Float32Array => {
+  const out = new Float32Array(n * 3)
+  let i = 0
+  for (const p of pts) { out[i++] = p[0]; out[i++] = p[1]; out[i++] = p[2] }
+  return out
+}
+
+const geometry = (positions: Float32Array, index?: number[]): THREE.BufferGeometry => {
+  const g = new THREE.BufferGeometry()
+  g.setAttribute("position", new THREE.BufferAttribute(positions, 3))
+  if (index) g.setIndex(index)
+  return g
+}
+
+/**
+ * Three objects for a set of features, in world (Z-up) coordinates; the parent group applies `WORLD_TO_THREE`.
+ * Points are one `Points` draw call (screen-space size), lines one `LineSegments`, polygons a fill mesh + outline.
+ */
+export const buildFeatureObjects = (
+  features: ReadonlyArray<OverlayFeature>,
+  style: OverlayStyle,
+  opts: { readonly opacity?: number; readonly depthTest?: boolean } = {}
+): THREE.Object3D[] => {
+  const color = new THREE.Color(style.color ?? DEFAULT_COLOR)
+  const transparent = (opts.opacity ?? 1) < 1
+  const common = { color, transparent, opacity: opts.opacity ?? 1, depthTest: opts.depthTest ?? false }
+  const out: THREE.Object3D[] = []
+
+  const points = features.filter((f): f is Extract<OverlayFeature, { type: "point" }> => f.type === "point")
+  if (points.length) {
+    const mat = new THREE.PointsMaterial({ ...common, size: style.size ?? DEFAULT_SIZE, sizeAttenuation: false })
+    out.push(new THREE.Points(geometry(flat(points.map((p) => p.at), points.length)), mat))
+  }
+
+  const segs: Vec3[] = []
+  for (const f of features) {
+    if (f.type === "segment" || f.type === "polyline") {
+      const p = f.points
+      for (let i = 0; i + 1 < p.length; i++) segs.push(p[i]!, p[i + 1]!)
+    } else if (f.type === "polygon") {
+      for (let i = 0; i < f.ring.length; i++) segs.push(f.ring[i]!, f.ring[(i + 1) % f.ring.length]!)
+    }
+  }
+  if (segs.length) out.push(new THREE.LineSegments(geometry(flat(segs, segs.length)), new THREE.LineBasicMaterial(common)))
+
+  const fillPos: Vec3[] = [], fillIdx: number[] = []
+  for (const f of features) {
+    if (f.type !== "polygon" || f.ring.length < 3) continue
+    const base = fillPos.length
+    const tris = THREE.ShapeUtils.triangulateShape(f.ring.map((p) => new THREE.Vector2(p[0], p[1])), [])
+    fillPos.push(...f.ring)
+    for (const t of tris) fillIdx.push(base + t[0]!, base + t[1]!, base + t[2]!)
+  }
+  if (fillIdx.length) {
+    const mat = new THREE.MeshBasicMaterial({ ...common, transparent: true, opacity: (opts.opacity ?? 1) * 0.25, side: THREE.DoubleSide })
+    out.push(new THREE.Mesh(geometry(flat(fillPos, fillPos.length), fillIdx), mat))
+  }
+  for (const o of out) o.renderOrder = 10
+  return out
+}
+
+/** Scene-graph owner for all overlay layers plus the highlight layer. */
+export class OverlayScene {
+  readonly root = new THREE.Group()
+  private readonly layers = new Map<string, OverlayLayerData & { readonly group: THREE.Group }>()
+  private readonly highlightGroup = new THREE.Group()
+  private highlighted: ReadonlyArray<string> = []
+
+  constructor(private readonly onChange: () => void = () => {}) {
+    this.root.matrixAutoUpdate = false
+    this.root.matrix.fromArray([...WORLD_TO_THREE])
+    this.root.add(this.highlightGroup)
+    this.highlightGroup.renderOrder = 20
+  }
+
+  get layerIds(): ReadonlyArray<string> { return [...this.layers.keys()] }
+  layerData(): Iterable<readonly [string, OverlayLayerData]> { return this.layers.entries() }
+  feature(id: string): OverlayFeature | undefined {
+    const p = parseFeatureId(id)
+    return p ? this.layers.get(p.layerId)?.features[p.index] : undefined
+  }
+
+  set(layerId: string, features: ReadonlyArray<Vec3> | ReadonlyArray<OverlayFeature>, style: OverlayStyle = {}) {
+    this.dropGroup(layerId)
+    const norm = normalizeFeatures(features)
+    const group = new THREE.Group()
+    for (const o of buildFeatureObjects(norm, style)) group.add(o)
+    this.root.add(group)
+    this.layers.set(layerId, { features: norm, style, group })
+    this.rebuildHighlight()
+    this.onChange()
+  }
+
+  remove(layerId: string) {
+    this.dropGroup(layerId)
+    this.layers.delete(layerId)
+    this.rebuildHighlight()
+    this.onChange()
+  }
+
+  highlight(ids: ReadonlyArray<string>) {
+    this.highlighted = ids
+    this.rebuildHighlight()
+    this.onChange()
+  }
+
+  dispose() {
+    for (const id of [...this.layers.keys()]) this.dropGroup(id)
+    this.clearHighlight()
+  }
+
+  private dropGroup(layerId: string) {
+    const old = this.layers.get(layerId)
+    if (!old) return
+    this.root.remove(old.group)
+    disposeTree(old.group)
+  }
+
+  private clearHighlight() {
+    disposeTree(this.highlightGroup)
+    this.highlightGroup.clear()
+  }
+
+  private rebuildHighlight() {
+    this.clearHighlight()
+    const feats: OverlayFeature[] = []
+    let size = DEFAULT_SIZE
+    for (const id of this.highlighted) {
+      const f = this.feature(id)
+      if (!f) continue
+      feats.push(f)
+      size = Math.max(size, (this.layers.get(parseFeatureId(id)!.layerId)!.style.size ?? DEFAULT_SIZE))
+    }
+    for (const o of buildFeatureObjects(feats, { color: HIGHLIGHT_COLOR, size: size * 1.8 })) this.highlightGroup.add(o)
+  }
+}
+
+const disposeTree = (o: THREE.Object3D) =>
+  o.traverse((c) => {
+    const m = c as THREE.Mesh
+    m.geometry?.dispose()
+    ;(Array.isArray(m.material) ? m.material : m.material ? [m.material] : []).forEach((x) => x.dispose())
+  })

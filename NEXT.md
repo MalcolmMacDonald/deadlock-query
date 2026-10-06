@@ -10,7 +10,7 @@ Single source for "what should I do next?". Prompt Claude with: **"Do the next t
 | query-builder | M0: editor panel with fixture `.d.ts`, `MockQueryEngine`, results table (S1 done, GO) | none |
 | spatial-core | M0: math, `Raycaster` interface + three-mesh-bvh impl, deterministic serialise tests (S5 done, GO) | none |
 | query-library | M2: API snapshot test, example files with `@example` (M0+M1 done); M3 needs spatial-core | none |
-| map-viewer | M1: Three.js scene, mini-map GLBs, Map/Orbit/Fly cameras, URL-hash state, Playwright smoke (M0 done) | none |
+| map-viewer | M3: annotation tools, layers panel (M0-M2 done; M1 real-bundle fps check pending) | none |
 | shell | M1: layer composition, per-module error panels, contracts mocks (M0 done) | none |
 | kanban | wait for infra M5 live (`GITHUB_TOKEN_PROXY`) | infra |
 | screenshot-tool, map-metadata | Phase 3 | — |
