@@ -1,6 +1,7 @@
 import { QueryEngine, type QueryDiagnostic, type QueryOutput } from "@deadlock-query/contracts"
 import { Effect, Layer, Stream } from "effect"
 import type { RunOutcome } from "../sandbox/runner.ts"
+import { LIMITS } from "../sandbox/limits.ts"
 import { projectResult } from "./project.ts"
 
 /** Type-checks and transpiles query source. Monaco's TS worker in the app; Bun's transpiler in unit tests. */
@@ -60,6 +61,7 @@ export const makeQueryEngine = (deps: { compiler: Compiler; runner: Runner }): L
                   throw new QueryFailed(message, out.reason)
                 }
                 const warnings = diagnostics.map((d) => `${formatDiagnostic(d)} (${d.severity})`)
+                if (out.totalRows !== undefined) warnings.push(`Result truncated to ${LIMITS.maxRows} of ${out.totalRows} rows.`)
                 return {
                   _tag: "result",
                   result: projectResult(out.value, { compileMs: Math.round(compileMs), runMs: Math.round(out.ms) }, warnings)

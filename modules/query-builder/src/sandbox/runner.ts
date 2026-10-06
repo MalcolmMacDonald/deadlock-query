@@ -1,7 +1,7 @@
 import { frameHtml } from "./frame.ts"
 
 export type RunOutcome =
-  | { readonly ok: true; readonly value: unknown; readonly ms: number }
+  | { readonly ok: true; readonly value: unknown; readonly ms: number; readonly totalRows?: number }
   | { readonly ok: false; readonly reason: "error" | "cancelled" | "timeout"; readonly message: string }
 
 export interface RunOptions { readonly timeoutMs?: number }
@@ -18,6 +18,8 @@ export class SandboxRunner {
     const nonce = crypto.randomUUID().replaceAll("-", "")
     this.frame = doc.createElement("iframe")
     this.frame.setAttribute("sandbox", "allow-scripts")
+    this.frame.setAttribute("allow", "") // no powerful features (camera, geolocation, …) even if the sandbox were loosened
+    this.frame.setAttribute("referrerpolicy", "no-referrer")
     this.frame.style.display = "none"
     this.frame.srcdoc = frameHtml(nonce, prelude)
     doc.defaultView!.addEventListener("message", this.onMessage)
@@ -32,7 +34,7 @@ export class SandboxRunner {
       this.readyWaiters.splice(0).forEach((f) => f())
     } else if (this.active && m.runId === this.active.runId) {
       const { settle } = this.active
-      if (m.type === "result") settle({ ok: true, value: m.value, ms: m.ms })
+      if (m.type === "result") settle({ ok: true, value: m.value, ms: m.ms, ...(m.totalRows === undefined ? {} : { totalRows: m.totalRows }) })
       else if (m.type === "error") settle({ ok: false, reason: "error", message: m.message })
     }
   }

@@ -5,7 +5,8 @@ const safeJson = (v: unknown): string => JSON.stringify(v).replaceAll("<", "\\u0
 
 /** CSP for the sandbox document; workers created from blob: inherit it. */
 export const sandboxCsp = (nonce: string): string =>
-  `default-src 'none'; script-src 'nonce-${nonce}' 'unsafe-eval' blob:; worker-src blob:; connect-src 'none'`
+  // `blob:` is only allowed for creating the worker, not for scripts/modules, so `import(blobUrl)` is blocked.
+  `default-src 'none'; script-src 'nonce-${nonce}' 'unsafe-eval'; worker-src blob:; connect-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'`
 
 /**
  * HTML for the `<iframe sandbox="allow-scripts" srcdoc=...>` (opaque origin).

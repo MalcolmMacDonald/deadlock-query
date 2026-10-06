@@ -108,4 +108,4 @@ const cancel = () => void Effect.runPromise(Effect.gen(function* () { yield* (yi
 runBtn.addEventListener("click", () => void run())
 cancelBtn.addEventListener("click", cancel)
 editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => void run())
-;(self as any).__qb = { editor, run, cancel }
+;(self as any).__qb = { editor, run, cancel, runner }
