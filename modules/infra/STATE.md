@@ -28,7 +28,7 @@
 ## M6 (done)
 - `tools/lib/budget.ts` + budget gate in `tools/build.ts` (tile 20 MB, site 900 MB, initial JS 1.5 MB gz); 5 tests in `test/budget.test.ts`.
 - `deploy.yml`: `workflow_dispatch` input `promote`; prod job runs only on promote dispatch (pushes to main update dev only).
-- `preview.yml`: same-repo PRs deploy to dev Pages branch `pr-<n>`. Needs Preview-environment secrets in Cloudflare (Malcolm), see `docs/dev-site.md`.
+- `preview.yml`: same-repo PRs deploy to dev Pages branch `pr-<n>` (now also runs `fetch-data.ts`, so previews get the map bundle instead of the fixture fallback). Needs Preview-environment secrets in Cloudflare (Malcolm), see `docs/dev-site.md`.
 - Docs updated in `docs/dev-site.md`.
 
 ## M3 (done)

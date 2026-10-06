@@ -27,6 +27,8 @@ jobs:
       - if: env.CLOUDFLARE_API_TOKEN != ''
         run: bun tools/build.ts --target dev
       - if: env.CLOUDFLARE_API_TOKEN != ''
+        run: bun tools/fetch-data.ts dist
+      - if: env.CLOUDFLARE_API_TOKEN != ''
         run: |
           bunx wrangler@4 pages deploy dist --project-name deadlock-query-dev --branch "pr-${{ github.event.pull_request.number }}" --commit-dirty=true | tee deploy.log
           URL=$(grep -oE 'https://[a-z0-9.-]+\.pages\.dev' deploy.log | tail -1)
