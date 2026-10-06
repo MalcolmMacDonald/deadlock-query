@@ -4,7 +4,7 @@
   "assets": [
     {
       "name": "dl_midtown-25738777-lite.zip",
-      "sha256": "4c2d988f369a84c8f398212a7d16547d6a13c1a0d7aa8a907f716021b2dc0181",
+      "sha256": "828d8686df17a9b2bbe7f88edae9db127d6b047eb19172ec79cc0ff1a32c4318",
       "dest": "data/dl_midtown"
     }
   ]
