@@ -1,5 +1,9 @@
 # contracts changelog
 
+## 0.5.0 — ViewerService.registerTool is required (schemaVersion stays 1.0.0)
+- `ViewerService.registerTool` is now a required member: map-viewer's service, query-builder's standalone viewer and the mocks all provide it. Any other object typed as `ViewerService` must add it (a no-op `() => Effect.succeed(() => {})` is enough).
+- `MockViewerService` now has a no-op `registerTool`; `makeMockViewerServiceWithTools()` stays for modules that want the registrations recorded (it also rejects duplicate ids).
+
 ## 0.4.0 — ScreenshotSet (additive, schemaVersion stays 1.0.0)
 - Added `ScreenshotSet` (`gameBuildId`, `mapName`, `fov`, `hideHud`, optional `placeholder` for fake-console dry runs and `tool`, `shots[]`) and `Shot` (`id`, optional `group`, `requested` and read-back `actual` pose as `{ position, angles }` in Source units/degrees, optional `lookAt`, `file`, optional `thumbnail`, `bytes`, `sha256`, pixel `width`/`height`, `capturedAt`). File paths are relative to the set's `index.json`. JSON Schema `screenshot-set.schema.json` generated.
 - Helpers: `makeScreenshotSet` (shots ordered by id), `poseError` (position units and largest angle error, wrap-around safe), `validateScreenshotSet` (unique ids and files, build/map match, read-back pose within tolerance; defaults 8 units and 1 degree) and `shotsNear` (shots around a world point, nearest first, for viewer markers).
