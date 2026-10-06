@@ -1,0 +1,27 @@
+{
+  "name": "@deadlock-query/shell",
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "typecheck": "tsc -p .",
+    "test": "bun test",
+    "e2e": "bun e2e/layout.ts",
+    "verify": "bun run typecheck && bun run test && bun run build"
+  },
+  "dependencies": {
+    "@deadlock-query/contracts": "workspace:*",
+    "dockview": "^4.2.0",
+    "effect": "4.0.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "playwright-core": "^1.56.1",
+    "vite": "^6.0.0"
+  }
+}
