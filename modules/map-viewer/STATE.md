@@ -79,6 +79,7 @@
 
 - 2026-10-06 — M4: the budget counts decoded geometry (positions + indices) because that is what stays in memory and on the GPU; compressed bytes in flight are transient. Cells show one LOD at a time with no cross-fade; the coarsest LOD of every visible cell is guaranteed first, so a far view never has holes unless even the coarsest set exceeds the budget (then the farthest cells are dropped, not the budget exceeded).
 - 2026-10-06 — M4: Bun's bundler does not follow `new Worker(new URL(...))`, so the e2e harness serves the worker bundle itself and passes `streaming.decoder`; Vite (shell) bundles the default worker, checked in the shell build output.
+- 2026-10-06 — Flaky `verify:all` fix: the >500 MB streaming flight test gets an explicit 60 s timeout. It decodes about 0.6 GB of fabricated geometry and `computeBoundingSphere` scans all of it (about 1.4 s alone), so the 5 s default failed whenever `verify:all` ran every module in parallel on a busy machine. The assertions are unchanged.
 
 ## Open questions
 - (see PLAN.md §9)
