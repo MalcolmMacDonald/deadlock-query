@@ -75,6 +75,17 @@
         "@deadlock-query/spatial-core": "workspace:*",
       },
     },
+    "modules/screenshot-tool": {
+      "name": "@deadlock-query/screenshot-tool",
+      "version": "0.0.0",
+      "bin": {
+        "dlq-shoot": "./src/cli.ts",
+      },
+      "dependencies": {
+        "@deadlock-query/contracts": "workspace:*",
+        "effect": "4.0.1",
+      },
+    },
     "modules/shell": {
       "name": "@deadlock-query/shell",
       "version": "0.0.0",
@@ -160,6 +171,8 @@
     "@deadlock-query/query-builder": ["@deadlock-query/query-builder@workspace:modules/query-builder"],
 
     "@deadlock-query/query-library": ["@deadlock-query/query-library@workspace:modules/query-library"],
+
+    "@deadlock-query/screenshot-tool": ["@deadlock-query/screenshot-tool@workspace:modules/screenshot-tool"],
 
     "@deadlock-query/shell": ["@deadlock-query/shell@workspace:modules/shell"],
 
