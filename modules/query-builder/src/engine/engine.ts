@@ -2,6 +2,7 @@ import { QueryEngine, type QueryDiagnostic, type QueryOutput } from "@deadlock-q
 import { Effect, Layer, Stream } from "effect"
 import type { RunOutcome } from "../sandbox/runner.ts"
 import { LIMITS } from "../sandbox/limits.ts"
+import type { Friendly } from "./friendly.ts"
 import { projectResult } from "./project.ts"
 
 /** Type-checks and transpiles query source. Monaco's TS worker in the app; Bun's transpiler in unit tests. */
@@ -27,14 +28,19 @@ export class QueryFailed extends Error {
 const formatDiagnostic = (d: QueryDiagnostic): string => `${d.line}:${d.column} ${d.message}`
 
 /** The real `QueryEngine`: check → emit → run in the sandbox → project to a `QueryResult`. */
-export const makeQueryEngine = (deps: { compiler: Compiler; runner: Runner }): Layer.Layer<QueryEngine> => {
+export const makeQueryEngine = (deps: { compiler: Compiler; runner: Runner; friendly?: Friendly }): Layer.Layer<QueryEngine> => {
+  const compile = async (source: string) => {
+    const c = await deps.compiler.compile(source)
+    if (!deps.friendly) return c
+    return { js: c.js, diagnostics: [...c.diagnostics.map(deps.friendly.diagnostic), ...deps.friendly.lint(source)] }
+  }
   // Shared by every provision of the layer, so `cancel` reaches a `run` started under another `provide`.
   let status: "idle" | "compiling" | "running" = "idle"
   let epoch = 0 // bumped by cancel, so a cancel that lands during compilation still stops the run
   return Layer.sync(QueryEngine)(() => {
     return {
       status: Effect.sync(() => status),
-      check: (source) => Effect.promise(() => deps.compiler.compile(source).then((c) => c.diagnostics)),
+      check: (source) => Effect.promise(() => compile(source).then((c) => c.diagnostics)),
       cancel: Effect.promise(() => { epoch++; return deps.runner.cancel() }),
       run: (source, opts) =>
         Stream.fromEffect(
@@ -44,7 +50,7 @@ export const makeQueryEngine = (deps: { compiler: Compiler; runner: Runner }): L
               const myEpoch = epoch
               status = "compiling"
               try {
-                const { js, diagnostics } = await deps.compiler.compile(source)
+                const { js, diagnostics } = await compile(source)
                 const errors = diagnostics.filter((d) => d.severity === "error")
                 if (errors.length > 0) {
                   throw new QueryFailed(errors.map(formatDiagnostic).join("\n"), "diagnostics", diagnostics)
@@ -55,9 +61,9 @@ export const makeQueryEngine = (deps: { compiler: Compiler; runner: Runner }): L
                 const out = await deps.runner.run(js, { timeoutMs: opts?.timeoutMs ?? DEFAULT_TIMEOUT_MS })
                 if (!out.ok) {
                   const message =
-                    out.reason === "timeout" ? `Query timed out after ${(opts?.timeoutMs ?? DEFAULT_TIMEOUT_MS) / 1000}s and was stopped.`
+                    out.reason === "timeout" ? `Query timed out after ${(opts?.timeoutMs ?? DEFAULT_TIMEOUT_MS) / 1000}s and was stopped.${deps.friendly ? " Narrow the input first (`where`, `take`) or use a coarser `sample.grid(spacing)`." : ""}`
                     : out.reason === "cancelled" ? "Query cancelled."
-                    : out.message
+                    : deps.friendly ? deps.friendly.runtime(out.message) : out.message
                   throw new QueryFailed(message, out.reason)
                 }
                 const warnings = diagnostics.map((d) => `${formatDiagnostic(d)} (${d.severity})`)

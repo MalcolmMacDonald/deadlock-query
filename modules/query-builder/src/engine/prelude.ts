@@ -1,3 +1,5 @@
+import type { ApiCatalog } from "../docs/catalog.ts"
+
 /** The query-library build output (`dist/`), as the builder consumes it: never imported, only read. Browser-safe (no node imports): this file is part of the package entry. */
 export interface LibraryArtifact {
   readonly apiVersion: string
@@ -7,6 +9,8 @@ export interface LibraryArtifact {
   readonly dts: Readonly<Record<string, string>>
   /** Top-level exports that must be visible as globals in the editor and at runtime. */
   readonly globals: ReadonlyArray<{ readonly name: string; readonly kind: "class" | "const" | "interface" | "type" }>
+  /** `apiCatalog.json`: powers the docs panel, hover links and friendly errors. Absent in artifacts built before M4. */
+  readonly catalog?: ApiCatalog
 }
 
 const EXPORT_BLOCK = /export\s*\{([^}]*)\}\s*;?\s*$/

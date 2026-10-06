@@ -1,8 +1,8 @@
 # query-builder — state
 
-- **Status:** M3 done
+- **Status:** M4 done
 - **Version:** 0.0.0
-- **Current milestone:** M3 complete; next is M4 (see PLAN.md §6)
+- **Current milestone:** M4 complete; next is M5 (see PLAN.md §6)
 - **Last updated:** 2026-10-06
 
 ## Done
@@ -57,11 +57,19 @@ Also verified: library-class member completions with TSDoc signature, string-lit
   - Removed the unused `syncSelectionToViewer`/`syncViewerToSelection` helpers (hard-coded `:position`/`:geometry` feature ids; superseded by the panel logic).
   - Tests: Chromium e2e drives overlay/highlight/pick/bus via the standalone services; `test/entry.test.ts` checks the entry bundles for the browser without node built-ins.
 
+- **M4** (`src/docs/`, `src/gallery/`, `src/ui/`, `src/engine/friendly.ts`, `test/docs.test.ts`, `test/friendly.test.ts`, `test/librarySource.ts`, e2e additions). Docs, gallery, snippets and friendly errors in the panel:
+  - **Docs panel** (`ui/sidebar.ts`, `docs/catalog.ts`): the sidebar's Docs tab is built from the library's `apiCatalog.json`, which `LibraryArtifact` now carries as optional `catalog` (`readLibraryArtifact` fills it, so `library.json` has it). Entries are top-level exports plus class members (`EntityList.closest`); search needs every term and ranks name matches first; browsing groups by category. The detail pane shows signature, summary and `@example`s; **Insert** puts the call at the cursor (adds the `.` after an expression, parentheses for callables, cursor inside them), **Insert example** inserts the example text. Header buttons toggle the sidebar (closed by default; `initialSidebar` option opens it). Artifacts without `catalog` simply get no sidebar/hover/friendly errors.
+  - **Hover → docs** (`ui/docsHover.ts`): a hover provider on the query model adds "Docs: `Class.member` · …" links (command `dlq.showDocs`) for any identifier the catalog knows; a member name on several classes links every owner. Acceptance ("each catalog entry reachable from editor hover") is unit-tested over every catalog item and e2e-tested through a real hover → link click → docs detail.
+  - **Gallery** (`gallery/queries.ts`): the three PLAN.md queries (orbs within 10 s of a guardian; wall pairs twice as far to walk as to fly; camps visible from high ground) plus a starter (guardian → nearest orb) that runs on the fixture map. Cards say what the query needs (`nav`, `spatial`, `semantics`) and carry a provisional note; **Load** is an editor edit (Ctrl+Z restores the previous query), **Load & run** also runs. Until the map extractor delivers walkable data, queries 1–2 stop with the friendly "needs map data" message on any bundle without a navmesh, and query 3's results are provisional (placeholder semantics). No fake results are shown.
+  - **Snippets** (`docs/snippets.ts`, `ui/snippetCompletions.ts`): statement snippets for the five query shapes (offered where an expression can start) and chain snippets (`selectRow`, `pairsWhereClose`, `orderByDistance`, offered after a `.` and replacing it). Sorted after library members.
+  - **Friendly errors** (`engine/friendly.ts`, wired through `makeQueryEngine({ friendly })`): TS diagnostics get advice in front and the original in parentheses: unknown globals (`guardians` → `map.guardians`, near-miss names), misspelled members (nearest name on the owning class, `Seq` members included for `EntityList`), Array habits on sequences (`filter`→`where`, `map`→`select`, `length`→`count()` …), bad lane/position arguments, top-level `return`/`await`. A source lint warns on `withinTravelTime(<number>, …)` ("write `seconds(10)`"; `seconds` is the identity, so the type checker cannot catch it). Runtime messages for missing navmesh/spatial/semantics data and `undefined` reads are expanded; timeouts suggest narrowing the input.
+  - **Tests:** every gallery query and every snippet (placeholders at their defaults) is type-checked against the library's types (`test/librarySource.ts` builds the catalog and checks types from library *source*, so unit tests never read `dist/`, which the library's own build rewrites); friendly-error rewrites run on real TypeScript messages; Chromium e2e covers docs search + insert, hover link, snippet completion, gallery load/run/undo and the advice in the error panel.
+
 ## In progress
 - (nothing)
 
 ## Next
-- M4: Docs panel from `apiCatalog.json`, gallery with 3 PLAN.md queries, snippets, friendly errors (PLAN.md §6).
+- M5: exports (CSV/JSON/GeoJSON/annotation/PNG), share links with `apiVersion` warning, saved queries/history (PLAN.md §6). The docs sidebar already knows `apiVersion` (`DocIndex.apiVersion`) for the stale-link warning.
 
 ## Blockers / Requests to other modules
 - contracts (nice to have): `SelectionBus` has no change stream, so the panel polls `current` every 250 ms. A `changes: Stream<ReadonlyArray<string>>` would remove the polling.
@@ -83,6 +91,9 @@ Also verified: library-class member completions with TSDoc signature, string-lit
 - 2026-10-06 — M3: limits live in one place (`LIMITS`) and are enforced in the worker first (cheapest), with `projectResult` and the table as backstops. Allocation guards are per-allocation, not cumulative, to avoid false positives on library churn. The `NEXT.md` row is not updated here: it is outside `modules/query-builder/` and `check:scope` rejects it, so it needs a follow-up infra change.
 
 - 2026-10-06 — Embeddable panel takes service *values*, not layers: the shell's `ManagedRuntime` owns the shared instances, and rebuilding a layer per `Effect.provide` would hand the panel a fresh bus.
+
+- 2026-10-06 — M4: the sidebar lives inside the embeddable panel (not separate shell panels `query.docs`/`query.gallery`), so the shell needs no change; split them out later only if the shell wants them docked. Gallery wall-pair query uses `sample.walls(600).take(300)` to bound the quadratic `pairs()`; the 2× ratio and spacing are proposals. Friendly-error rules are text matches on TypeScript's English messages (the TS worker's language is fixed), each unit-tested against real compiler output.
+- 2026-10-06 — M4: the starter gallery entry was added beyond the three PLAN.md queries so the gallery has one query that runs today on the fixture bundle.
 
 ## Open questions
 - (see PLAN.md §9)

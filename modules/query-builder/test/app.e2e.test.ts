@@ -118,3 +118,82 @@ test.skipIf(!haveBrowser)("results drive the viewer overlay, and row â†” pick â†
   expect(errors).toEqual([])
   await page.close()
 }, 90_000)
+
+// M4: docs panel, hover links, snippets, gallery, friendly errors.
+const editorValue = (page: Awaited<ReturnType<typeof open>>["page"]) => page.evaluate(() => (self as any).__qb.editor.getValue() as string)
+
+test.skipIf(!haveBrowser)("docs panel searches the catalog and inserts at the cursor", async () => {
+  const { page, errors } = await open()
+  await setSource(page, "map.healingOrbs")
+  await page.evaluate(() => { const e = (self as any).__qb.editor; e.setPosition(e.getModel().getFullModelRange().getEndPosition()) })
+  await page.click("[data-testid=toggle-docs]")
+  expect(await page.$$eval("[data-testid=doc-item]", (r) => r.length)).toBeGreaterThan(80)
+  await page.fill("[data-testid=docs-search]", "withinTravel")
+  await page.waitForFunction(() => document.querySelector("[data-testid=doc-item]")?.textContent === "EntityList.withinTravelTime")
+  await page.click("[data-testid=doc-item]")
+  expect(await page.textContent("[data-testid=docs-detail]")).toContain("withinTravelTime(time: number")
+  await page.click("[data-testid=doc-insert]")
+  expect(await editorValue(page)).toBe("map.healingOrbs.withinTravelTime()")
+  // Cursor lands inside the parentheses.
+  expect(await page.evaluate(() => { const e = (self as any).__qb.editor; return e.getModel().getOffsetAt(e.getPosition()) })).toBe("map.healingOrbs.withinTravelTime(".length)
+  expect(errors).toEqual([])
+  await page.close()
+}, 60_000)
+
+// M4 acceptance: a catalog entry is reachable from the editor hover.
+test.skipIf(!haveBrowser)("hover over a library member links into the docs panel", async () => {
+  const { page, errors } = await open()
+  await setSource(page, "map.healingOrbs.closest(map.guardians.first()!)")
+  await page.evaluate(() => { const e = (self as any).__qb.editor; e.focus(); e.setPosition({ lineNumber: 1, column: 20 }); e.trigger("test", "editor.action.showHover", {}) })
+  const link = page.locator(".monaco-hover a", { hasText: "EntityList.closest" })
+  await link.waitFor({ timeout: 20_000 })
+  await link.click()
+  await page.waitForFunction(() => document.querySelector("[data-testid=docs-detail] .title strong")?.textContent === "EntityList.closest", undefined, { timeout: 10_000 })
+  expect(await page.isVisible("[data-testid=sidebar]")).toBe(true)
+  expect(errors).toEqual([])
+  await page.close()
+}, 60_000)
+
+test.skipIf(!haveBrowser)("snippet completion offers the PLAN.md query shapes", async () => {
+  const { page, errors } = await open()
+  await setSource(page, "")
+  await page.click(".monaco-editor")
+  await page.keyboard.type("withinTrav")
+  const widget = ".suggest-widget.visible .monaco-list-row"
+  await page.waitForSelector(widget, { timeout: 20_000 })
+  expect(await page.$$eval(widget, (rows) => rows.map((r) => r.textContent ?? "").some((t) => t.includes("withinTravelTime") && t.includes("Entities within N seconds")))).toBe(true)
+  expect(errors).toEqual([])
+  await page.close()
+}, 60_000)
+
+test.skipIf(!haveBrowser)("gallery loads queries; the starter runs and the navmesh ones explain what is missing", async () => {
+  const { page, errors } = await open()
+  const mini = buildMiniMap()
+  await page.click("[data-testid=toggle-gallery]")
+  expect(await page.$$eval("[data-testid=gallery-card]", (c) => c.length)).toBe(4)
+  expect(await page.$$eval("[data-testid=gallery-note]", (c) => c.length)).toBe(3)
+
+  await page.click("[data-query-id=guardian-nearest-orb] [data-testid=gallery-run]")
+  await page.waitForSelector("[data-testid=results-table] tbody tr", { timeout: 20_000 })
+  expect(await page.$$eval("[data-testid=results-table] tbody tr", (r) => r.length)).toBe(mini.expectedGuardianOrbDistance.rows.length)
+
+  await page.click("[data-query-id=orbs-within-10s] [data-testid=gallery-run]")
+  await page.waitForSelector("[data-testid=error]", { timeout: 20_000 })
+  expect(await page.textContent("[data-testid=error]")).toMatch(/withinTravelTime\(\) needs map data this bundle does not have yet/)
+  expect(await editorValue(page)).toContain("withinTravelTime(seconds(10)")
+
+  // Loading is an editor edit, so undo brings the previous query back.
+  await page.evaluate(() => (self as any).__qb.editor.trigger("test", "undo", {}))
+  expect(await editorValue(page)).toContain("closest(g)")
+  expect(errors).toEqual([])
+  await page.close()
+}, 90_000)
+
+test.skipIf(!haveBrowser)("type errors come with plain-language advice", async () => {
+  const { page } = await open()
+  await setSource(page, "map.healingOrbs.closet(map.guardians.first()!)")
+  await page.click("#run")
+  await page.waitForSelector("[data-testid=error]", { timeout: 20_000 })
+  expect(await page.textContent("[data-testid=error]")).toMatch(/1:\d+ .*Did you mean `closest`\?.*\(Property 'closet' does not exist/s)
+  await page.close()
+}, 60_000)
