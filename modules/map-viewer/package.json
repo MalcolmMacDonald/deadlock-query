@@ -8,10 +8,16 @@
   "scripts": {
     "typecheck": "tsc -p .",
     "test": "bun test --pass-with-no-tests",
-    "verify": "bun run typecheck && bun run test"
+    "verify": "bun run typecheck && bun run test",
+    "test:e2e": "bun e2e/smoke.ts"
   },
   "dependencies": {
     "@deadlock-query/contracts": "workspace:*",
-    "effect": "4.0.1"
+    "effect": "4.0.1",
+    "three": "^0.170.0"
+  },
+  "devDependencies": {
+    "@types/three": "^0.170.0",
+    "playwright-core": "^1.49.0"
   }
 }
