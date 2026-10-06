@@ -1,18 +1,27 @@
 import { expect, test } from "bun:test"
 import * as THREE from "three"
 import {
-  buildTileIndex, lodIndexForDistance, parseTileId, planResidency, plannedBytes, selectVisible, tileLod, type ManifestTile
+  buildTileIndex, lodIndexForDistance, planResidency, plannedBytes, selectVisible, type ManifestTile
 } from "../src/index.ts"
+import { tileBaseId, tileLod } from "@deadlock-query/contracts"
 
 const tile = (id: string, x: number, y: number, bytes = 1000, size = 100): ManifestTile => ({
   id, file: `${id}.glb`, bytes, sha256: "", bounds: { min: [x, y, 0], max: [x + size, y + size, 10] }
 })
 
-test("tile ids: base and lod come from the #lod<n> suffix; a lod field wins", () => {
-  expect(parseTileId("t_0_1")).toEqual({ base: "t_0_1", lod: 0 })
-  expect(parseTileId("t_0_1#lod2")).toEqual({ base: "t_0_1", lod: 2 })
-  expect(tileLod(tile("a#lod1", 0, 0))).toBe(1)
+test("tile LOD comes from the lod field, else the legacy #lod<n> id suffix", () => {
+  expect(tileLod(tile("t_0_1", 0, 0))).toBe(0)
+  expect(tileLod(tile("t_0_1#lod2", 0, 0))).toBe(2)
+  expect(tileBaseId(tile("t_0_1#lod2", 0, 0))).toBe("t_0_1")
   expect(tileLod({ ...tile("a", 0, 0), lod: 3 })).toBe(3)
+  expect(tileBaseId({ ...tile("tiles/a.lod1", 0, 0), lodOf: "a" })).toBe("a")
+})
+
+test("the index groups LODs given by lod / lodOf fields, with ids that carry no suffix", () => {
+  const cells = buildTileIndex([
+    { ...tile("a.far", 0, 0), lod: 1, lodOf: "a" }, tile("a", 0, 0), { ...tile("a.farther", 0, 0), lod: 2, lodOf: "a" }, tile("b", 100, 0)
+  ])
+  expect(cells.map((c) => [c.base, c.lods.map((l) => l.tile.id)])).toEqual([["a", ["a", "a.far", "a.farther"]], ["b", ["b"]]])
 })
 
 test("the index groups LODs by base id, finest first, with a Three-space box", () => {
@@ -74,4 +83,25 @@ test("residency plan: coarsest first, upgrades nearest first, never above budget
   expect(tiny.map((p) => p.cell.base)).toEqual(["a", "b"])
   // A cell whose distance only asks for LOD1 is never upgraded past it.
   expect(planResidency(visible.map((v) => ({ ...v, want: 1 })), 1000, cost).map((p) => p.index)).toEqual([1, 1, 1])
+})
+
+test("the eager path loads and draws only the LOD0 tiles", async () => {
+  const { Effect, Layer } = await import("effect")
+  const { MapDataService, MockMapDataService } = await import("@deadlock-query/contracts")
+  const { loadViewerData, buildScene } = await import("../src/index.ts")
+  const { syntheticMap } = await import("../e2e/synthetic.ts")
+  const map = syntheticMap({ cols: 2, rows: 1, grids: [9, 5] }) // ids c0_0, c0_0#lod1, c1_0, c1_0#lod1
+  const asked: string[] = []
+  const base = await Effect.runPromise(MockMapDataService.pipe(Layer.build, Effect.scoped, Effect.map((c) => Effect.runSync(Effect.service(MapDataService).pipe(Effect.provide(Layer.succeedContext(c)))))))
+  const layer = Layer.succeed(MapDataService)({
+    ...base, manifest: Effect.succeed(map.manifest), entities: Effect.succeed([]),
+    loadTile: (id: string) => { asked.push(id); return Effect.succeed(map.glb(id)) }
+  })
+  const data = await Effect.runPromise(loadViewerData.pipe(Effect.provide(layer)))
+  expect(asked).toEqual(["c0_0", "c1_0"])
+  expect([...data.tiles.keys()]).toEqual(["c0_0", "c1_0"])
+  const all = new Map(map.manifest.tiles.map((t) => [t.id, map.glb(t.id)]))
+  const scene = await buildScene({ ...data, tiles: all })
+  const holders = scene.children.filter((c) => (c as { matrixAutoUpdate: boolean }).matrixAutoUpdate === false)
+  expect(holders).toHaveLength(2) // one per LOD0 tile, even though the LOD tiles' bytes were offered
 })

@@ -1,15 +1,11 @@
 import * as THREE from "three"
-import type { Manifest, Vec3 } from "@deadlock-query/contracts"
+import { tileBaseId, tileLod, type Tile, type Vec3 } from "@deadlock-query/contracts"
 
-/** A manifest tile. `lod` is read when contracts adds it (M3); until then the `<id>#lod<n>` id convention applies. */
-export type ManifestTile = Manifest["tiles"][number] & { readonly lod?: number }
-
-export const parseTileId = (id: string): { readonly base: string; readonly lod: number } => {
-  const m = /^(.*)#lod(\d+)$/.exec(id)
-  return m ? { base: m[1]!, lod: Number(m[2]) } : { base: id, lod: 0 }
-}
-
-export const tileLod = (t: ManifestTile): number => (typeof t.lod === "number" ? t.lod : parseTileId(t.id).lod)
+/**
+ * A manifest tile. LOD comes from contracts' `tileLod` / `tileBaseId`: the `lod` / `lodOf` fields, else the legacy
+ * `<id>#lod<n>` id suffix older bundles use.
+ */
+export type ManifestTile = Tile
 
 export interface TileEntry { readonly tile: ManifestTile; readonly lod: number }
 
@@ -28,7 +24,7 @@ const worldToThreeBox = (min: Vec3, max: Vec3): THREE.Box3 =>
 export const buildTileIndex = (tiles: ReadonlyArray<ManifestTile>): ReadonlyArray<TileCell> => {
   const cells = new Map<string, { box: THREE.Box3; lods: TileEntry[] }>()
   for (const tile of tiles) {
-    const { base } = parseTileId(tile.id)
+    const base = tileBaseId(tile)
     const box = worldToThreeBox(tile.bounds.min, tile.bounds.max)
     const cell = cells.get(base)
     if (cell) { cell.box.union(box); cell.lods.push({ tile, lod: tileLod(tile) }) }

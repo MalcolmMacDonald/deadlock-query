@@ -1,7 +1,7 @@
 import * as THREE from "three"
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js"
 import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js"
-import type { Mat4 } from "@deadlock-query/contracts"
+import { tilesAtLod, type Mat4 } from "@deadlock-query/contracts"
 import type { ViewerData } from "./ViewerPanel.ts"
 
 /** World (Z-up) -> Three (Y-up): (x,y,z) -> (x,z,-y), column-major. Mirrors contracts `Space.worldToThree`. */
@@ -43,7 +43,8 @@ const ENTITY_COLORS: Record<string, number> = { guardian: 0xe8a33d, walker: 0xd4
 export const buildScene = async (data: ViewerData): Promise<THREE.Group> => {
   const root = new THREE.Group()
   const baseMat = makeTerrainMaterial()
-  for (const tile of data.manifest.tiles) {
+  // Eagerly drawn tiles are the full-resolution set: LOD tiles share their base tile's bounds and would draw over it.
+  for (const tile of tilesAtLod(data.manifest, 0)) {
     const bytes = data.tiles.get(tile.id)
     if (!bytes) continue
     const group = await parseGlb(bytes)

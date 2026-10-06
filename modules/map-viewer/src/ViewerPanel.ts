@@ -1,6 +1,6 @@
 import { Effect } from "effect"
 import * as THREE from "three"
-import { MapDataService, type Entity, type Manifest, type Vec3 } from "@deadlock-query/contracts"
+import { MapDataService, tilesAtLod, type Entity, type Manifest, type Vec3 } from "@deadlock-query/contracts"
 import { boundsOf, fitTopDown } from "./projection.ts"
 import { frameBounds, type CameraMode } from "./camera.ts"
 import { FOV_DEG, ViewerControls } from "./controls.ts"
@@ -54,17 +54,15 @@ export interface ViewerData {
 }
 
 /** Path of the baked collision BVH in a manifest (`baked.bvh.file`), if the bundle was baked. */
-export const bakedBvhFile = (manifest: Manifest): string | undefined => {
-  const bvh = (manifest.baked as { readonly bvh?: { readonly file?: unknown } } | undefined)?.bvh
-  return typeof bvh?.file === "string" ? bvh.file : undefined
-}
+export const bakedBvhFile = (manifest: Manifest): string | undefined => manifest.baked?.bvh?.file
 
 export const loadViewerData = Effect.gen(function* () {
   const data = yield* MapDataService
   const manifest = yield* data.manifest
   const entities = yield* data.entities
   const tiles = new Map<string, Uint8Array>()
-  for (const t of manifest.tiles) tiles.set(t.id, yield* data.loadTile(t.id))
+  // Only the full-resolution tiles: LOD tiles share their base tile's bounds (streaming is for `loadBundle`).
+  for (const t of tilesAtLod(manifest, 0)) tiles.set(t.id, yield* data.loadTile(t.id))
   return { manifest, entities, tiles } satisfies ViewerData
 })
 
