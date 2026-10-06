@@ -8,9 +8,15 @@ import { runQuery } from "../app/engine.ts"
 import { monacoCompiler } from "../app/monacoCompiler.ts"
 import { renderResults } from "../app/resultsTable.ts"
 import { overlayFeatures, setResultOverlay } from "../app/viewerIntegration.ts"
+import { buildDocIndex, insertionFor, type DocIndex, type DocItem } from "../docs/catalog.ts"
 import { makeQueryEngine } from "../engine/engine.ts"
+import { makeFriendly } from "../engine/friendly.ts"
 import { globalsShim, toPrelude, type LibraryArtifact } from "../engine/prelude.ts"
+import type { GalleryQuery } from "../gallery/queries.ts"
 import { SandboxRunner } from "../sandbox/runner.ts"
+import { registerDocsHover } from "../ui/docsHover.ts"
+import { renderSidebar, type Sidebar, type SidebarTab } from "../ui/sidebar.ts"
+import { registerSnippetCompletions } from "../ui/snippetCompletions.ts"
 
 /** The map data a query runs against (what the library's `MapContext.fromBundle` takes). */
 export interface QueryBundle {
@@ -34,6 +40,8 @@ export interface QueryEditorPanelOptions {
   readonly initialSource?: string
   /** Viewer overlay layer id. Default `"query-result"`. */
   readonly overlayLayerId?: string
+  /** Open the docs/gallery sidebar on this tab at mount. Default: closed (the header buttons toggle it). */
+  readonly initialSidebar?: SidebarTab
 }
 
 export interface QueryEditorHandle {
@@ -42,6 +50,8 @@ export interface QueryEditorHandle {
   readonly run: () => Promise<void>
   readonly cancel: () => void
   readonly runner: SandboxRunner
+  /** Docs/gallery sidebar; absent when the library artifact carries no `apiCatalog`. */
+  readonly sidebar?: Sidebar
 }
 
 const DEFAULT_SOURCE = `map.guardians
@@ -52,8 +62,26 @@ const STYLE_ID = "dlq-qb-style"
 const STYLE = `
 .dlq-qb{display:flex;flex-direction:column;height:100%;min-height:0;background:#1e1e1e;color:#ddd;font:13px system-ui,sans-serif}
 .dlq-qb header{display:flex;gap:8px;align-items:center;padding:6px 8px;border-bottom:1px solid #333}
+.dlq-qb .qb-body{flex:1;display:flex;min-height:0}
+.dlq-qb .qb-main{flex:1;display:flex;flex-direction:column;min-width:0;min-height:0}
 .dlq-qb .qb-editor{height:40%;min-height:160px}
 .dlq-qb .qb-results{flex:1;overflow:auto;padding:8px}
+.dlq-qb .qb-side{width:340px;flex:none;display:flex;flex-direction:column;border-left:1px solid #333;min-height:0}
+.dlq-qb .qb-side[hidden]{display:none}
+.dlq-qb .qb-side .tabs{display:flex;gap:4px;padding:6px 8px;border-bottom:1px solid #333}
+.dlq-qb .qb-side .tabs .active,.dlq-qb header .active{background:#264f78}
+.dlq-qb .qb-side .pane{flex:1;min-height:0;overflow:auto;padding:8px;display:flex;flex-direction:column;gap:6px}
+.dlq-qb .qb-side .pane[hidden]{display:none}
+.dlq-qb .qb-side .docs{overflow:hidden}
+.dlq-qb .doc-list{flex:0 1 45%;overflow:auto;display:flex;flex-direction:column;border:1px solid #333}
+.dlq-qb .doc-list .cat{background:#252526;padding:2px 6px;font-weight:600;position:sticky;top:0}
+.dlq-qb .doc-list .doc-item{text-align:left;background:none;border:0;color:inherit;padding:2px 10px;cursor:pointer;font:12px ui-monospace,monospace}
+.dlq-qb .doc-list .doc-item:hover,.dlq-qb .doc-list .doc-item.selected{background:#264f78}
+.dlq-qb .doc-detail{flex:1;overflow:auto}
+.dlq-qb .doc-detail .kind{color:#999}
+.dlq-qb .qb-side pre{background:#252526;padding:6px;margin:4px 0;overflow:auto;white-space:pre-wrap;font:12px ui-monospace,monospace}
+.dlq-qb .card{border:1px solid #333;padding:8px;display:flex;flex-direction:column;gap:4px}
+.dlq-qb .card p{margin:0}.dlq-qb .card .needs{color:#999}.dlq-qb .card .actions{display:flex;gap:6px}
 .dlq-qb table{border-collapse:collapse}.dlq-qb th,.dlq-qb td{border:1px solid #333;padding:2px 8px;text-align:left}.dlq-qb th{background:#252526}
 .dlq-qb tr.selected td{background:#264f78}
 .dlq-qb .error{color:#f48771;white-space:pre-wrap}.dlq-qb .warning{background:#5a4a1a;padding:2px 6px;margin:4px 0}
@@ -103,7 +131,7 @@ export const mountQueryEditor = async (container: HTMLElement, opts: QueryEditor
     }
     const rootEl = doc.createElement("div")
     rootEl.className = "dlq-qb"
-    rootEl.innerHTML = `<header><button id="run" type="button">Run (Ctrl+Enter)</button><button id="cancel" type="button" disabled>Cancel</button><span id="status">idle</span></header><div id="editor" class="qb-editor"></div><div id="results" class="qb-results"></div>`
+    rootEl.innerHTML = `<header><button id="run" type="button">Run (Ctrl+Enter)</button><button id="cancel" type="button" disabled>Cancel</button><span id="status">idle</span><span style="flex:1"></span><span id="side-toggles"></span></header><div class="qb-body"><div class="qb-main"><div id="editor" class="qb-editor"></div><div id="results" class="qb-results"></div></div></div>`
     container.append(rootEl)
     cleanups.push(() => rootEl.remove())
     const q = <T extends HTMLElement>(sel: string) => rootEl.querySelector<T>(sel)!
@@ -116,7 +144,9 @@ export const mountQueryEditor = async (container: HTMLElement, opts: QueryEditor
     for (const [name, text] of Object.entries(lib.dts)) cleanups.push(ts.typescriptDefaults.addExtraLib(text, `file:///library/${name}`).dispose)
     cleanups.push(ts.typescriptDefaults.addExtraLib(globalsShim(lib), "file:///library/globals.d.ts").dispose)
 
-    const model = monaco.editor.createModel(opts.initialSource ?? DEFAULT_SOURCE, "typescript", monaco.Uri.parse("file:///query.ts"))
+    const docIndex: DocIndex | undefined = lib.catalog ? buildDocIndex(lib.catalog) : undefined
+    const modelUri = monaco.Uri.parse("file:///query.ts")
+    const model = monaco.editor.createModel(opts.initialSource ?? DEFAULT_SOURCE, "typescript", modelUri)
     cleanups.push(() => model.dispose())
     const editor = monaco.editor.create(q("#editor"), { model, automaticLayout: true, theme: "vs-dark", minimap: { enabled: false } })
     cleanups.push(() => editor.dispose())
@@ -126,11 +156,64 @@ export const mountQueryEditor = async (container: HTMLElement, opts: QueryEditor
     await runner.load(bundle)
     const compilerModelUri = monaco.Uri.parse("file:///engine/query.ts")
     cleanups.push(() => monaco.editor.getModel(compilerModelUri)?.dispose())
-    const engineLayer = makeQueryEngine({ compiler: monacoCompiler(monaco), runner })
+    const engineLayer = makeQueryEngine({ compiler: monacoCompiler(monaco), runner, ...(docIndex ? { friendly: makeFriendly(docIndex) } : {}) })
     const servicesLayer = Layer.mergeAll(Layer.succeed(ViewerService)(opts.viewer), Layer.succeed(SelectionBus)(opts.selection))
     const layerId = opts.overlayLayerId ?? "query-result"
     const { viewer, selection } = opts
     const fire = (e: Effect.Effect<unknown>) => void Effect.runPromise(e.pipe(Effect.ignore))
+
+    // Docs/gallery sidebar, hover links into the docs, snippet completions.
+    cleanups.push(registerSnippetCompletions(monaco, modelUri).dispose)
+    let sidebar: Sidebar | undefined
+    if (docIndex) {
+      const insertAtCursor = (text: string, cursorBack: number) => {
+        const sel = editor.getSelection() ?? model.getFullModelRange()
+        editor.executeEdits("dlq-docs", [{ range: sel, text, forceMoveMarkers: true }])
+        const end = editor.getPosition()
+        if (end && cursorBack > 0) editor.setPosition({ lineNumber: end.lineNumber, column: end.column - cursorBack })
+        editor.focus()
+      }
+      sidebar = renderSidebar(doc, {
+        index: docIndex,
+        onInsert: (item: DocItem) => {
+          const pos = editor.getPosition() ?? model.getFullModelRange().getEndPosition()
+          const ins = insertionFor(item, model.getValueInRange({ startLineNumber: 1, startColumn: 1, endLineNumber: pos.lineNumber, endColumn: pos.column }))
+          insertAtCursor(ins.text, ins.cursorBack)
+        },
+        onInsertExample: (source) => insertAtCursor(source, 0),
+        onLoadQuery: (query: GalleryQuery, runNow: boolean) => {
+          // An edit (not setValue) so Ctrl+Z brings the previous query back.
+          editor.executeEdits("dlq-gallery", [{ range: model.getFullModelRange(), text: query.source }])
+          editor.setPosition({ lineNumber: 1, column: 1 })
+          editor.focus()
+          if (runNow) void run()
+        },
+      })
+      sidebar.el.hidden = true
+      const side = sidebar
+      const toggles = q("#side-toggles")
+      const syncToggles = () => {
+        for (const b of Array.from(toggles.querySelectorAll("button"))) b.classList.toggle("active", !side.el.hidden && b.dataset.tab === side.el.dataset.tab)
+      }
+      const toggle = (tab: SidebarTab) => {
+        const closing = !side.el.hidden && side.el.dataset.tab === tab
+        side.el.hidden = closing
+        if (!closing) side.show(tab)
+        syncToggles()
+      }
+      for (const [tab, label] of [["docs", "Docs"], ["gallery", "Gallery"]] as const) {
+        const b = doc.createElement("button")
+        b.type = "button"
+        b.textContent = label
+        b.dataset.tab = tab
+        b.dataset.testid = `toggle-${tab}`
+        b.addEventListener("click", () => toggle(tab))
+        toggles.append(b)
+      }
+      q(".qb-body").append(side.el)
+      cleanups.push(registerDocsHover(monaco, docIndex, modelUri, (id) => { side.el.hidden = false; side.showDoc(id); syncToggles() }).dispose)
+      if (opts.initialSidebar) toggle(opts.initialSidebar)
+    }
 
     // Live diagnostics as markers on the visible model (same service the engine uses).
     let checkTimer: ReturnType<typeof setTimeout> | undefined
@@ -207,7 +290,7 @@ export const mountQueryEditor = async (container: HTMLElement, opts: QueryEditor
     runBtn.addEventListener("click", () => void run())
     cancelBtn.addEventListener("click", cancel)
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => void run())
-    return { dispose, editor, run, cancel, runner }
+    return { dispose, editor, run, cancel, runner, ...(sidebar ? { sidebar } : {}) }
   } catch (e) {
     dispose()
     throw e
