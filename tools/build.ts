@@ -1,3 +1,4 @@
+import { checkBudgets } from "./lib/budget.ts"
 import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs"
 
 export const placeholderHtml = (target: string) =>
@@ -17,5 +18,8 @@ if (import.meta.main) {
   const i = process.argv.indexOf("--target")
   const target = i >= 0 ? process.argv[i + 1] : "prod"
   if (target !== "prod" && target !== "dev") { console.error("--target must be prod|dev"); process.exit(1) }
-  console.log(`built ${target} -> ${build(target)}`)
+  const out = build(target)
+  const errors = checkBudgets(out)
+  if (errors.length) { console.error(errors.map((e) => `✗ budget: ${e}`).join("\n")); process.exit(1) }
+  console.log(`built ${target} -> ${out} (within budgets)`)
 }

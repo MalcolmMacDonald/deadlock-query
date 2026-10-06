@@ -1,0 +1,13 @@
+{
+  "name": "@deadlock-query/query-builder",
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -p .",
+    "test": "bun test",
+    "bench": "bun bench/s1.ts",
+    "verify": "bun run typecheck && bun run test"
+  },
+  "dependencies": { "monaco-editor": "^0.52.2" },
+  "devDependencies": { "playwright-core": "^1.56.1" }
+}
