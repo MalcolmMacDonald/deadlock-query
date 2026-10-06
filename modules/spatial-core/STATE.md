@@ -1,7 +1,7 @@
 # spatial-core — state
 
-- **Status:** M0, M1 raycaster and M3 SampleGrid done; M2 pending
-- **Version:** 0.2.0
+- **Status:** M0, M1, M3, M4 done; M2 in progress
+- **Version:** 0.3.0
 - **Current milestone:** M1 done; next M2 (semantics scaffold)
 - **Last updated:** 2026-10-05
 
@@ -21,6 +21,8 @@
 
 - **M3 SampleGrid** (2026-10-06): `src/sampleGrid.ts`. Built-in `floorHeight` (downward ray from above bounds, NaN if none) is always present and passed to generators as `cell.floorZ`; custom channels are `fn` or `{type: "f32"|"u8", gen}` so owner functions plug in unchanged. `get(channel, p)` is nearest-cell (XY), null outside. Deterministic binary `serialize`/`deserialize`; `onProgress`/`AbortSignal` on build. Cost report on a real map is still to do.
 
+- **M4 NavMesh** (2026-10-06): `src/navmesh.ts`. Convex polygon soup (`vertices`, `offsets`, `indices`); adjacency from shared edges; `nearestPoint`, `findPath` (A* over polygons, points via edge midpoints, no funnel smoothing yet), `distanceField(sources, MovementModel)` (multi-source Dijkstra, cost = travel time, `costAt(p)` at polygon resolution), `NavLink`s (cost = length / `linkSpeeds[kind]`, unlisted kinds unusable), `withOverrides` (blocked polys, added links, cost multipliers), deterministic `serialize`/`load`. Tests use a hand-computed corridor. Not done: Recast import (see request below), funnel smoothing, spatial acceleration for `nearestPoint` (linear scan, fine for tests, needs a grid before the 50k-polygon Dijkstra benchmark).
+
 ## In progress
 - (nothing)
 
@@ -28,7 +30,7 @@
 - M2: `semantics/` scaffold (signatures, params, placeholders, cases.json harness). Touches `src/semantics/**`, so its PR is owner-merge. M4 NavMesh (query-library M4 needs it) does not depend on M2.
 
 ## Blockers / Requests to other modules
-- (none)
+- Request to contracts/map-extractor: no navmesh binary spec exists in contracts yet. spatial-core defines one in `NavMesh.serialize` (polygon soup + links); extractor's Recast bake should emit `NavMeshData` (convex polygons) and links, or contracts should adopt this layout.
 
 ## Decisions log
 - 2026-10-05 — Module scaffolded (rev 2 of IMPLEMENTATION_PLAN.md).
