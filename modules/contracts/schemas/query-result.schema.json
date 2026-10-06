@@ -41,6 +41,12 @@
           "type": "array"
         }
       },
+      "rowIds": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
       "geometryColumns": {
         "type": "array",
         "items": {
@@ -114,6 +120,7 @@
       "schemaVersion",
       "columns",
       "rows",
+      "rowIds",
       "geometryColumns",
       "stats",
       "warnings"
