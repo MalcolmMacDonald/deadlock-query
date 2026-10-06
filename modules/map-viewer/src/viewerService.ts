@@ -9,7 +9,7 @@ import {
 import { SnapState } from "./snapping.ts"
 import { insertVertex, moveVertex, removeVertex } from "./vertexEdit.ts"
 import { LayerStore, type LayerAppearance } from "./layers.ts"
-import { ToolMachine } from "./tools.ts"
+import { ToolMachine, type ExternalTool } from "./tools.ts"
 import type { StreamStats } from "./tileStreamer.ts"
 import { DEFAULT_COLOR } from "./overlays.ts"
 import {
@@ -17,6 +17,16 @@ import {
 } from "./persistence.ts"
 
 const AUTOSAVE_DELAY_MS = 400
+
+/** Largest `CaptureOptions.scale`: the PNG is `scale` times the canvas size, and GPUs cap render targets. */
+export const MAX_CAPTURE_SCALE = 4
+
+export interface CaptureOptions {
+  /** Pixel multiplier over the canvas size (default 1, clamped to 1..4): a fixed higher resolution for exports. */
+  readonly scale?: number
+  /** Leave the background out (alpha 0) so the PNG has only terrain and overlays. */
+  readonly transparent?: boolean
+}
 
 /** What a mounted panel gives the controller; absent until a panel mounts. */
 export interface ViewerSurface {
@@ -29,7 +39,7 @@ export interface ViewerSurface {
   readonly setHandles: (points: ReadonlyArray<Vec3>, active: number | undefined) => void
   readonly getPose: () => CameraPose
   readonly setPose: (pose: CameraPose) => void
-  readonly capture: () => Promise<Uint8Array>
+  readonly capture: (opts?: CaptureOptions) => Promise<Uint8Array>
   readonly loadBundle: (manifestUrl: string) => Promise<void>
 }
 
@@ -59,9 +69,8 @@ export class ViewerController {
   /** Layers panel state (visibility, colour, opacity, order) for every overlay layer, annotations included. */
   readonly layers = new LayerStore()
   readonly annotations = new AnnotationStore()
-  readonly tools = new ToolMachine((a) => {
-    this.annotations.add(this.activeLayerId === undefined ? a : ({ ...a, layer: this.activeLayerId } as typeof a))
-  })
+  readonly tools = new ToolMachine((a) =>
+    this.annotations.add(this.activeLayerId === undefined ? a : ({ ...a, layer: this.activeLayerId } as typeof a)))
   /** Snap-to-surface/vertex/feature switches for the annotation tools. */
   readonly snapping = new SnapState()
   private selectedIds: ReadonlyArray<string> = []
@@ -336,7 +345,14 @@ export class ViewerController {
   highlight(ids: ReadonlyArray<string>) { this.highlighted = ids; this.surface?.highlight(ids) }
   getPose(): CameraPose { return this.surface?.getPose() ?? this.pose }
   setPose(p: CameraPose) { this.pose = p; this.surface?.setPose(p) }
-  capture(): Promise<Uint8Array> { return this.surface ? this.surface.capture() : Promise.reject(new Error("viewer panel is not mounted")) }
+  /** PNG of the canvas including overlays; `opts` picks a resolution multiplier and a transparent background. */
+  capture(opts?: CaptureOptions): Promise<Uint8Array> { return this.surface ? this.surface.capture(opts) : Promise.reject(new Error("viewer panel is not mounted")) }
+
+  /**
+   * Registers an annotation-style tool for another module (the viewer's `registerTool`): it gets a button in the Tools
+   * panel and receives snapped map clicks while active. Returns the unregister function.
+   */
+  registerTool(tool: ExternalTool): () => void { return this.tools.register(tool) }
   loadBundle(url: string): Promise<void> { return this.surface ? this.surface.loadBundle(url) : Promise.reject(new Error("viewer panel is not mounted")) }
 }
 

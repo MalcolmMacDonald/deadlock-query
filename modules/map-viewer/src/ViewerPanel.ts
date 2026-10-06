@@ -6,7 +6,7 @@ import { frameBounds, type CameraMode } from "./camera.ts"
 import { FOV_DEG, ViewerControls } from "./controls.ts"
 import { buildScene, glbToThreeMatrix, makeTerrainMaterial, surfaceMeshes } from "./scene.ts"
 import { OverlayScene, parseFeatureId, pickFeature } from "./overlays.ts"
-import { ViewerController } from "./viewerService.ts"
+import { MAX_CAPTURE_SCALE, ViewerController } from "./viewerService.ts"
 import { eyeOf } from "./camera.ts"
 import { SurfacePicker, threeToWorld, worldTriangleSoup } from "./picking.ts"
 import { snap, snapCandidates, type SnapResult } from "./snapping.ts"
@@ -82,8 +82,8 @@ export const makeViewerPanel = (data: ViewerData, controller: ViewerController =
     root.appendChild(bar)
     container.appendChild(root)
 
-    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true })
-    renderer.setClearColor(0x14161a)
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true, alpha: true })
+    renderer.setClearColor(0x14161a, 1)
     const camera = new THREE.PerspectiveCamera(FOV_DEG, 1, 5, 200_000)
     const scene = new THREE.Scene()
     let dirty = true
@@ -374,11 +374,26 @@ export const makeViewerPanel = (data: ViewerData, controller: ViewerController =
       setHandles: (pts, active) => overlays.setHandles(pts, active),
       getPose: () => controls.pose,
       setPose: (p) => controls.setPose(p),
-      capture: async () => {
-        renderer.render(scene, camera)
-        const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, "image/png"))
-        if (!blob) throw new Error("canvas capture failed")
-        return new Uint8Array(await blob.arrayBuffer())
+      capture: async (opts) => {
+        const scale = Math.min(MAX_CAPTURE_SCALE, Math.max(1, Math.round(opts?.scale ?? 1)))
+        const transparent = opts?.transparent === true
+        const ratio = renderer.getPixelRatio()
+        const w = Math.max(1, Math.floor(root.getBoundingClientRect().width)), h = Math.max(1, Math.floor(root.getBoundingClientRect().height))
+        const restyle = scale > 1 || transparent
+        if (scale > 1) { renderer.setPixelRatio(ratio * scale); renderer.setSize(w, h, false) }
+        if (transparent) renderer.setClearAlpha(0)
+        try {
+          renderer.render(scene, camera)
+          const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, "image/png"))
+          if (!blob) throw new Error("canvas capture failed")
+          return new Uint8Array(await blob.arrayBuffer())
+        } finally {
+          if (restyle) {
+            if (transparent) renderer.setClearAlpha(1)
+            if (scale > 1) { renderer.setPixelRatio(ratio); renderer.setSize(w, h, false) }
+            requestRender()
+          }
+        }
       },
       loadBundle: async (manifestUrl) => {
         const base = new URL(manifestUrl, globalThis.location?.href)

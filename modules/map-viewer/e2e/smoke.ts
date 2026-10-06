@@ -350,6 +350,49 @@ try {
   await settle()
   const cyanAfter = await cyan()
   if (cyanAfter - cyanBefore < 800) fail(`label text not drawn (${cyanAfter - cyanBefore} px)`)
+  // M5: an external tool registered through the controller is used end to end; captureImage options.
+  await page.evaluate(() => {
+    const v = (globalThis as any).__viewer
+    v.importJson(JSON.stringify({ schemaVersion: "1.0.0", annotations: [] }))
+    let ctx: any
+    v.registerTool({
+      id: "sample.pin", label: "Sample pin", hint: "Click to pin.",
+      activate: (c: any) => { ctx = c },
+      click: (p: number[]) => { ctx.commit({ kind: "point", points: [p], properties: { tool: "sample.pin" } }); ctx.setStatus("pinned") },
+      move: (p: number[]) => ctx.setDraft([{ type: "point", at: p }])
+    })
+  })
+  await page.click('[data-testid="viewer-tools"] button[data-tool="sample.pin"]')
+  if ((await canvas.getAttribute("data-tool")) !== "sample.pin") fail("registered tool did not become active")
+  await page.mouse.move(380, 300)
+  await page.mouse.click(400, 300)
+  await settle()
+  const pinned = (await anns())
+  if (pinned.length !== 1 || (pinned[0] as any).properties?.tool !== "sample.pin") fail(`external tool did not annotate: ${JSON.stringify(pinned)}`)
+  if (!(await page.locator('[data-testid="viewer-tools"]').textContent())?.includes("pinned")) fail("tool status not shown in the Tools panel")
+  await page.click('[data-testid="viewer-tools"] button[data-tool="select"]')
+  const png = async (opts: object) => page.evaluate(async (o) => {
+    const bytes: Uint8Array = await (globalThis as any).__viewer.capture(o)
+    const bmp = await createImageBitmap(new Blob([bytes], { type: "image/png" }))
+    const c = new OffscreenCanvas(bmp.width, bmp.height)
+    const ctx = c.getContext("2d")!
+    ctx.drawImage(bmp, 0, 0)
+    const px = ctx.getImageData(0, 0, bmp.width, bmp.height).data
+    let transparent = 0, opaque = 0
+    for (let i = 3; i < px.length; i += 4) px[i] === 0 ? transparent++ : opaque++
+    return { w: bmp.width, h: bmp.height, transparent, opaque }
+  }, opts)
+  const plain = await png({})
+  if (plain.w !== 900 || plain.transparent !== 0) fail(`plain capture ${JSON.stringify(plain)}`)
+  const big = await png({ scale: 2 })
+  if (big.w !== 1800 || big.h !== 1200) fail(`scaled capture is ${big.w}x${big.h}`)
+  // Zoom out so the terrain no longer fills the frame and the background shows.
+  await page.evaluate(() => { const v = (globalThis as any).__viewer; v.setPose({ ...v.getPose(), distance: 90000 }) })
+  await settle()
+  const clear = await png({ transparent: true })
+  if (clear.transparent < 1000 || clear.opaque < 1000) fail(`transparent capture ${JSON.stringify(clear)}`)
+  const after = await png({})
+  if (after.transparent !== 0) fail("capture options leaked into later captures")
   if (errors.length) fail(errors.join("; "))
   console.log("map-viewer e2e smoke: ok")
 } finally {
