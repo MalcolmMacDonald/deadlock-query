@@ -1,8 +1,8 @@
 # map-extractor — state
 
 - **Status:** S2 spike complete — **GO** (render, collision, entities, nav all obtainable)
-- **Version:** 0.1.0
-- **Current milestone:** M1 code done (unit-tested with a fake S2V runner); real-install run pending
+- **Version:** 0.3.0
+- **Current milestone:** M2 code done (pack-lite command implemented and tested); pending real-data run on dev machine
 - **Last updated:** 2026-10-06
 
 ## Done
@@ -127,12 +127,23 @@ Other (bulk, likely out of scope): `light_omni2` 1,968, `light_barn` 755, `citad
   - Known limits: no real decimation (small props are dropped entirely, so interiors/detail will be missing); textures are not downsized, so the 900 MB site budget may be exceeded once real texture volume is known; vertex data is plain float32 (32 B/vertex), so quantisation would roughly halve tile size; primitives over the tile budget are dropped with a warning; non-triangle modes are skipped.
   - Next: run `dlq-extract extract --tier lite --force` on the dev machine, check `inspect`, tile sizes, texture MB and the warning line; tune `--tri-budget`; then publish with `tools/publish-data.ts` (infra).
 
+## M2 (2026-10-06)
+
+- **`pack-lite` command** (extractor 0.3.0, with pack-lite): validates lite-tier bundles for publishing. Checks:
+  - Manifest tier is "lite" (rejects "full")
+  - No texture files (`.png`, `.jpg`, `.webp`, `.ktx2`, `.basis`, `.tga`, `.bmp`)
+  - Bundle size < 900 MB (site budget)
+  - Individual tile files < 20 MB (per-tile budget)
+  - Reports buildId, mapName, total size, tile count, texture file count, collision size
+  - 3 unit tests: valid lite bundle passes; non-lite bundle rejected; no-manifest error
+- Next: run `dlq-extract pack-lite <bundle-dir>` on dev machine after `extract --tier lite` to verify budget compliance; then ready for M3 (tiling/LOD).
+
 ## In progress
-- Real-install run on the dev machine (see "Next" 1).
+- Testing on real data via Remote Control dev machine (pending).
 
 ## Next
-1. Run `doctor` on the dev machine and fix `parseVersion` if needed; optionally wire `doctor --fix` download.
-2. M1 open questions to settle first: (a) are physics GLB and render glTF in the same coordinate frame (compare bboxes after applying node matrices); (b) are all hulls exported; (c) per-entity volume models (interior/trigger) export; (d) how to cut render triangles (29.4 M) for `lite`: filter by material name, `--gltf_mesh_list`, instancing; (e) parse the `.vents` text format (specified above).
+1. Run `pack-lite` on a lite bundle produced by `extract --tier lite` on the dev machine to verify budget compliance.
+2. Settle M1 open questions via real-data tests on dev machine: (a) are physics GLB and render glTF in the same coordinate frame; (b) are all hulls exported; (c) per-entity volume models (interior/trigger) export; (d) triangle cut for `lite` impact on size/quality (tune `--tri-budget`).
 3. Check `dl_hideout` / `new_player_basics` only if the owner wants them (not in Slice 1).
 
 ## Blockers / Requests to other modules
@@ -147,6 +158,8 @@ Other (bulk, likely out of scope): `light_omni2` 1,968, `light_barn` 755, `citad
 - 2026-10-05 — M0: no `@effect/cli` yet (two commands); hand-rolled parser, swap when `extract` flags grow. Tool path via `S2V_CLI` or `~/tools/s2v`.
 
 - 2026-10-06 — M1: lite tier omits render geometry for now (collision + entities only) rather than guess a decimation; full tier exports `n0.vwnod_c` as `.gltf`. Hand-rolled argv kept.
+
+- 2026-10-06 — M2: `pack-lite` validates lite-tier bundles for publishing (tier check, texture verification, budget compliance). No real-data testing yet; unit tests pass. Not yet integrated with the publish workflow (that lives in infra/tools/publish-data.ts).
 
 ## Open questions
 - (see PLAN.md §9, and "Next" item 2 above)

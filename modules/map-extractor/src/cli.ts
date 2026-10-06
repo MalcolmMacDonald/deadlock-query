@@ -6,6 +6,7 @@ import { ExportFailed, GameNotFound, ToolMissing } from "./errors.ts"
 import lock from "../tools.lock.json" with { type: "json" }
 import { extract, type Tier } from "./extract.ts"
 import { inspectBundle } from "./inspect.ts"
+import { packLite } from "./packLite.ts"
 import { bunRunner } from "./s2v.ts"
 import { findTool } from "./tool.ts"
 import { join, resolve } from "node:path"
@@ -18,7 +19,8 @@ const USAGE = `dlq-extract <command> [--json] [--game-dir <path>]
   list-maps  maps present in the game paks
   extract    --map <name> [--tier full|lite] [--force] [--out <dir>] [--tri-budget <n>] [--keep-work]   (default map ${lock.game.mainMap}, tier lite, out <repo>/data/bundles)
   inspect    <bundle-dir>   validate manifest/entities against contracts, report sizes and frame sanity
-(bake, pack-lite, diff: not implemented yet)`
+  pack-lite  <bundle-dir>   validate lite bundle, check for textures, verify budget compliance
+(bake, diff: not implemented yet)`
 
 export const main = (argv: ReadonlyArray<string>): number => {
   const [cmd, ...rest] = argv
@@ -62,6 +64,24 @@ export const mainAsync = async (argv: ReadonlyArray<string>): Promise<number> =>
     if (!dir) { console.error(USAGE); return EXIT.usage }
     const r = await inspectBundle(dir)
     emit(r, [...r.errors.map((e) => `✗ ${e}`), ...r.warnings.map((w) => `! ${w}`), ...Object.entries(r.info).map(([k, v]) => `${k}: ${JSON.stringify(v)}`), r.ok ? "inspect ok" : "inspect failed"].join("\n"))
+    return r.ok ? EXIT.ok : EXIT.problem
+  }
+  if (cmd === "pack-lite") {
+    const dir = rest.find((a) => !a.startsWith("--"))
+    if (!dir) { console.error(USAGE); return EXIT.usage }
+    const r = await packLite(dir)
+    const MB = 1024 * 1024
+    const lines = [
+      r.buildId && r.mapName ? `bundle: ${r.mapName} / build ${r.buildId}` : "no bundle info",
+      `total: ${(r.sizes.totalBytes / MB).toFixed(1)} MB (budget: 900 MB)`,
+      `tiles: ${r.sizes.tileCount}`,
+      r.sizes.collisionBytes ? `collision: ${(r.sizes.collisionBytes / MB).toFixed(1)} MB` : "collision: none",
+      r.sizes.textureFiles.length > 0 ? `textures: ${r.sizes.textureFiles.length} files, ${(r.sizes.textureBytes / MB).toFixed(1)} MB` : "textures: none (✓)",
+      ...r.errors.map((e) => `✗ ${e}`),
+      ...r.warnings.map((w) => `! ${w}`),
+      r.ok ? "pack-lite ok" : "pack-lite failed"
+    ]
+    emit(r, lines.join("\n"))
     return r.ok ? EXIT.ok : EXIT.problem
   }
   if (cmd === "extract") {
