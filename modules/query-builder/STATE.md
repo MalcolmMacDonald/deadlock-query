@@ -1,8 +1,8 @@
 # query-builder — state
 
-- **Status:** M5 done
+- **Status:** M6 done (real-data parts deferred, see below)
 - **Version:** 0.0.0
-- **Current milestone:** M5 complete; next is M6 (see PLAN.md §6)
+- **Current milestone:** M6 complete; next is M7 (see PLAN.md §6)
 - **Last updated:** 2026-10-06
 
 ## Done
@@ -71,15 +71,24 @@ Also verified: library-class member completions with TSDoc signature, string-lit
   - **Saved queries and history** (`store/queryStore.ts`, `store/dlqFile.ts`, Saved and History tabs): saved queries (named, replace by name, up to 200, 100k chars each) and the last 50 runs (newest first, an immediate repeat of the same source and outcome only refreshes its time) live in `localStorage` under one key, sanitised on read; storage that is missing, full or blocked degrades to memory. `.dlq.json` (`{kind:"deadlock-query", version:1, queries:[{name, source, apiVersion?}]}`, Effect Schema) imports/exports one or all queries. Loading from saved, history, gallery or a link is an editor edit (Ctrl+Z restores) and never runs.
   - **Tests:** CSV is parsed back with an RFC 4180 reader and compared with the table; JSON decodes as `QueryResult`; annotations decode as `AnnotationDocument`; share links round-trip (unicode, 50 kB), reject damage and an inflate bomb; store limits and corrupt storage; Chromium e2e for the four downloads, the PNG message, share → reload (never runs, stale `api` warns), save/reload/load/import/export/delete and history.
 
+- **M6** (`src/panel/loader.ts`, `src/load/`, `src/panel/monacoContributions.ts`, `test/{budget,load}.test.ts`, e2e additions). Loading and performance for everything that does not need the real map:
+  - **Lazy loading:** the package entry (`src/index.ts`) is now a small loader (7 kB minified). `makeQueryEditorPanel` / `mountQueryEditor` there show a loading view immediately and `import()` the heavy panel (Monaco, Effect, contracts, ~3.3 MB minified, 3.07 MB / 794 kB gzip as the shell's `QueryEditorPanel` chunk) while the library and map data download. `prefetchQueryEditor({ getWorkerUrl })` starts the panel chunk and the TypeScript worker download ahead of time (call it when the shell is idle or on hovering the editor tab). Syntax highlighting needs no worker, so the editor is usable (and highlighted) while the TS worker spins up, as before.
+  - **Load UX (documented here):** one progress bar per step (Editor, Query library, Map data) in `[data-testid=loading]`, with `n MB of m MB` when `Content-Length` is known (not when the server compresses, then the bar is indeterminate), "Starting the editor…" while Monaco and the sandbox start, and on failure the error plus a Retry button (`loading-retry`) that re-runs all steps. `library` and `bundle` options are now `Loadable`: a value, a promise, or `(report) => Promise` for progress; `fetchLibraryArtifact(url)` and the new `fetchQueryBundle(url)` return such loadables and memoise the download per URL for the page (failures are not cached). The loading view is an overlay, so the editor mounts into a hidden host underneath and appears when ready. Disposing during loading cancels cleanly.
+  - **Trimmed Monaco:** `editor.all.js` (every feature) is replaced by `monacoContributions.ts`, an explicit list: suggest, snippets, hover, parameter hints, inlay hints, go to definition/error, find, folding, formatting, bracket matching, comments, clipboard, multi-cursor, line/word operations, links, code actions, unicode highlighter. Dropped: diff editor, code lens, colour picker, sticky scroll, inline completions/edits, rename, drag and drop, linked editing, semantic tokens. Saves about 250 kB minified (shell chunk 3,307 kB → 3,067 kB; gzip 854 → 794 kB). To add a feature, import its contribution there; the budget test fails if `editor.all.js` comes back.
+  - **Budgets (test/budget.test.ts, runs in CI):** initial JS (entry + static imports) < 16 kB (measured 7.2 kB); deferred JS < 3.5 MB (measured 3.29 MB) and > 1 MB so inlining the heavy code is caught. Raising a number is a decision to record here.
+  - **Timings (Chromium e2e on this container, local server, 2026-10-06):** editor ready (page load → mounted) 458 ms; first `map.` suggestion 821 ms after clicking the editor. The S1 gates (first suggestion ≤ 2 s, warm completion ≤ 200 ms, cancel ≤ 100 ms) still hold; the e2e asserts looser limits (ready < 10 s, first suggestion < 4 s) and logs the numbers, and e2e self-skips without Chromium, so CI does not enforce them. Real-network numbers (Pages latency, 6 MB `ts.worker.js`, 1.4 MB gz) are still unmeasured.
+  - **Index API change:** `buildExport` / `resultToAnnotations` are no longer exported from the entry (they pull in Effect/contracts, ~1 MB, which would defeat the lazy split); the panel uses them internally. `fetchLibraryArtifact` returns a progress-reporting `Loadable` rather than a promise; the shell passes it straight to `makeQueryEditorPanel`, which is unchanged for callers.
+  - **Not done (needs the real map, or a decision):** transferring the real bundle's large buffers (collision BVH, navmesh, sample grid) to the sandbox worker without copying: the shape of those buffers in the loaded bundle is not settled and there is no real bundle to measure, so `SandboxRunner.load` still structured-clones `{manifest, entities}` (fine for the entity JSON; revisit with real data, ideally transfer `ArrayBuffer`s parent → frame → worker and keep the replay-on-respawn). Loading `NavMesh.load`/spatial backends in the worker (query-library "Blockers") belongs with it. Worker pool: kept as a seam only (`Runner` is an interface; one worker per frame today); a pool needs SharedArrayBuffer for the map data (COOP/COEP on Pages, `coi-serviceworker`) and real query timings to size it, so it waits for Phase 3 and real data. The library-artifact cache across visits is left to HTTP caching (the shell controls the headers); only in-page memoisation is implemented.
+
 ## In progress
 - (nothing)
 
 ## Next
-- M6: perf/loading: lazy Monaco, caching, bundle-load progress, worker pool prep (PLAN.md §6).
+- M7: accessibility and polish (PLAN.md §6). Then, with real data: buffer transfer to the worker, worker pool, real-network load numbers (M6 leftovers above).
 
 ## Blockers / Requests to other modules
 - contracts (nice to have): `SelectionBus` has no change stream, so the panel polls `current` every 250 ms. A `changes: Stream<ReadonlyArray<string>>` would remove the polling.
-- shell: wire `makeQueryEditorPanel` per "Embeddable panel" above (replaces the iframe `editor/` panel) and serve the two Monaco workers.
+- shell (nice to have): call `qb.prefetchQueryEditor({ getWorkerUrl })` when idle, and pass `qb.fetchQueryBundle(url)` instead of its own promise so the Map data step shows a progress bar.
 
 ## Decisions log
 - 2026-10-05 — Module scaffolded (rev 2 of IMPLEMENTATION_PLAN.md).
@@ -103,6 +112,8 @@ Also verified: library-class member completions with TSDoc signature, string-lit
 
 - 2026-10-06 — M5: the shell owns the page URL, so the panel takes `initialShare` (a fragment) and `shareBaseUrl` instead of reading `location` itself; the shell should pass `location.hash` at mount and, if it uses the hash for its own routing, a `shareBaseUrl` that makes the two coexist. Annotation, GeoJSON and PNG exports are included now although PLAN.md marks GeoJSON/annotation "Phase 2"; the contracts for them already exist. `captureImage` is the viewer's job; the panel does nothing beyond saving the bytes.
 - 2026-10-06 — M5: query files use their own envelope (`kind`/`version`) rather than a contracts schema, since contracts has none; if the shell or kanban ever needs to read `.dlq.json`, ask contracts to adopt `DlqFile`.
+
+- 2026-10-06 — M6: the lazy split lives inside the package (loader vs. panel) so every consumer, including the shell's existing `await import("@deadlock-query/query-builder")`, gets a loading view for free and the shell needs no change. Monaco features are an allowlist rather than `editor.all.js`; unlisted features simply do not exist, so check `monacoContributions.ts` first when a Monaco feature seems missing.
 
 ## Open questions
 - (see PLAN.md §9)
