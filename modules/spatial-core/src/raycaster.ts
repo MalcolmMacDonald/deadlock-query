@@ -11,6 +11,9 @@ export interface CapsuleShape { readonly a: Vec3; readonly b: Vec3; readonly rad
 /** Backend-agnostic static-geometry queries (PLAN §3). */
 export interface Raycaster {
   readonly bounds: Aabb
+  readonly triangleCount: number
+  /** Corner positions of triangle `triIndex` (the index reported in `Hit`/`ClosestPoint`); throws RangeError when out of range. */
+  triangle(triIndex: number): readonly [Vec3, Vec3, Vec3]
   raycastFirst(origin: Vec3, dir: Vec3, opts?: RayOpts): Hit | null
   raycastAll(origin: Vec3, dir: Vec3, opts?: RayOpts): Hit[]
   /** True when a triangle blocks the segment a→b. */
@@ -28,9 +31,18 @@ const tup = (v: Vector3): Vec3 => [v.x, v.y, v.z]
 
 class BvhRaycaster implements Raycaster {
   readonly bounds: Aabb
+  readonly triangleCount: number
   constructor(private readonly geo: BufferGeometry, private readonly bvh: MeshBVH) {
     const b = bvh.getBoundingBox(new Box3())
     this.bounds = { min: tup(b.min), max: tup(b.max) }
+    this.triangleCount = geo.index!.count / 3
+  }
+
+  triangle(triIndex: number): readonly [Vec3, Vec3, Vec3] {
+    if (!Number.isInteger(triIndex) || triIndex < 0 || triIndex >= this.triangleCount) throw new RangeError(`triangle ${triIndex} out of range 0..${this.triangleCount - 1}`)
+    const idx = this.geo.index!, pos = this.geo.getAttribute("position")
+    const at = (k: number): Vec3 => { const v = idx.getX(triIndex * 3 + k); return [pos.getX(v), pos.getY(v), pos.getZ(v)] }
+    return [at(0), at(1), at(2)]
   }
 
   private hit(h: { point: Vector3; distance: number; faceIndex?: number | null | undefined; face?: { normal: Vector3 } | null | undefined }): Hit {

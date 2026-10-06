@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test"
 import { Raycaster } from "../src/index.ts"
+import { Triangle, Vector3 } from "three"
 import type { Vec3 } from "@deadlock-query/contracts"
 import { makeScene } from "../bench/scene.ts"
 
@@ -86,4 +87,25 @@ test("serialise is deterministic and round-trips", () => {
   expect(r.raycastFirst(o, [0, 0, -1], { backfaces: true })!.distance)
     .toBeCloseTo(a.raycastFirst(o, [0, 0, -1], { backfaces: true })!.distance, 5)
   expect(r.bounds).toEqual(a.bounds)
+})
+
+test("triangle(triIndex) returns the corners of the triangle a query reported", () => {
+  const { pos, idx } = scene()
+  const rc = Raycaster.fromGeometry(pos.slice(), idx.slice())
+  expect(rc.triangleCount).toBe(idx.length / 3)
+  const back = Raycaster.deserialize(rc.serialize())
+  const tri = new Triangle(), t = new Vector3()
+  for (let i = 0; i < 50; i++) {
+    const o: Vec3 = [rnd() * 500, rnd() * 500, 600]
+    const h = rc.raycastFirst(o, [0, 0, -1], { backfaces: true })
+    if (!h) continue
+    const c = rc.triangle(h.triIndex)
+    tri.set(new Vector3(...c[0]), new Vector3(...c[1]), new Vector3(...c[2]))
+    expect(tri.closestPointToPoint(new Vector3(...h.point), t).distanceTo(new Vector3(...h.point))).toBeLessThan(1e-3)
+    expect(back.triangle(h.triIndex)).toEqual(c)
+    const cp = rc.closestPoint(o)!
+    expect(rc.triangle(cp.triIndex)).toEqual(back.triangle(cp.triIndex))
+  }
+  expect(() => rc.triangle(-1)).toThrow(RangeError)
+  expect(() => rc.triangle(rc.triangleCount)).toThrow(RangeError)
 })
