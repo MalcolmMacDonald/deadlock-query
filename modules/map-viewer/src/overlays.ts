@@ -6,7 +6,7 @@ import { DEFAULT_APPEARANCE, type LayerAppearance } from "./layers.ts"
 import { layerLabels, makeLabelSprite } from "./labels.ts"
 
 export const DEFAULT_COLOR = "#ffcc00"
-export const DEFAULT_SIZE = 6
+export const DEFAULT_SIZE = 9
 export const HIGHLIGHT_COLOR = "#ffffff"
 const HANDLE_STYLE: OverlayStyle = { color: "#4fc3ff", size: 11 }
 const ACTIVE_HANDLE_STYLE: OverlayStyle = { color: "#ffe14f", size: 15 }
@@ -16,6 +16,27 @@ export const VERTEX_SNAP_COLOR = "#4fff9a"
 export interface OverlayLayerData {
   readonly features: ReadonlyArray<OverlayFeature>
   readonly style: OverlayStyle
+}
+
+let markerTexture: THREE.Texture | undefined
+/**
+ * Round point marker: a white disc inside a dark ring, tinted by the material colour so the disc takes the layer
+ * colour and the ring keeps it legible over any surface. Needs a 2D canvas, so without a DOM points stay squares.
+ */
+const roundMarker = (): THREE.Texture | undefined => {
+  if (markerTexture) return markerTexture
+  if (typeof document === "undefined") return undefined
+  const canvas = document.createElement("canvas")
+  canvas.width = canvas.height = 64
+  const ctx = canvas.getContext("2d")
+  if (!ctx) return undefined
+  ctx.fillStyle = "#101216"
+  ctx.beginPath(); ctx.arc(32, 32, 31, 0, Math.PI * 2); ctx.fill()
+  ctx.fillStyle = "#ffffff"
+  ctx.beginPath(); ctx.arc(32, 32, 22, 0, Math.PI * 2); ctx.fill()
+  markerTexture = new THREE.CanvasTexture(canvas)
+  markerTexture.colorSpace = THREE.SRGBColorSpace
+  return markerTexture
 }
 
 /** A bare `Vec3[]` is shorthand for a layer of points. */
@@ -117,7 +138,8 @@ export const buildFeatureObjects = (
 
   const points = features.filter((f): f is Extract<OverlayFeature, { type: "point" }> => f.type === "point")
   if (points.length) {
-    const mat = new THREE.PointsMaterial({ ...common, size: style.size ?? DEFAULT_SIZE, sizeAttenuation: false })
+    const map = roundMarker()
+    const mat = new THREE.PointsMaterial({ ...common, size: style.size ?? DEFAULT_SIZE, sizeAttenuation: false, ...(map ? { map, alphaTest: 0.5 } : {}) })
     out.push(new THREE.Points(geometry(flat(points.map((p) => p.at), points.length)), mat))
   }
 

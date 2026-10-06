@@ -5,6 +5,7 @@ import { boundsOf, fitTopDown } from "./projection.ts"
 import { frameBounds, type CameraMode } from "./camera.ts"
 import { FOV_DEG, ViewerControls } from "./controls.ts"
 import { buildScene, glbToThreeMatrix, makeTerrainMaterial, surfaceMeshes } from "./scene.ts"
+import { declutterLabels } from "./labels.ts"
 import { OverlayScene, parseFeatureId, pickFeature } from "./overlays.ts"
 import { MAX_CAPTURE_SCALE, ViewerController } from "./viewerService.ts"
 import { eyeOf } from "./camera.ts"
@@ -100,6 +101,7 @@ export const makeViewerPanel = (data: ViewerData, controller: ViewerController =
       if (!dirty || disposed) return
       dirty = false
       if (streamDirty && streamer) { streamDirty = false; streamer.update(camera) }
+      declutterLabels(overlays.root, camera, canvas.clientWidth, canvas.clientHeight)
       renderer.render(scene, camera)
       canvas.dataset.frames = String(Number(canvas.dataset.frames ?? "0") + 1)
     }
