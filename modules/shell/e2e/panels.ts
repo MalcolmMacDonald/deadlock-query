@@ -24,7 +24,16 @@ try {
   await page.click('[data-testid="viewer-tools"] button[data-tool="point"]')
   await canvas.click({ position: { x: c.width / 2, y: c.height / 2 } })
   await page.locator('[data-testid="viewer-layers"] [data-layer="ann.points"]').waitFor({ timeout: 10000 })
-  console.log("e2e ok: tools and layers panels mounted left of the map and share its controller")
+  // The inspector is mounted over the same controller; clicking the placed annotation with the Select tool lists it.
+  const inspector = page.locator('[data-testid="inspector"]')
+  await inspector.waitFor({ timeout: 10000 })
+  await page.getByText("Nothing selected").waitFor({ timeout: 10000 })
+  await page.click('[data-testid="viewer-tools"] button[data-tool="select"]')
+  await canvas.click({ position: { x: c.width / 2, y: c.height / 2 } })
+  await page.getByText("1 selected").waitFor({ timeout: 10000 })
+  const text = await inspector.innerText()
+  if (!text.includes("annotation") || !text.includes("points[0]")) throw new Error(`inspector does not list the selected annotation: ${text}`)
+  console.log("e2e ok: tools, layers and inspector panels mounted and share the map's controller")
 } finally {
   await browser.close()
   server.kill()

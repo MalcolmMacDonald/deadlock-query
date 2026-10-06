@@ -61,7 +61,7 @@ test("Query preset references only registered panels", () => {
   const real = queryPreset(modules.flatMap((m) => m.panels))
   const ids = new Set(real.map((x) => x.id))
   for (const x of real) if (x.position) expect(ids.has(x.position.referencePanel)).toBe(true)
-  expect(["viewer.main", "viewer.tools", "viewer.layers", "query.editor"].every((id) => ids.has(id))).toBe(true)
+  expect(["viewer.main", "viewer.tools", "viewer.layers", "viewer.inspector", "query.editor"].every((id) => ids.has(id))).toBe(true)
 })
 
 test("restorable layouts name only registered panels", () => {

@@ -14,7 +14,7 @@ await withShell(4176, async ({ open }) => {
 
   // Close a panel, then reopen it from the palette with the keyboard only.
   await page.evaluate(() => (globalThis as any).__dockview.getPanel("viewer.layers").api.close())
-  await expectPanels(page, ["query.editor", "viewer.main", "viewer.tools"], "after closing Layers")
+  await expectPanels(page, ["query.editor", "viewer.inspector", "viewer.main", "viewer.tools"], "after closing Layers")
   await page.keyboard.press("Control+k")
   await input.fill("layers")
   const options = page.getByRole("option")

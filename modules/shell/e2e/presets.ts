@@ -22,7 +22,7 @@ await withShell(4175, async ({ open }) => {
     api.getPanel("viewer.layers").api.close()
     api.getPanel("query.editor").api.close()
   })
-  await expectPanels(page, ["viewer.main", "viewer.tools"], "after closing panels")
+  await expectPanels(page, ["viewer.inspector", "viewer.main", "viewer.tools"], "after closing panels")
   await page.getByTestId("reset-layout").click()
   await expectPanels(page, QUERY, "after reset")
   await page.reload()

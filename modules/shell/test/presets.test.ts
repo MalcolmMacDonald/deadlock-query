@@ -10,6 +10,17 @@ test("Explore: map with tools and layers, no editor and no extras", () => {
   expect(explorePreset(all).map((p) => p.id)).toEqual(["viewer.main", "viewer.tools", "viewer.layers"])
 })
 
+test("Inspector: under the editor in Query, its own column right of the map otherwise", () => {
+  const withInspector = [...all, def("viewer.inspector", "right")]
+  const query = queryPreset(withInspector)
+  expect(query.map((p) => p.id)).toEqual(["viewer.main", "viewer.tools", "viewer.layers", "query.editor", "viewer.inspector", "dummy"])
+  expect(query[4]!.position).toEqual({ referencePanel: "query.editor", direction: "below" })
+  const explore = explorePreset(withInspector)
+  expect(explore.map((p) => p.id)).toEqual(["viewer.main", "viewer.tools", "viewer.layers", "viewer.inspector"])
+  expect(explore[3]!.position).toEqual({ referencePanel: "viewer.main", direction: "right" })
+  expect(explore[3]!.initialWidth).toBeGreaterThan(0)
+})
+
 test("Review: adds metadata.* panels docked right of the map, drops the editor", () => {
   const preset = reviewPreset([...all, def("metadata.review", "right")])
   expect(preset.map((p) => p.id)).toEqual(["viewer.main", "viewer.tools", "viewer.layers", "metadata.review"])
