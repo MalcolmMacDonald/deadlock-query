@@ -6,10 +6,10 @@ import { ExportFailed } from "./errors.ts"
 import { gltfInfo, readGltfJson, type GltfInfo } from "./gltfInfo.ts"
 import { invertAffine } from "./mat4.ts"
 import { args, firstExceptionLine, lastRunOutput, run, type S2VRunner } from "./s2v.ts"
-import { buildLiteTiles, type LiteOptions } from "./liteRender.ts"
+import { buildLiteTiles, liteReady, type LiteOptions } from "./liteRender.ts"
 import { toEntities, parseVents } from "./vents.ts"
 
-export const EXTRACTOR_VERSION = "0.3.0"
+export const EXTRACTOR_VERSION = "0.4.0"
 export type Tier = "full" | "lite"
 
 export interface ExtractOptions {
@@ -143,6 +143,7 @@ export const extract = async (o: ExtractOptions): Promise<ExtractResult> => {
         await run(o.runner, "render", args.render(o.vpk, o.map, fullGltf, o.materials))
       }
       for (const f of readdirSync(liteDir)) rmSync(join(liteDir, f), { recursive: true, force: true })
+      await liteReady
       const r = buildLiteTiles(fullGltf, liteDir, { ...o.lite, log: o.log })
       warnings.push(...r.warnings.map((w) => `lite render: ${w}`))
       writeFileSync(manifestTiles, JSON.stringify({ tiles: r.tiles, keptTriangles: r.keptTriangles, totalTriangles: r.totalTriangles, textureBytes: r.textureBytes }))
