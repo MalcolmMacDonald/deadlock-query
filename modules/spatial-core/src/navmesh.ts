@@ -1,5 +1,5 @@
-import { Triangle, Vector3 } from "three"
 import type { Vec3 } from "@deadlock-query/contracts"
+import { NavIndex } from "./navIndex.ts"
 
 /** Convex polygon soup in world space (Z-up). Polygon `i` uses `indices[offsets[i]..offsets[i+1])`. */
 export interface NavMeshData {
@@ -29,6 +29,7 @@ export interface DistanceField {
   readonly costs: Float64Array
 }
 
+const indexes = new WeakMap<NavMeshData, NavIndex>()
 const MAGIC = 0x314d564e // "NVM1"
 
 class Heap {
@@ -121,23 +122,11 @@ export class NavMesh {
 
   private nearestPoly(p: Vec3): number { return this.nearestPoint(p)?.poly ?? -1 }
 
+  /** Closest point on the mesh (any polygon), via an XY grid index built on first use and shared by `withOverrides` copies. */
   nearestPoint(p: Vec3, opts: { maxDist?: number } = {}): NearestPoint | null {
-    const { vertices: V, offsets: O, indices: I } = this.data
-    const tri = new Triangle(), t = new Vector3(), q = new Vector3(p[0], p[1], p[2]), best = new Vector3()
-    let bd = Infinity, bp = -1
-    for (let poly = 0; poly < this.polyCount; poly++) {
-      const s = O[poly]!, e = O[poly + 1]!
-      const v0 = I[s]! * 3
-      for (let k = s + 1; k + 1 < e; k++) {
-        const v1 = I[k]! * 3, v2 = I[k + 1]! * 3
-        tri.a.fromArray(V, v0); tri.b.fromArray(V, v1); tri.c.fromArray(V, v2)
-        tri.closestPointToPoint(q, t)
-        const d = t.distanceTo(q)
-        if (d < bd) { bd = d; bp = poly; best.copy(t) }
-      }
-    }
-    if (bp < 0 || bd > (opts.maxDist ?? Infinity)) return null
-    return { point: [best.x, best.y, best.z], poly: bp, distance: bd }
+    let ix = indexes.get(this.data)
+    if (!ix) indexes.set(this.data, (ix = new NavIndex(this.data)))
+    return ix.nearest(p, opts.maxDist)
   }
 
   private edgeCost(from: number, to: number, speed: number): number {
