@@ -1,0 +1,47 @@
+{
+  "dialect": "draft-2020-12",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "submissionId": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "recordId": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "decision": {
+        "type": "string",
+        "enum": [
+          "accepted",
+          "rejected",
+          "changesRequested"
+        ]
+      },
+      "reviewer": {
+        "type": "string",
+        "maxLength": 80,
+        "minLength": 1
+      },
+      "decidedAt": {
+        "type": "string"
+      },
+      "comment": {
+        "type": "string",
+        "maxLength": 1000
+      }
+    },
+    "required": [
+      "submissionId",
+      "recordId",
+      "decision",
+      "reviewer",
+      "decidedAt"
+    ],
+    "additionalProperties": true
+  },
+  "definitions": {}
+}

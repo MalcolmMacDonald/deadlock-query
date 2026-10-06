@@ -1,8 +1,8 @@
 # contracts — state
 
-- **Status:** M3 baked-data specs done (additive); `check:real` re-run on the real bundle still to do locally
-- **Version:** 0.2.1
-- **Current milestone:** M4 (`MapMetadata`, `ScreenshotSet`) next
+- **Status:** M4 `MapMetadata` done (additive); `ScreenshotSet` next; `check:real` re-run on the real bundle still to do locally
+- **Version:** 0.3.0
+- **Current milestone:** M4 (`ScreenshotSet` left)
 - **Last updated:** 2026-10-06
 
 ## Done
@@ -21,6 +21,8 @@
 
 - ViewerService.registerTool (2026-10-06, requested by map-viewer M5): `ExternalTool`, `ToolContext`, `NewAnnotation` moved into contracts as plain types; the `ViewerService` tag gained `registerTool?(tool): Effect<() => void>` and `makeMockViewerServiceWithTools()` is a mock layer that records registrations. `MockViewerService` itself is unchanged because map-viewer's parity test (`overlays.test.ts`) requires the same members as the real service; fold the member into it once the viewer implements it. Optional on purpose: making it required would break map-viewer's `makeViewerService` and query-builder's standalone viewer shape, which this module cannot edit. See CHANGELOG.
 
+- M4 (2026-10-06): `MapMetadata` (`src/MapMetadata.ts`): record union (walkableRegion, creepCamp, sinnersSacrifice, healingOrb, navLink, custom), `MetadataFile`/`MetadataBundle`/`Submission`/`ReviewDecision`, deterministic `makeMetadataBundle` + content hash, `acceptedRecords`, `validateMetadataRecords`/`validateSubmission`; JSON Schemas generated. Details in CHANGELOG. map-metadata M0 and query-library M6 can start against it.
+
 ## In progress
 - Annotation schema (requested by map-viewer M3): added `Annotation`/`AnnotationDocument` (2026-10-06), see CHANGELOG. map-viewer can replace its local `Annotation` type (`src/annotations.ts`) with it for import/export and IndexedDB autosave; its local `id` is `a<N>`, which fits the non-empty string id.
 
@@ -29,6 +31,8 @@
 - M4: `MapMetadata` (+ `Submission`, `ReviewDecision`), `ScreenshotSet` (Phase 3; wait for the metadata/screenshot modules).
 
 ## Blockers / Requests to other modules
+- map-metadata (M0): consume `MetadataRecord`/`Submission`/`MetadataBundle` from contracts for the kinds registry and validators; add the collision-dependent geometry checks there. Tell contracts if a kind needs another field.
+- query-library (M6): load `metadata.bundle.json` with `decodeVersioned(MetadataBundle, 1)` + `verifyMetadataBundle`, use `acceptedRecords`, and carry `record.provenance` into merged entities. `navLink`/`walkableRegion` are applied at query-load time over the baked navmesh, not by re-baking. Sinner's Sacrifice has no `EntityKind` yet; add one here if the library wants it as an entity.
 - map-viewer: have `makeViewerService` implement `registerTool` (wrap `controller.registerTool`) and import `ExternalTool`/`ToolContext`/`NewAnnotation` from contracts instead of its local copies in `tools.ts`/`annotations.ts`. Once the viewer, the shell and query-builder's standalone shape all provide it, contracts can make the member required.
 - map-extractor: write `lod` and `lodOf` on LOD tiles (`tiling.ts` `lodId`/`lodFile` sites) alongside the `#lod<n>` id; the id convention can stay until consumers move. `BakedRecord`/`NavmeshRecord` could become `Baked`/`BakedNavmesh` from contracts instead of local interfaces.
 - map-viewer: draw `tilesAtLod(manifest, 0)` rather than every manifest tile (the real bundle has LOD tiles sharing the base bounds), and replace the `bakedBvhFile` cast with `manifest.baked?.bvh.file`.
@@ -48,6 +52,8 @@
 - 2026-10-06 — M3: `params` of the sample grid is `Record<string, number>` rather than a fixed struct so spatial-core can add a semantics parameter without a contracts bump; `Tile.lod` is optional with helpers reading the legacy id suffix, so no schemaVersion bump; fixture left unbaked and without LOD tiles (reasons in CHANGELOG).
 
 - 2026-10-06 — `registerTool` is an optional member of the `ViewerService` tag (additive); its value is `Effect<() => void>` as map-viewer suggested. `captureImage` options (`{ scale, transparent }`) and `OverlayStyle` extensions are not added yet (changing `captureImage` from an Effect value to a function would break callers); still on `ViewerController.capture(opts)`.
+
+- 2026-10-06 — M4: one record union keyed by `kind` rather than a registry of per-kind schemas, so a new kind is one additive union member; nav overrides are `walkableRegion.flag` (noGo/walkable) + `costMultiplier` and `navLink`, as the plan's override list (blocked polygons, added links, area costs) needs; `contentHash` covers build, map and records only (not `schemaVersion`), so a pure schema-version bump does not look like a data change.
 
 ## Open questions
 - (see PLAN.md §9)
