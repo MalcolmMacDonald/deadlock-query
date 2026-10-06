@@ -1,7 +1,7 @@
 # map-viewer — state
 
 - **Status:** M5 viewer side done (`registerTool`, capture options); the `ViewerService` tag still lacks `registerTool` (contracts request below); M4 done; real-hardware perf checks pending
-- **Version:** 0.8.0
+- **Version:** 0.8.1
 - **Current milestone:** M5 (contracts side pending) / M6
 - **Last updated:** 2026-10-06
 
@@ -28,13 +28,14 @@
 
 - 2026-10-06 — Overlay points readable on the real map: markers are round discs with a dark ring (tinted by layer colour, 9 px default, `roundMarker` in `src/overlays.ts`; squares remain without a DOM), and label sprites are decluttered each frame (`declutter` / `declutterLabels` in `src/labels.ts`, earlier labels win, more appear as you zoom in) instead of piling up to 500 overlapping boxes. Checked in Chromium against the real dl_midtown lite bundle.
 
+- 2026-10-06 — Contracts M3 follow-up (PR #75): LOD comes from contracts' `tileLod` / `tileBaseId` / `tilesAtLod` (the `lod` / `lodOf` fields, else the legacy `#lod<n>` id suffix), the viewer's own `parseTileId` is gone. The eager path (`loadViewerData`, `buildScene`) loads and draws only `tilesAtLod(manifest, 0)`, so LOD tiles no longer draw on top of their base tile; the streaming path still indexes every LOD into cells (`buildTileIndex` groups by `tileBaseId`). `bakedBvhFile` reads `manifest.baked?.bvh?.file` instead of casting. Tests: `test/tiles.test.ts` (lod/lodOf fields group correctly, eager path asks for and draws only LOD0).
+
 ## In progress
 - (nothing)
 
 ## Next
 - M1 leftover (needs Malcolm's machine): open the real single-tile bundle and confirm >= 30 fps; the viewer loads any manifest via `MapDataService`, so no code change expected.
 - Real-bundle check (Malcolm's machine): load the published dl_midtown bundle (126 tile files, LOD0 + `#lod1`, meshopt) and confirm tiles stream, `data-tile-bytes` stays under the budget, and fps. Only the unit/e2e synthetic map was exercised here; the real tiles use EXT_meshopt_compression + KHR_mesh_quantization, which `decodeTileGlb` handles through GLTFLoader but is only covered by plain float GLBs in tests.
-- Contracts M3 (`Tile.lod`) will replace the `#lod<n>` id convention; `tileLod` already prefers a `lod` field.
 - Tile fetches are not cancelled when the camera moves on (the tile still lands in the cache, and is evicted first when it is not wanted); fine for LAN-sized tiles, revisit with an `AbortSignal` if bandwidth matters. No tile prefetch ahead of the camera or cross-fade between LODs yet.
 - SDF/outlined labels with collision avoidance are M7; M3 labels are plain canvas sprites (overlap when crowded).
 - No UI to rename or delete a document layer yet (deleting would need undo to restore it).
@@ -42,6 +43,7 @@
 - M2 leftover: confirm 10k points at 60 fps on real hardware (software GL in CI measures ~15 fps for the whole scene, informational only).
 
 ## Blockers / Requests to other modules
+- Map-extractor: write `lod` / `lodOf` on LOD tiles (the viewer already reads them; the `#lod<n>` ids keep working).
 - Contracts: add `registerTool` (and optional `captureImage` options `{ scale, transparent }`) to the `ViewerService` tag so map-metadata can reach them through the service layer; until then they are on `ViewerController` (`registerTool`, `capture(opts)`), which the shell shares. Suggested shape: `registerTool(tool: ExternalTool): Effect<() => void>`; `ExternalTool`/`ToolContext` are exported from `modules/map-viewer/src/tools.ts` and could move to contracts as plain types.
 - Shell: `loadViewerData(MockMapDataService)` still hands the viewer every tile eagerly, which is right for the fixture; the published bundle goes through `loadBundle(url)` and now streams, so no shell change is needed.
 - Spatial-core: expose triangle vertices (e.g. `Raycaster.triangle(triIndex)`); vertex snapping reads them from the serialized BVH layout (`bakedTriangles` in `src/picking.ts`, guarded by `test/picking.test.ts`), which would break silently if `serialize()` changed.
