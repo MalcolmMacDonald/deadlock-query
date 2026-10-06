@@ -9,7 +9,7 @@
     "typecheck": "tsc -p .",
     "test": "bun test --pass-with-no-tests",
     "verify": "bun run typecheck && bun run test",
-    "test:e2e": "bun e2e/smoke.ts"
+    "test:e2e": "bun e2e/smoke.ts && bun e2e/streaming.ts"
   },
   "dependencies": {
     "@deadlock-query/contracts": "workspace:*",

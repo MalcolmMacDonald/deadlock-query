@@ -19,7 +19,11 @@ export * from "./vertexEdit.ts"
 export * from "./persistence.ts"
 export * from "./panels.ts"
 export * from "./viewerService.ts"
-export { buildScene, glbToThreeMatrix, WORLD_TO_THREE } from "./scene.ts"
+export * from "./tiles.ts"
+export * from "./tileStreamer.ts"
+export * from "./tileDecode.ts"
+export { defaultDecoder, DEFAULT_DECODE_WORKERS } from "./defaultDecoder.ts"
+export { buildScene, glbToThreeMatrix, makeTerrainMaterial, WORLD_TO_THREE } from "./scene.ts"
 
 export const makeViewerModule = (data: ViewerData, controller = new ViewerController()): ModuleDefinition => ({
   id: "map-viewer",
