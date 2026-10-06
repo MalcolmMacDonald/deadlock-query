@@ -17,11 +17,14 @@ export interface OverlayStyle {
   readonly size?: number
 }
 
-/** Geometry in canonical world space (Source units, Z-up). */
+/**
+ * Geometry in canonical world space (Source units, Z-up). `properties` is free-form metadata the viewer's inspector
+ * lists when the feature is selected, e.g. the other columns of the query-result row the feature came from.
+ */
 export type OverlayFeature =
-  | { readonly type: "point"; readonly at: Vec3; readonly label?: string }
-  | { readonly type: "segment" | "polyline"; readonly points: ReadonlyArray<Vec3>; readonly label?: string }
-  | { readonly type: "polygon"; readonly ring: ReadonlyArray<Vec3>; readonly label?: string }
+  | { readonly type: "point"; readonly at: Vec3; readonly label?: string; readonly properties?: Readonly<Record<string, unknown>> }
+  | { readonly type: "segment" | "polyline"; readonly points: ReadonlyArray<Vec3>; readonly label?: string; readonly properties?: Readonly<Record<string, unknown>> }
+  | { readonly type: "polygon"; readonly ring: ReadonlyArray<Vec3>; readonly label?: string; readonly properties?: Readonly<Record<string, unknown>> }
 
 /** An annotation as a tool creates it: the viewer assigns the `id`. */
 export type NewAnnotation = Annotation extends infer A ? (A extends unknown ? Omit<A, "id"> : never) : never

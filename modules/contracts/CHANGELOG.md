@@ -1,5 +1,8 @@
 # contracts changelog
 
+## 0.5.1 — OverlayFeature.properties (additive, schemaVersion stays 1.0.0)
+- `OverlayFeature` gained an optional `properties` record on every variant. The viewer's inspector lists it when the feature is selected, so query results can show the other columns of a row. Existing features are unaffected.
+
 ## 0.5.0 — ViewerService.registerTool is required (schemaVersion stays 1.0.0)
 - `ViewerService.registerTool` is now a required member: map-viewer's service, query-builder's standalone viewer and the mocks all provide it. Any other object typed as `ViewerService` must add it (a no-op `() => Effect.succeed(() => {})` is enough).
 - `MockViewerService` now has a no-op `registerTool`; `makeMockViewerServiceWithTools()` stays for modules that want the registrations recorded (it also rejects duplicate ids).

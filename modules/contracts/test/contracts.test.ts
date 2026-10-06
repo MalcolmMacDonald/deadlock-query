@@ -2,7 +2,7 @@ import { expect, test } from "bun:test"
 import { Effect } from "effect"
 import {
   DEFAULT_GLB_TO_WORLD, MockSelectionBus, MockViewerService, SelectionBus, ViewerService, makeMockViewerServiceWithTools, distance, metersToUnits,
-  threeToWorld, transformPoint, unitsToMeters, worldToThree, type Vec3
+  threeToWorld, transformPoint, unitsToMeters, worldToThree, type OverlayFeature, type Vec3
 } from "../src/index.ts"
 
 test("world <-> three round trips", () => {
@@ -172,4 +172,14 @@ test("mock viewer with tools records registrations and unregisters", async () =>
   const plain = await Effect.runPromise(Effect.gen(function* () { return yield* ViewerService }).pipe(Effect.provide(MockViewerService)))
   expect(typeof (await Effect.runPromise(plain.registerTool({ id: "x", label: "X" })))).toBe("function")
   expect(Object.keys(plain).sort()).toEqual(Object.keys(await Effect.runPromise(Effect.gen(function* () { return yield* ViewerService }).pipe(Effect.provide(mock.layer)))).sort())
+})
+
+test("OverlayFeature accepts free-form properties on every variant", () => {
+  const props = { entity: "g1", "0.0,": "odd key", nested: { a: [1, 2] } }
+  const features: ReadonlyArray<OverlayFeature> = [
+    { type: "point", at: [0, 0, 0], properties: props },
+    { type: "polyline", points: [[0, 0, 0], [1, 1, 1]], properties: props },
+    { type: "polygon", ring: [[0, 0, 0], [1, 0, 0], [1, 1, 0]], label: "x", properties: props }
+  ]
+  expect(features.every((f) => f.properties === props)).toBe(true)
 })
