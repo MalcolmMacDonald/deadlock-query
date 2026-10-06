@@ -1,5 +1,10 @@
 # contracts changelog
 
+## 0.4.0 — ScreenshotSet (additive, schemaVersion stays 1.0.0)
+- Added `ScreenshotSet` (`gameBuildId`, `mapName`, `fov`, `hideHud`, optional `placeholder` for fake-console dry runs and `tool`, `shots[]`) and `Shot` (`id`, optional `group`, `requested` and read-back `actual` pose as `{ position, angles }` in Source units/degrees, optional `lookAt`, `file`, optional `thumbnail`, `bytes`, `sha256`, pixel `width`/`height`, `capturedAt`). File paths are relative to the set's `index.json`. JSON Schema `screenshot-set.schema.json` generated.
+- Helpers: `makeScreenshotSet` (shots ordered by id), `poseError` (position units and largest angle error, wrap-around safe), `validateScreenshotSet` (unique ids and files, build/map match, read-back pose within tolerance; defaults 8 units and 1 degree) and `shotsNear` (shots around a world point, nearest first, for viewer markers).
+- No fixture yet: PLAN.md has screenshot-tool generate it from its fake console.
+
 ## 0.3.0 — M4: MapMetadata (additive, schemaVersion stays 1.0.0)
 - Added `MetadataRecord`, a union on `kind`: `walkableRegion` (ring, `floorZ`, `flag` walkable/noGo/interior/water, optional `costMultiplier`), `creepCamp` (position, optional `tier`), `sinnersSacrifice`, `healingOrb` (optional `respawnSeconds`), `navLink` (`from`, `to`, `linkKind`, `bidirectional`, optional `cost`) and `custom` (`label`, point/polyline/polygon `geometry`, scalar `properties`). Every record has `id`, `status` (proposed/accepted/rejected/stale), `provenance` (self-declared submitter, submission id, reviewer, timestamps, comment) and optional `name`/`note`. Strings are length-capped plain text.
 - Documents: `MetadataFile` (`data/metadata/<build>/<kind>.json`), `MetadataBundle` (`metadata.bundle.json`, with `contentHash`), `Submission` (all records proposed, 1..500), `ReviewDecision` (accepted/rejected/changesRequested). JSON Schemas generated in `schemas/`.
