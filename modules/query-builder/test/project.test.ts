@@ -14,8 +14,17 @@ test("array of arrays → positional columns with inferred types", () => {
 test("array of objects → one column per key; entities become entityRef ids", () => {
   const e = { id: "g1", position: [0, 0, 0] }
   const r = projectResult([{ guardian: e, d: 3 }, { guardian: { ...e, id: "g2" }, d: 4 }], stats)
-  expect(r.columns).toEqual([{ name: "guardian", type: "entityRef" }, { name: "d", type: "number" }])
-  expect(r.rows).toEqual([["g1", 3], ["g2", 4]])
+  // Each entity column gets a `<name>.position` point column so the entity is drawn on the map.
+  expect(r.columns).toEqual([{ name: "guardian", type: "entityRef" }, { name: "guardian.position", type: "point" }, { name: "d", type: "number" }])
+  expect(r.rows).toEqual([["g1", [0, 0, 0], 3], ["g2", [0, 0, 0], 4]])
+  expect(r.geometryColumns).toEqual(["guardian.position"])
+})
+
+test("a list of entities plots each at its position", () => {
+  const r = projectResult([{ id: "a", position: [1, 2, 3] }, { id: "b", position: [4, 5, 6] }], stats)
+  expect(r.columns).toEqual([{ name: "value", type: "entityRef" }, { name: "value.position", type: "point" }])
+  expect(r.rows).toEqual([["a", [1, 2, 3]], ["b", [4, 5, 6]]])
+  expect(r.rowIds).toEqual(["a", "b"])
 })
 
 test("scalars, single values, null and empty results", () => {

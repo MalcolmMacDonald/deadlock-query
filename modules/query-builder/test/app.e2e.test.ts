@@ -95,16 +95,20 @@ test.skipIf(!haveBrowser)("results drive the viewer overlay, and row ↔ pick �
   // The query returns plain rows (not entities), so row ids are row indexes.
   const ids = mini.expectedGuardianOrbDistance.rows.map((_, i) => String(i))
   const overlay = await page.evaluate(() => (self as any).__qb.host.log.overlays.get("query-result")?.map((f: any) => f.label))
-  expect(overlay).toEqual(ids.map((id) => `${id}:c2`))
+  // Labels name the thing (the guardian id in column c1), not the row/column plumbing.
+  const names = await page.$$eval("[data-testid=results-table] tbody tr", (rs) => rs.map((r) => r.querySelector("td")?.textContent))
+  expect(overlay).toEqual(names)
+  // Feature ids are the viewer's own `<layer>:<index>`.
+  const featureId = (i: number) => `query-result:${i}`
 
   // Row click → shared selection + viewer highlight + selected row.
   await page.click(`tr[data-row-id="${ids[1]}"]`)
   const sel1 = await page.evaluate(() => ({ highlight: (self as any).__qb.host.log.highlights.at(-1) }))
-  expect(sel1.highlight).toEqual([`${ids[1]}:c2`])
+  expect(sel1.highlight).toEqual([featureId(1)])
   expect(await page.$$eval("tr.selected", (r) => r.map((x) => (x as HTMLElement).dataset.rowId))).toEqual([ids[1]])
 
   // Viewer pick → row selected.
-  await page.evaluate((id) => (self as any).__qb.host.emitPick(id), `${ids[2]}:c2`)
+  await page.evaluate((id) => (self as any).__qb.host.emitPick(id), featureId(2))
   await page.waitForFunction((id) => document.querySelector("tr.selected")?.getAttribute("data-row-id") === id, ids[2])
 
   // External selection change (polled) → row selected.
