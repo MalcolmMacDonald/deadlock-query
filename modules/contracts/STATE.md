@@ -30,7 +30,7 @@
 
 ## Next
 - Run `check:real` on the real bundle (Malcolm's machine) and note the outcome.
-- M4: `MapMetadata` (+ `Submission`, `ReviewDecision`), `ScreenshotSet` (Phase 3; wait for the metadata/screenshot modules).
+- M4 is complete. Remaining contracts work arrives as requests from map-metadata, query-library, screenshot-tool and map-viewer (see below); make `ViewerService.registerTool` required once all implementations provide it.
 
 ## Blockers / Requests to other modules
 - screenshot-tool (M1+): write `index.json` as a `ScreenshotSet` (`makeScreenshotSet`), fill `actual` from the `getpos` read-back, and generate the fake-console fixture (`placeholder: true`); `validateScreenshotSet` is what `verify` can call for the shared rules (checking files and hashes on disk stays in the tool).
