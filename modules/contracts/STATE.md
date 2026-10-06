@@ -1,8 +1,8 @@
 # contracts — state
 
-- **Status:** M4 `MapMetadata` done (additive); `ScreenshotSet` next; `check:real` re-run on the real bundle still to do locally
-- **Version:** 0.3.0
-- **Current milestone:** M4 (`ScreenshotSet` left)
+- **Status:** M4 done (`MapMetadata`, `ScreenshotSet`, additive); `check:real` re-run on the real bundle still to do locally
+- **Version:** 0.4.0
+- **Current milestone:** M4 done; nothing queued (next: requests from other modules)
 - **Last updated:** 2026-10-06
 
 ## Done
@@ -23,14 +23,18 @@
 
 - M4 (2026-10-06): `MapMetadata` (`src/MapMetadata.ts`): record union (walkableRegion, creepCamp, sinnersSacrifice, healingOrb, navLink, custom), `MetadataFile`/`MetadataBundle`/`Submission`/`ReviewDecision`, deterministic `makeMetadataBundle` + content hash, `acceptedRecords`, `validateMetadataRecords`/`validateSubmission`; JSON Schemas generated. Details in CHANGELOG. map-metadata M0 and query-library M6 can start against it.
 
+- ScreenshotSet (2026-10-06, requested by screenshot-tool): `src/ScreenshotSet.ts` with `ScreenshotSet`/`Shot`, `makeScreenshotSet`, `poseError`, `validateScreenshotSet`, `shotsNear`; JSON Schema generated. Details in CHANGELOG.
+
 ## In progress
 - Annotation schema (requested by map-viewer M3): added `Annotation`/`AnnotationDocument` (2026-10-06), see CHANGELOG. map-viewer can replace its local `Annotation` type (`src/annotations.ts`) with it for import/export and IndexedDB autosave; its local `id` is `a<N>`, which fits the non-empty string id.
 
 ## Next
 - Run `check:real` on the real bundle (Malcolm's machine) and note the outcome.
-- M4: `MapMetadata` (+ `Submission`, `ReviewDecision`), `ScreenshotSet` (Phase 3; wait for the metadata/screenshot modules).
+- M4 is complete. Remaining contracts work arrives as requests from map-metadata, query-library, screenshot-tool and map-viewer (see below); make `ViewerService.registerTool` required once all implementations provide it.
 
 ## Blockers / Requests to other modules
+- screenshot-tool (M1+): write `index.json` as a `ScreenshotSet` (`makeScreenshotSet`), fill `actual` from the `getpos` read-back, and generate the fake-console fixture (`placeholder: true`); `validateScreenshotSet` is what `verify` can call for the shared rules (checking files and hashes on disk stays in the tool).
+- map-viewer: street-view markers can use `shotsNear(set, annotationPoint, radius)`.
 - map-metadata (M0): consume `MetadataRecord`/`Submission`/`MetadataBundle` from contracts for the kinds registry and validators; add the collision-dependent geometry checks there. Tell contracts if a kind needs another field.
 - query-library (M6): load `metadata.bundle.json` with `decodeVersioned(MetadataBundle, 1)` + `verifyMetadataBundle`, use `acceptedRecords`, and carry `record.provenance` into merged entities. `navLink`/`walkableRegion` are applied at query-load time over the baked navmesh, not by re-baking. Sinner's Sacrifice has no `EntityKind` yet; add one here if the library wants it as an entity.
 - map-viewer: have `makeViewerService` implement `registerTool` (wrap `controller.registerTool`) and import `ExternalTool`/`ToolContext`/`NewAnnotation` from contracts instead of its local copies in `tools.ts`/`annotations.ts`. Once the viewer, the shell and query-builder's standalone shape all provide it, contracts can make the member required.
