@@ -1,0 +1,19 @@
+name: data
+# Gate for the map-data pointer. Publishing stays local (`bun tools/publish-data.ts <bundle> --upload`) because the
+# bundle is extracted from the game install; this workflow proves a pointer change is deployable before it merges.
+on:
+  pull_request:
+    paths: [data/current-build.json, tools/lib/data.ts, tools/lib/budget.ts, tools/check-data.ts]
+  merge_group:
+    types: [checks_requested]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  check-data:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - run: bun tools/check-data.ts

@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { spawnSync } from "node:child_process"
-import { fetchData, parsePointer, sha256Hex } from "../../../tools/lib/data.ts"
+import { checkPointer, fetchData, parsePointer, sha256Hex } from "../../../tools/lib/data.ts"
 
 const good = { buildId: "1", tag: "data-1", assets: [{ name: "a.zip", sha256: "a".repeat(64), dest: "data/x" }] }
 
@@ -29,4 +29,12 @@ test("fetchData verifies hash and extracts", async () => {
   await fetchData(ptr, out, "o/r", fake)
   expect(readFileSync(join(out, "data/x/hello.txt"), "utf8")).toBe("hi")
   await expect(fetchData(good as never, out, "o/r", fake)).rejects.toThrow(/sha256 mismatch/)
+})
+
+test("checkPointer enforces the data-<buildId> tag and unique names/dests", () => {
+  const a = { name: "x.zip", sha256: "0".repeat(64), dest: "data/x" }
+  expect(checkPointer({ buildId: "1", tag: "data-1", assets: [a] })).toEqual([])
+  expect(checkPointer({ buildId: "1", tag: "v1", assets: [a] })).toHaveLength(1)
+  expect(checkPointer({ buildId: "1", tag: "data-1", assets: [] })).toHaveLength(1)
+  expect(checkPointer({ buildId: "1", tag: "data-1", assets: [a, a] })).toHaveLength(2)
 })
