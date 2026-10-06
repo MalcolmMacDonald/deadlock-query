@@ -1,11 +1,13 @@
 # spatial-core — state
 
-- **Status:** M0–M5 done (semantics are placeholders)
-- **Version:** 0.5.0
-- **Current milestone:** M5 complete; next: owner-written semantics or Phase 2 tasks
+- **Status:** M0–M5 done, nav leftovers done (semantics are placeholders)
+- **Version:** 0.6.0
+- **Current milestone:** M5 complete; next: owner-written semantics, then real-map checks
 - **Last updated:** 2026-10-06
 
 ## Done
+- **Nav leftovers** (2026-10-06): (1) `NavMesh.nearestPoint` uses an XY grid index (`src/navIndex.ts`, built on first use, shared by `withOverrides` copies; ties resolve to the lowest polygon like the old scan; oracle-tested against brute force on stacked floors). (2) `findPath` is funnel-smoothed by default (`src/funnel.ts`; `smooth: false` restores edge midpoints); stretches between off-mesh links are funnelled separately and a link contributes its two end points; `cost` is unchanged (centroid-hop graph cost, so it still equals `distanceField`; the smoothed polyline can be shorter than `cost` implies); no agent-radius clearance, corners sit on polygon vertices. (3) `bun run bench:nav` (`bench/nav.ts`): synthetic 53k-polygon rolling grid on this sandbox: index build 215 ms, `nearestPoint` 0.017 ms each (linear scan was ~8.8 ms on a similar-sized mesh), `distanceField` with 30 sources 69 ms, `costAt` 0.005 ms, `findPath` ~17 ms each. The real-map Dijkstra number is still to take once the real navmesh exists. (4) `Raycaster.triangle(triIndex)` and `triangleCount` (indices as reported by `Hit`/`ClosestPoint`, valid after `deserialize` too), so map-viewer no longer has to parse the serialised layout. (5) `SEMANTICS_VERSION`: generated `src/semanticsVersion.ts` = hash of `src/semantics/*.ts` (CRLF folded to LF; params defaults are part of that source). **After editing `src/semantics/**` run `bun run semantics-version` in this module**; `test/semanticsVersion.test.ts` fails when it is stale. The extractor still computes its own hash (which also mixes in the params object); it can switch to this export.
+
 - **M5 hardening** (2026-10-06): Added `AbortSignal` and `onProgress` callbacks to long-running operations (`raycastFirstMany`, `distanceField`, `findPath`). Created `SEMANTICS.md` with comprehensive documentation and a worked example of `isVisible` implementation. Confirmed SAB (SharedArrayBuffer) readiness: serialised geometry and grids are zero-copy and safe for cross-worker transfer.
 
 - **S5 spike: GO** (2026-10-05). `bun run bench` (`bench/s5.ts`) on a deterministic 1.0M-triangle heightfield, three@0.170 + three-mesh-bvh@0.8.x, default CENTER strategy, maxLeafTris 10:
@@ -31,7 +33,7 @@
 - (nothing)
 
 ## Next
-- M5: cancellation/progress on raycasts, SAB-ready buffers, docs with a worked `isVisible` example; navmesh funnel smoothing and spatial acceleration for `nearestPoint`; Dijkstra benchmark (30 sources, 50k polys); cost report for SampleGrid on a real map.
+- Owner-written semantics (Malcolm). Cost report for SampleGrid and the Dijkstra benchmark on the real map (need a real bake). map-viewer can drop `bakedTriangles` in favour of `Raycaster.triangle`; map-extractor can import `SEMANTICS_VERSION`.
 
 ## Blockers / Requests to other modules
 - Request to contracts/map-extractor: no navmesh binary spec exists in contracts yet. spatial-core defines one in `NavMesh.serialize` (polygon soup + links); extractor's Recast bake should emit `NavMeshData` (convex polygons) and links, or contracts should adopt this layout.
