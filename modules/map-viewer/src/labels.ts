@@ -107,6 +107,7 @@ export const makeLabelSprite = (text: string, at: Vec3, color: string): THREE.Sp
   // Sit just above the anchor so the text does not cover its marker.
   sprite.center.set(0.5, -0.35)
   sprite.userData.label = text
+  sprite.userData.px = { width: r.width, height: r.height }
   sprite.onBeforeRender = (renderer, _scene, camera) => {
     renderer.getSize(size)
     const k = 2 / (size.y * (camera as THREE.PerspectiveCamera).projectionMatrix.elements[5]!)
@@ -116,4 +117,42 @@ export const makeLabelSprite = (text: string, at: Vec3, color: string): THREE.Sp
     }
   }
   return sprite
+}
+
+/** A label's screen rectangle in pixels (top-left origin). */
+export interface LabelRect { readonly x: number; readonly y: number; readonly width: number; readonly height: number }
+
+/**
+ * Which labels to draw so none overlap: greedy in the given order (earlier wins), skipping any that would cover one
+ * already kept. Zooming in spreads the anchors apart, so more labels fit.
+ */
+export const declutter = (rects: ReadonlyArray<LabelRect | undefined>, gap = 2): boolean[] => {
+  const kept: LabelRect[] = []
+  return rects.map((r) => {
+    if (!r) return false
+    const hit = kept.some((k) => r.x < k.x + k.width + gap && k.x < r.x + r.width + gap && r.y < k.y + k.height + gap && k.y < r.y + r.height + gap)
+    if (!hit) kept.push(r)
+    return !hit
+  })
+}
+
+const ndc = new THREE.Vector3()
+
+/** Hides label sprites under `root` that would overlap an earlier one or sit behind the camera (call before each render). */
+export const declutterLabels = (root: THREE.Object3D, camera: THREE.Camera, width: number, height: number): void => {
+  const sprites: THREE.Sprite[] = []
+  root.traverse((o) => { if ((o as THREE.Sprite).isSprite && o.userData.px) sprites.push(o as THREE.Sprite) })
+  if (sprites.length === 0) return
+  root.updateWorldMatrix(true, true)
+  const rects = sprites.map((s): LabelRect | undefined => {
+    if (!s.parent?.visible) return undefined
+    ndc.setFromMatrixPosition(s.matrixWorld).project(camera)
+    if (ndc.z < -1 || ndc.z > 1 || Math.abs(ndc.x) > 1.2 || Math.abs(ndc.y) > 1.2) return undefined
+    const { width: w, height: h } = s.userData.px as { width: number; height: number }
+    const x = (ndc.x * 0.5 + 0.5) * width, y = (-ndc.y * 0.5 + 0.5) * height
+    // The sprite hangs above its anchor (`center` y = -0.35), so its rectangle spans 0.35h..1.35h above it.
+    return { x: x - w / 2, y: y - 1.35 * h, width: w, height: h }
+  })
+  const show = declutter(rects)
+  sprites.forEach((s, i) => { s.visible = show[i]! })
 }
