@@ -4,7 +4,7 @@ import {
 } from "@deadlock-query/contracts"
 import { eyeOf, poseFromEye, type CameraPose } from "./camera.ts"
 import {
-  AnnotationStore, annotationIdForFeature, annotationLayers, featureIdForAnnotation
+  AnnotationStore, annotationIdForFeature, annotationLayers, featureIdForAnnotation, isHidden, isLocked, type Annotation
 } from "./annotations.ts"
 import { SnapState } from "./snapping.ts"
 import { insertVertex, moveVertex, removeVertex } from "./vertexEdit.ts"
@@ -50,10 +50,13 @@ export class ViewerController {
   /** Layers panel state (visibility, colour, opacity, order) for every overlay layer, annotations included. */
   readonly layers = new LayerStore()
   readonly annotations = new AnnotationStore()
-  readonly tools = new ToolMachine((a) => { this.annotations.add(a) })
+  readonly tools = new ToolMachine((a) => {
+    this.annotations.add(this.activeLayerId === undefined ? a : ({ ...a, layer: this.activeLayerId } as typeof a))
+  })
   /** Snap-to-surface/vertex/feature switches for the annotation tools. */
   readonly snapping = new SnapState()
-  private selectedId: string | undefined
+  private selectedIds: ReadonlyArray<string> = []
+  private activeLayerId: string | undefined
   private selectedVertexIndex: number | undefined
   private liveAnnotationLayers = new Set<string>()
   private map: MapIdentity = {}
@@ -166,33 +169,88 @@ export class ViewerController {
     this.layers.drop(id)
   }
 
-  get selectedAnnotation(): string | undefined { return this.selectedId }
+  /** Primary selection (the last one added); vertex editing only applies when exactly one annotation is selected. */
+  get selectedAnnotation(): string | undefined { return this.selectedIds[this.selectedIds.length - 1] }
+
+  /** Every selected annotation id, in selection order. */
+  get selection(): ReadonlyArray<string> { return this.selectedIds }
 
   onSelectionChange(fn: () => void): () => void {
     this.selectionListeners.add(fn)
     return () => { this.selectionListeners.delete(fn) }
   }
 
-  /** Selects an annotation (or clears with `undefined`) and highlights it; shares the viewer's one highlight slot. */
-  selectAnnotation(id: string | undefined) {
-    if (id !== this.selectedId) this.selectedVertexIndex = undefined
-    this.selectedId = id
-    const fid = id ? featureIdForAnnotation(this.annotations.annotations, id, this.annotations.layers) : undefined
-    this.highlight(fid ? [fid] : [])
+  /** Whether the annotation is in a locked document layer (it then cannot be selected or changed). */
+  isLocked(id: string): boolean {
+    const a = this.annotations.annotations.find((x) => x.id === id)
+    return a !== undefined && isLocked(a, this.annotations.layers)
+  }
+
+  private selectable(a: Annotation): boolean {
+    const layers = this.annotations.layers
+    return !isLocked(a, layers) && !isHidden(a, layers)
+  }
+
+  /**
+   * Replaces the selection. Unknown ids, annotations in locked or hidden layers and duplicates are dropped. The
+   * selection is shown through the viewer's single highlight slot, so it replaces any query highlight until cleared.
+   */
+  setSelection(ids: ReadonlyArray<string>) {
+    const doc = this.annotations.annotations
+    const next = [...new Set(ids)].filter((id) => { const a = doc.find((x) => x.id === id); return a !== undefined && this.selectable(a) })
+    const same = next.length === this.selectedIds.length && next.every((id, i) => id === this.selectedIds[i])
+    if (next.length !== 1 || next[0] !== this.selectedIds[0] || this.selectedIds.length !== 1) this.selectedVertexIndex = undefined
+    this.selectedIds = next
+    const layers = this.annotations.layers
+    this.highlight(next.flatMap((id) => featureIdForAnnotation(doc, id, layers) ?? []))
     this.syncHandles()
-    for (const fn of [...this.selectionListeners]) fn()
+    if (!same) for (const fn of [...this.selectionListeners]) fn()
   }
 
-  /** Selects the annotation under an overlay feature id; other layers' ids are ignored. */
-  selectFeature(featureId: string) {
+  /** Selects one annotation (or clears with `undefined`). */
+  selectAnnotation(id: string | undefined) { this.setSelection(id ? [id] : []) }
+
+  /** Adds the annotation to the selection, or removes it when already selected. */
+  toggleAnnotation(id: string) {
+    this.setSelection(this.selectedIds.includes(id) ? this.selectedIds.filter((x) => x !== id) : [...this.selectedIds, id])
+  }
+
+  /** Selects the annotation under an overlay feature id (`additive`: toggle it in the selection); other layers' ids are ignored. */
+  selectFeature(featureId: string, additive = false) {
     const id = annotationIdForFeature(this.annotations.annotations, featureId, this.annotations.layers)
-    if (id) this.selectAnnotation(id)
+    if (!id) return
+    if (additive) this.toggleAnnotation(id)
+    else this.selectAnnotation(id)
   }
 
+  /** Selects every annotation that can be selected (not locked, not hidden). */
+  selectAll() {
+    this.setSelection(this.annotations.annotations.filter((a) => this.selectable(a)).map((a) => a.id))
+  }
+
+  /** Deletes the whole selection as one undo step. */
   deleteSelected(): boolean {
-    const id = this.selectedId
-    if (!id || !this.annotations.remove(id)) return false
+    return this.selectedIds.length > 0 && this.annotations.removeMany(this.selectedIds)
+  }
+
+  /** Document layer new annotations are drawn into (`undefined`: none). */
+  get activeLayer(): string | undefined { return this.activeLayerId }
+
+  /** Refuses layers that do not exist or are locked/hidden, since nothing drawn there could be edited afterwards. */
+  setActiveLayer(id: string | undefined): boolean {
+    if (id !== undefined) {
+      const l = this.annotations.layers?.find((x) => x.id === id)
+      if (!l || l.locked === true || l.visible === false) return false
+    }
+    this.activeLayerId = id
+    for (const fn of [...this.selectionListeners]) fn()
     return true
+  }
+
+  /** Moves the selected annotations into layer `layer` (`undefined`: out of any layer). */
+  moveSelectionToLayer(layer: string | undefined): boolean {
+    if (layer !== undefined && !this.annotations.layers?.some((l) => l.id === layer)) return false
+    return this.annotations.assignLayer(this.selectedIds, layer)
   }
 
   /** Vertex of the selected annotation that Delete removes and a drag moves. */
@@ -205,7 +263,11 @@ export class ViewerController {
     for (const fn of [...this.selectionListeners]) fn()
   }
 
-  private selected() { return this.selectedId ? this.annotations.annotations.find((a) => a.id === this.selectedId) : undefined }
+  /** The selected annotation when exactly one is selected (vertex editing works on that one only). */
+  private selected() {
+    const id = this.selectedIds.length === 1 ? this.selectedIds[0] : undefined
+    return id ? this.annotations.annotations.find((a) => a.id === id) : undefined
+  }
 
   /** Vertices the user can grab: those of the selected annotation, only while the Select tool is active. */
   vertexHandles(): ReadonlyArray<Vec3> {
@@ -256,8 +318,11 @@ export class ViewerController {
     for (const id of [...this.liveAnnotationLayers]) if (!liveIds.has(id)) this.removeOverlay(id)
     this.liveAnnotationLayers = liveIds
     for (const l of live) this.setOverlay(l.id, l.features, l.style, l.label)
-    if (this.selectedId && !doc.some((a) => a.id === this.selectedId)) this.selectAnnotation(undefined)
-    else if (this.selectedId) this.selectAnnotation(this.selectedId)
+    if (this.activeLayerId !== undefined) {
+      const l = this.annotations.layers?.find((x) => x.id === this.activeLayerId)
+      if (!l || l.locked === true || l.visible === false) this.activeLayerId = undefined
+    }
+    this.setSelection(this.selectedIds)
   }
   highlight(ids: ReadonlyArray<string>) { this.highlighted = ids; this.surface?.highlight(ids) }
   getPose(): CameraPose { return this.surface?.getPose() ?? this.pose }

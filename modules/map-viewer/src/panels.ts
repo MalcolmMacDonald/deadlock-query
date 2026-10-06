@@ -1,5 +1,5 @@
 import * as THREE from "three"
-import { describe } from "./annotations.ts"
+import { describe, isHidden, isLocked } from "./annotations.ts"
 import { TOOL_IDS, type ToolId } from "./tools.ts"
 import type { PanelComponent } from "./ViewerPanel.ts"
 import type { ViewerController } from "./viewerService.ts"
@@ -29,7 +29,15 @@ export const makeLayersPanel = (controller: ViewerController): PanelComponent =>
     root.dataset.testid = "viewer-layers"
     const list = el("div", "display:flex;flex-direction:column;gap:6px")
     const empty = el("div", "opacity:.6", { textContent: "No layers yet." })
-    root.append(list, empty)
+    const groupsHeader = el("div", "display:flex;align-items:center;gap:6px;margin-top:12px;font-weight:700")
+    groupsHeader.append(el("span", "flex:1", { textContent: "Annotation layers" }))
+    const newGroup = el("button", "", { textContent: "New layer", title: "Add an annotation layer" })
+    newGroup.dataset.action = "new-layer"
+    newGroup.onclick = () => { const l = controller.annotations.addLayer(); controller.setActiveLayer(l.id) }
+    groupsHeader.append(newGroup)
+    const groups = el("div", "display:flex;flex-direction:column;gap:4px;margin-top:4px")
+    groups.dataset.role = "doc-layers"
+    root.append(list, empty, groupsHeader, groups)
     container.appendChild(root)
 
     interface Row { readonly row: HTMLElement; readonly visible: HTMLInputElement; readonly color: HTMLInputElement; readonly opacity: HTMLInputElement; readonly name: HTMLElement }
@@ -83,9 +91,41 @@ export const makeLayersPanel = (controller: ViewerController): PanelComponent =>
       }
       empty.style.display = layers.length ? "none" : ""
     }
+    /** Document layers (`Annotation.layer`): which one new drawings go to, and whether it is visible or locked. */
+    const renderGroups = () => {
+      const docLayers = controller.annotations.layers ?? []
+      groups.replaceChildren(
+        ...(docLayers.length ? [el("div", "opacity:.6", { textContent: "● draw · visible · locked" })] : [el("div", "opacity:.6", { textContent: "Annotations are not grouped yet." })]),
+        ...docLayers.map((l) => {
+          const row = el("div", "display:flex;align-items:center;gap:6px")
+          row.dataset.docLayer = l.id
+          const active = el("input", "", { type: "radio", name: "active-layer", title: "Draw into this layer", checked: controller.activeLayer === l.id })
+          active.dataset.role = "active"
+          active.onchange = () => { controller.setActiveLayer(l.id); renderGroups() }
+          const visible = el("input", "", { type: "checkbox", title: "Visible", checked: l.visible !== false })
+          visible.dataset.role = "doc-visible"
+          visible.onchange = () => controller.annotations.patchLayer(l.id, { visible: visible.checked })
+          const locked = el("input", "", { type: "checkbox", title: "Locked: its annotations cannot be selected or edited", checked: l.locked === true })
+          locked.dataset.role = "doc-locked"
+          locked.onchange = () => controller.annotations.patchLayer(l.id, { locked: locked.checked })
+          const name = el("span", "flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap", { textContent: l.name, title: l.id })
+          const move = el("button", "", { textContent: "Move selection here", title: "Move the selected annotations into this layer" })
+          move.dataset.role = "doc-move"
+          move.disabled = l.locked === true || controller.selection.length === 0
+          move.onclick = () => controller.moveSelectionToLayer(l.id)
+          row.append(active, visible, locked, name, move)
+          return row
+        })
+      )
+    }
     render()
-    const unsub = controller.layers.subscribe(render)
-    return () => { unsub(); root.remove() }
+    renderGroups()
+    const unsubs = [
+      controller.layers.subscribe(render),
+      controller.annotations.subscribe(renderGroups),
+      controller.onSelectionChange(renderGroups)
+    ]
+    return () => { for (const u of unsubs) u(); root.remove() }
   }
 })
 
@@ -98,12 +138,14 @@ export const makeToolsPanel = (controller: ViewerController): PanelComponent => 
     const actions = el("div", "display:flex;gap:4px;margin-bottom:6px")
     const hint = el("div", "opacity:.7;margin-bottom:6px;min-height:1.4em")
     const list = el("div", "display:flex;flex-direction:column;gap:2px")
+    const selectionInfo = el("div", "margin-bottom:6px;opacity:.8")
+    selectionInfo.dataset.role = "selection"
     const files = el("div", "display:flex;gap:4px;margin-bottom:6px")
     const status = el("div", "margin-bottom:6px;min-height:1.4em")
     status.dataset.role = "status"
     const snaps = el("div", "display:flex;gap:8px;margin-bottom:6px;flex-wrap:wrap")
     snaps.title = "Snapping"
-    root.append(toolBar, actions, files, snaps, hint, status, list)
+    root.append(toolBar, actions, files, snaps, hint, status, selectionInfo, list)
     container.appendChild(root)
 
     const toolButtons = TOOL_IDS.map((t) => {
@@ -164,7 +206,7 @@ export const makeToolsPanel = (controller: ViewerController): PanelComponent => 
     })
 
     const HINTS: Record<ToolId, string> = {
-      select: "Click an annotation to select it; drag a blue handle to move a vertex, double-click an edge to add one, Delete removes the vertex (or the annotation).",
+      select: "Click an annotation to select it (Shift/Ctrl-click adds or removes, Ctrl+A selects all); drag a blue handle to move a vertex, double-click an edge to add one, Delete removes the vertex (or the annotation).",
       point: "Click the map to drop a point.",
       label: "Click the map, then type the label text.",
       polyline: "Click to add vertices; double-click or Enter to finish, Esc to cancel.",
@@ -179,13 +221,23 @@ export const makeToolsPanel = (controller: ViewerController): PanelComponent => 
       undo.disabled = !controller.annotations.canUndo
       redo.disabled = !controller.annotations.canRedo
       finish.disabled = controller.tools.pending === 0
-      del.disabled = controller.selectedAnnotation === undefined
+      del.disabled = controller.selection.length === 0
+      const layers = controller.annotations.layers
       list.replaceChildren(...controller.annotations.annotations.map((a) => {
-        const row = el("button", `text-align:left;font-weight:${a.id === controller.selectedAnnotation ? 700 : 400}`, { textContent: describe(a) })
+        const locked = isLocked(a, layers)
+        const layerName = a.layer === undefined ? "" : ` [${layers?.find((l) => l.id === a.layer)?.name ?? a.layer}]`
+        const row = el("button", `text-align:left;font-weight:${controller.selection.includes(a.id) ? 700 : 400}`, {
+          textContent: `${locked ? "🔒 " : ""}${describe(a)}${layerName}`, disabled: locked || isHidden(a, layers)
+        })
         row.dataset.annotation = a.id
-        row.onclick = () => { controller.tools.setTool("select"); controller.selectAnnotation(a.id) }
+        row.onclick = (ev) => {
+          controller.tools.setTool("select")
+          if (ev.shiftKey || ev.ctrlKey || ev.metaKey) controller.toggleAnnotation(a.id)
+          else controller.selectAnnotation(a.id)
+        }
         return row
       }))
+      selectionInfo.textContent = controller.selection.length > 1 ? `${controller.selection.length} selected` : ""
     }
     render()
     const unsubs = [

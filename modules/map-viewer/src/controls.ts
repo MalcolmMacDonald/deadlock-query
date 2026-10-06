@@ -107,7 +107,8 @@ export class ViewerControls {
       if (k === "1") this.setMode("map")
       else if (k === "2") this.setMode("orbit")
       else if (k === "3") this.setMode("fly")
-      else if (this.mode === "fly" && "wasdqe".includes(k) && k.length === 1) {
+      // Shortcuts (Ctrl+A select all, Ctrl+S, ...) must not also fly the camera.
+      else if (this.mode === "fly" && "wasdqe".includes(k) && k.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
         this.keys.add(k)
         this.startLoop()
       }

@@ -3,6 +3,7 @@ import type { OverlayFeature, OverlayStyle, Vec3 } from "@deadlock-query/contrac
 import { WORLD_TO_THREE } from "./scene.ts"
 import { DRAFT_COLOR } from "./tools.ts"
 import { DEFAULT_APPEARANCE, type LayerAppearance } from "./layers.ts"
+import { layerLabels, makeLabelSprite } from "./labels.ts"
 
 export const DEFAULT_COLOR = "#ffcc00"
 export const DEFAULT_SIZE = 6
@@ -107,7 +108,7 @@ const geometry = (positions: Float32Array, index?: number[]): THREE.BufferGeomet
 export const buildFeatureObjects = (
   features: ReadonlyArray<OverlayFeature>,
   style: OverlayStyle,
-  opts: { readonly opacity?: number; readonly depthTest?: boolean } = {}
+  opts: { readonly opacity?: number; readonly depthTest?: boolean; readonly labels?: boolean } = {}
 ): THREE.Object3D[] => {
   const color = new THREE.Color(style.color ?? DEFAULT_COLOR)
   const transparent = (opts.opacity ?? 1) < 1
@@ -144,6 +145,14 @@ export const buildFeatureObjects = (
     out.push(new THREE.Mesh(geometry(flat(fillPos, fillPos.length), fillIdx), mat))
   }
   for (const o of out) o.renderOrder = 10
+  // Text labels: billboards above the geometry (render order 12), sharing the layer's colour and opacity.
+  for (const l of opts.labels === false ? [] : layerLabels(features)) {
+    const sprite = makeLabelSprite(l.text, l.at, style.color ?? DEFAULT_COLOR)
+    if (!sprite) continue
+    sprite.material.opacity = opts.opacity ?? 1
+    sprite.renderOrder = 12
+    out.push(sprite)
+  }
   return out
 }
 
@@ -235,7 +244,7 @@ export class OverlayScene {
     // Layer order only ranks layers against each other; it stays below the draft (15) and highlight (20) passes.
     const rank = 10 + Math.min(Math.max(a.order, 0), 1000) * 0.004
     for (const o of buildFeatureObjects(features, a.color ? { ...style, color: a.color } : style, { opacity: a.opacity })) {
-      o.renderOrder = rank
+      o.renderOrder = o instanceof THREE.Sprite ? rank + 0.002 : rank
       group.add(o)
     }
     this.root.add(group)
@@ -286,7 +295,7 @@ export class OverlayScene {
       feats.push(f)
       size = Math.max(size, (this.layers.get(parseFeatureId(id)!.layerId)!.style.size ?? DEFAULT_SIZE))
     }
-    for (const o of buildFeatureObjects(feats, { color: HIGHLIGHT_COLOR, size: size * 1.8 })) { o.renderOrder = 20; this.highlightGroup.add(o) }
+    for (const o of buildFeatureObjects(feats, { color: HIGHLIGHT_COLOR, size: size * 1.8 }, { labels: false })) { o.renderOrder = 20; this.highlightGroup.add(o) }
   }
 }
 
