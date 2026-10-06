@@ -93,7 +93,7 @@ export const DEFAULT_FOV = 90
 /** Refuse plans that would take hours by accident. */
 export const MAX_SHOTS = 5000
 
-const make = (meta: PlanMeta, shots: ShotSpec[]): ShotPlan => {
+export const buildPlan = (meta: PlanMeta, shots: ShotSpec[]): ShotPlan => {
   if (shots.length > MAX_SHOTS) throw new PlanError([`plan would have ${shots.length} shots (max ${MAX_SHOTS}); use a larger spacing or fewer yaws`])
   return parsePlan({
     schemaVersion: SCHEMA_VERSION,
@@ -124,7 +124,7 @@ export const ringPlan = (meta: PlanMeta, o: RingOptions): ShotPlan => {
     const group = `ring-${String(i + 1).padStart(3, "0")}`
     return yaws.map((yaw) => ({ id: `${group}-${yawTag(yaw)}`, group, position: position.map(round) as unknown as Vec3, angles: [pitch, yaw, 0] }))
   })
-  return make(meta, shots)
+  return buildPlan(meta, shots)
 }
 
 export interface GridOptions {
@@ -157,7 +157,7 @@ export const gridPlan = (meta: PlanMeta, o: GridOptions): ShotPlan => {
       for (const yaw of yaws) shots.push({ id: `${group}-${yawTag(yaw)}`, group, position, angles: [pitch, yaw, 0] })
     }
   }
-  return make(meta, shots)
+  return buildPlan(meta, shots)
 }
 
 /** Canonical text form: stable key order, two-space indent, trailing newline. Same plan in, same bytes out. */
