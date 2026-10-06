@@ -5,5 +5,7 @@ import react from "@vitejs/plugin-react"
 export default defineConfig({
   base: process.env.SHELL_BASE ?? "./",
   plugins: [react()],
+  // Monaco workers are ES modules (Monaco starts them with `type: "module"`).
+  worker: { format: "es" },
   build: { outDir: "dist", emptyOutDir: true },
 })

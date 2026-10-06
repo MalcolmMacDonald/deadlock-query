@@ -1,7 +1,7 @@
 # map-viewer — state
 
-- **Status:** M3 partly done (layers panel, annotation tools, undo/redo); import/export + autosave blocked on contracts `Annotation`; M1 real-bundle perf check pending
-- **Version:** 0.3.0
+- **Status:** M3 core done (layers panel, annotation tools, undo/redo, import/export, autosave); snapping/BVH/vertex editing remain; M1 real-bundle perf check pending
+- **Version:** 0.4.0
 - **Current milestone:** M3 (finish)
 - **Last updated:** 2026-10-06
 
@@ -16,16 +16,17 @@
 
 - 2026-10-06 — M3 (part 1): `viewer.layers` and `viewer.tools` panels (`src/panels.ts`) over state held on `ViewerController`, so they survive remounts and work with the shell's shared controller. `LayerStore` (`src/layers.ts`): every overlay layer, including query layers, gets visibility, colour override, opacity and draw order; `OverlayScene.setAppearance` applies it, hidden layers are not picked. Annotations (`src/annotations.ts`): point, label, polyline, polygon, measure kinds, `AnnotationStore` with undo/redo history (200 steps), rendered as overlay layers `ann.points|labels|lines|polygons|measures`. Tools (`src/tools.ts`): `ToolMachine` (select/point/label/polyline/polygon/measure), rubber-band draft, double-click/Enter finishes, Esc cancels, Ctrl+Z / Ctrl+Y / Delete on the canvas. Points land on the first terrain hit (Three raycaster, click only), else on the horizontal plane through the last placed point or the camera target. Tests: bun unit (`test/annotations.test.ts`) and e2e (draw, layer hide/show, undo/redo, measure, delete).
 
+- 2026-10-06 — M3 (part 2): the viewer's local `Annotation` type is gone; `AnnotationStore` holds the contracts `Annotation` (and carries the document's `layers` through). `src/persistence.ts`: `toDocument`/`serializeDocument`, `parseDocument` (schema + `decodeVersioned` major 1 + `validateAnnotationDocument`; a different `mapName`/`gameBuildId` only warns), `AnnotationStorage` with `indexedDbStorage()` and `memoryStorage()`. `ViewerController`: `setMap`, `exportJson`, `importJson` (replaces the annotations as one undoable step; a rejected file changes nothing), `useStorage`/`useDefaultStorage`, `flushAutosave`. Autosave is debounced (400 ms), one document per map under key `annotations:<mapName>`, restored on mount when nothing has been drawn yet (restore resets history). Tools panel has Export (downloads `annotations-<map>.json`) and Import (file picker, result shown in the panel). Tests: bun unit (round trip, bad documents, autosave/restore) and e2e (draw, reload restores, export is schema-valid, import replaces, bad import rejected).
+
 ## In progress
 - (nothing)
 
 ## Next
 - M1 leftover (needs Malcolm's machine): open the real single-tile bundle and confirm >= 30 fps; the viewer loads any manifest via `MapDataService`, so no code change expected.
-- M3 remainder: import/export as the contract `AnnotationDocument` (needs contracts), IndexedDB autosave (store the same document), snapping to surface/vertices/features and BVH picking (three-mesh-bvh; click raycast is brute force today and hover preview uses the plane only), vertex editing, multi-select, per-layer lock, text rendering for labels and measure results (shown only in the tools list for now; SDF labels are M7).
+- M3 remainder: snapping to surface/vertices/features and BVH picking (three-mesh-bvh; click raycast is brute force today and hover preview uses the plane only), vertex editing, multi-select, per-layer lock, text rendering for labels and measure results (shown only in the tools list for now; SDF labels are M7).
 - M2 leftover: confirm 10k points at 60 fps on real hardware (software GL in CI measures ~15 fps for the whole scene, informational only).
 
 ## Blockers / Requests to other modules
-- Contracts: add an `Annotation` / `AnnotationDocument` schema (`schemaVersion`, features with kind point/label/polyline/polygon/measure, world-space `Vec3` points, label text, optional properties). M3 acceptance ("export equals schema-valid document") needs it; the viewer's local `Annotation` type (`src/annotations.ts`) will be replaced by it.
 - Shell: mount `viewer.layers` (`makeLayersPanel(controller)`) and `viewer.tools` (`makeToolsPanel(controller)`) next to `viewer.main`, using the same `ViewerController`. They are already listed in `makeViewerModule(...).panels`; `shell/src/viewer.ts` builds its own module and only lists `viewer.main`.
 - Shell/contracts: `ModuleDefinition.layer` is typed `Layer<never>` and shell provides `MockViewerService` in its base layer, so the real service is not reachable by other modules yet. Shell should create one `ViewerController`, pass it to `makeViewerModule(data, controller)` and provide `makeViewerService(controller)` instead of the mock.
 - Contracts: `ViewerEvent` pick/hover carry only `id`; style has only `color`/`size` (line width is not supported by WebGL lines; fat lines come later). Per-feature styling from columns needs an `OverlayStyle` extension.
@@ -42,6 +43,8 @@
 - 2026-10-06 — Terrain rendered solid black on the dev site: extracted GLBs carry POSITION only (no NORMAL), so `MeshStandardMaterial` lit to black. Fixed with `flatShading: true` (per-fragment derivative normals); e2e smoke now asserts lit terrain pixels.
 
 - 2026-10-06 — M3: selecting an annotation reuses the viewer's single highlight slot, so it replaces any query highlight until cleared. Layer order is the draw order among overlay layers only; draft and highlight always draw above (render order 15 / 20). Annotation layers disappear (and their appearance resets) when their last annotation is deleted.
+
+- 2026-10-06 — M3: contract `Annotation.color`, `.layer` and `.properties` and the document's `layers` round-trip through import/export/autosave but are not rendered yet (annotation overlay layers are still one per kind with the viewer's default colours). Importing replaces rather than merges.
 
 ## Open questions
 - (see PLAN.md §9)

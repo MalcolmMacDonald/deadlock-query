@@ -1,20 +1,15 @@
-import type { OverlayFeature, OverlayStyle, Vec3 } from "@deadlock-query/contracts"
+import type {
+  Annotation, AnnotationDocument, AnnotationKind, OverlayFeature, OverlayStyle, Vec3
+} from "@deadlock-query/contracts"
 
 /**
- * Viewer-local annotation model. The shared `Annotation` contract does not exist yet (see STATE.md "Blockers"), so
- * import/export waits on it; geometry is world-space Source units (Z-up), same as overlays.
+ * The annotation model is the contracts `Annotation` (geometry is world-space Source units, Z-up, same as overlays);
+ * the store holds exactly what import/export and autosave read and write.
  */
-export type AnnotationKind = "point" | "label" | "polyline" | "polygon" | "measure"
+export type { Annotation, AnnotationKind }
 
-export interface Annotation {
-  readonly id: string
-  readonly kind: AnnotationKind
-  readonly points: ReadonlyArray<Vec3>
-  /** Label text (`label` kind only). */
-  readonly text?: string
-}
-
-export type NewAnnotation = Omit<Annotation, "id">
+/** An annotation before the store assigns its id. */
+export type NewAnnotation = Annotation extends infer A ? (A extends unknown ? Omit<A, "id"> : never) : never
 
 export const SOURCE_UNIT_METRES = 0.0254
 
@@ -23,12 +18,15 @@ const MAX_HISTORY = 200
 /** Document of annotations with a linear undo/redo history; each edit is one history step. */
 export class AnnotationStore {
   private doc: ReadonlyArray<Annotation> = []
+  private docLayers: AnnotationDocument["layers"]
   private past: Array<ReadonlyArray<Annotation>> = []
   private future: Array<ReadonlyArray<Annotation>> = []
   private nextId = 1
   private readonly listeners = new Set<() => void>()
 
   get annotations(): ReadonlyArray<Annotation> { return this.doc }
+  /** Document-level layer definitions carried through an import so an export does not drop them. */
+  get layers(): AnnotationDocument["layers"] { return this.docLayers }
   get canUndo(): boolean { return this.past.length > 0 }
   get canRedo(): boolean { return this.future.length > 0 }
 
@@ -38,9 +36,41 @@ export class AnnotationStore {
   }
 
   add(a: NewAnnotation): Annotation {
-    const made: Annotation = { ...a, id: `a${this.nextId++}` }
+    const made = { ...a, id: this.freshId() } as Annotation
     this.commit([...this.doc, made])
     return made
+  }
+
+  /** Replaces the whole document as one undoable step (import). */
+  replace(annotations: ReadonlyArray<Annotation>, layers?: AnnotationDocument["layers"]) {
+    this.docLayers = layers
+    this.commit(annotations)
+    this.bumpIds(annotations)
+  }
+
+  /** Replaces the document and forgets history (restoring autosave, where there is nothing to undo back to). */
+  reset(annotations: ReadonlyArray<Annotation>, layers?: AnnotationDocument["layers"]) {
+    this.docLayers = layers
+    this.past = []
+    this.future = []
+    this.doc = annotations
+    this.bumpIds(annotations)
+    this.emit()
+  }
+
+  private freshId(): string {
+    const taken = new Set(this.doc.map((a) => a.id))
+    let id = `a${this.nextId++}`
+    while (taken.has(id)) id = `a${this.nextId++}`
+    return id
+  }
+
+  /** Keeps generated ids clear of imported `a<N>` ids. */
+  private bumpIds(annotations: ReadonlyArray<Annotation>) {
+    for (const a of annotations) {
+      const n = /^a(\d+)$/.exec(a.id)
+      if (n) this.nextId = Math.max(this.nextId, Number(n[1]) + 1)
+    }
   }
 
   remove(id: string): boolean {
@@ -105,7 +135,7 @@ export const formatMeasurement = (m: Measurement): string => {
 /** One-line description for lists. */
 export const describe = (a: Annotation): string => {
   switch (a.kind) {
-    case "label": return `label "${a.text ?? ""}"`
+    case "label": return `label "${a.text}"`
     case "measure": return `measure ${formatMeasurement(measure(a.points))}`
     case "point": return "point"
     case "polyline": return `polyline (${a.points.length} pts)`
@@ -135,7 +165,7 @@ export const ANNOTATION_LAYER_IDS: ReadonlyArray<string> = Object.values(KIND_LA
 const toFeature = (a: Annotation): OverlayFeature => {
   switch (a.kind) {
     case "point": return { type: "point", at: a.points[0]! }
-    case "label": return { type: "point", at: a.points[0]!, label: a.text ?? "" }
+    case "label": return { type: "point", at: a.points[0]!, label: a.text }
     case "polyline": return { type: "polyline", points: a.points }
     case "measure": return { type: "polyline", points: a.points, label: formatMeasurement(measure(a.points)) }
     case "polygon": return { type: "polygon", ring: a.points }

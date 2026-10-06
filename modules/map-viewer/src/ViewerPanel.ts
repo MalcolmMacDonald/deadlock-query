@@ -196,6 +196,8 @@ export const makeViewerPanel = (data: ViewerData, controller: ViewerController =
     const unsubTool = controller.tools.subscribe(syncTool)
     syncTool()
 
+    controller.setMap({ mapName: data.manifest.mapName, gameBuildId: data.manifest.gameBuildId })
+    controller.useDefaultStorage()
     const detach = controller.attach({
       setOverlay: (id, f, s) => overlays.set(id, f, s),
       removeOverlay: (id) => overlays.remove(id),
@@ -224,6 +226,7 @@ export const makeViewerPanel = (data: ViewerData, controller: ViewerController =
         const collision = manifest.collision ? new Uint8Array(await (await get(manifest.collision.file)).arrayBuffer()) : undefined
         const g = await buildScene({ manifest, entities, tiles, collision })
         if (!disposed) {
+          controller.setMap({ mapName: manifest.mapName, gameBuildId: manifest.gameBuildId })
           setWorld(g)
           controls.setPose(frameBounds(manifest.bounds.min, manifest.bounds.max, FOV_DEG))
         }

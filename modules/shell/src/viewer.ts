@@ -14,7 +14,11 @@ const viewerPackage = () => import("@deadlock-query/map-viewer")
 let controller: Promise<ViewerController> | undefined
 /** The one ViewerController shared by the Map panel and the `ViewerService` layer. */
 export const getViewerController = (): Promise<ViewerController> =>
-  (controller ??= viewerPackage().then((v) => new v.ViewerController()))
+  (controller ??= viewerPackage().then((v) => {
+    const c = new v.ViewerController()
+    ;(globalThis as { __viewerController?: ViewerController }).__viewerController = c // e2e hook, like `__dockview`
+    return c
+  }))
 
 /** Real `ViewerService` backed by the shared controller (loads the viewer chunk before the runtime builds). */
 export const viewerServiceLayer: Layer.Layer<ViewerService> = Layer.unwrap(
