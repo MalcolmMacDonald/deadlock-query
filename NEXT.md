@@ -13,7 +13,8 @@ Single source for "what should I do next?". Prompt Claude with: **"Do the next t
 | map-viewer | M5 contracts side: `ViewerService` needs `registerTool` (request in STATE.md); then M6/M7 (SDF labels). M0–M4 and the M5 viewer side merged. Malcolm: >= 30 fps on the real bundle, 10k points at 60 fps, and tile streaming on the real dl_midtown bundle (real hardware) | contracts: `registerTool` on `ViewerService` |
 | shell | M5 leftovers: a real Lighthouse accessibility run (>= 90; axe is clean) and keyboard resizing of panel groups. Then M2: swap the fixture for the real published bundle; ship `library.json` without the standalone editor app. M0–M5 merged | none |
 | kanban | wait for infra M5 live (`GITHUB_TOKEN_PROXY`) | infra |
-| screenshot-tool, map-metadata | Phase 3 | — |
+| screenshot-tool | M2 `shoot` loop (pose verification, file pickup, `ScreenshotSet` index; PR #105 open). M0 (CLI, `GameConsole`, fake console, `doctor`) and M1 (`plan` grid/ring/from-file) merged, all against the fake console. `grid` uses a fixed `--z` until walkable collision exists | **Malcolm only, needs the game:** M0 acceptance `console "echo hi"` against real Deadlock (also settles spike S3: transport, launch options, screenshot folder, real `getpos` reply format), then the 20-shot acceptance run |
+| map-metadata | M1: editor panel with per-kind tools and IndexedDB drafts (M0 merged: kinds registry, validators, `bun run metadata:validate`). Collision-based validator checks run degraded until M2 supplies a `CollisionProbe` | none |
 
 ## Human-only steps
 1. **Now:** repo Settings → Pages → Source = GitHub Actions.
