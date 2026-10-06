@@ -2,3 +2,5 @@ node_modules
 dist
 .app-dist
 .dev.vars
+# screenshot-tool output (PLAN.md §2)
+data/screenshots/
