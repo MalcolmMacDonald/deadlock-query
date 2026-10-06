@@ -48,6 +48,8 @@
 - `ci.yml`: PR title/labels/refs passed through env instead of inline expressions (actionlint script-injection warning).
 - Dry run: semantics guard, lockfile resolution, data gate and takedown failure mode run locally; the rest is listed for Malcolm in `docs/dry-run.md`.
 
+- `tools/build.ts` passes `VITE_TARGET=<target>` to the shell build (the request in shell STATE.md M4), so `--target dev` ships dev-only modules and the lock screen and `--target prod` omits them. No dev-only module exists yet, so deployed output is unchanged today.
+
 ## Next
 - Malcolm: import the ruleset, enable auto-merge, optional `LOCKFILE_BOT_TOKEN`, run the prod rollback dry run (see `docs/runbook.md` one-time setup).
 - Malcolm creates the fine-grained PAT and sets `GITHUB_TOKEN_PROXY` (see `docs/secrets.md`); then curl the live proxy with a session cookie, confirm the token never appears in a response.

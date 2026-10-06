@@ -20,7 +20,12 @@ if (import.meta.main) {
   const i = process.argv.indexOf("--target")
   const target = i >= 0 ? process.argv[i + 1] : "prod"
   if (target !== "prod" && target !== "dev") { console.error("--target must be prod|dev"); process.exit(1) }
-  const vite = Bun.spawnSync(["bun", "run", "--filter", "@deadlock-query/shell", "build"], { stdout: "inherit", stderr: "inherit" })
+  // The shell reads VITE_TARGET at build time: a dev build keeps dev-only modules and the login lock screen.
+  const vite = Bun.spawnSync(["bun", "run", "--filter", "@deadlock-query/shell", "build"], {
+    stdout: "inherit",
+    stderr: "inherit",
+    env: { ...process.env, VITE_TARGET: target },
+  })
   if (vite.exitCode !== 0) { console.error("shell build failed"); process.exit(1) }
   const editorDist = await buildApp()
   const out = build(target, "dist", "modules/shell/dist", editorDist)
