@@ -5,6 +5,7 @@ import type { ViewerController } from "@deadlock-query/map-viewer"
 const VIEWER_PANEL_ID = "viewer.main"
 const LAYERS_PANEL_ID = "viewer.layers"
 const TOOLS_PANEL_ID = "viewer.tools"
+const INSPECTOR_PANEL_ID = "viewer.inspector"
 
 /** Where the deploy unzips the published bundle (`tools/fetch-data.ts` → `<site>/data/<map>`). */
 export const BUNDLE_MANIFEST_URL = "./data/dl_midtown/manifest.json"
@@ -74,5 +75,6 @@ export const viewerModule: ModuleDefinition = {
     },
     { id: TOOLS_PANEL_ID, title: "Tools", defaultPlacement: "left", component: sidePanel((v, c) => v.makeToolsPanel(c)) },
     { id: LAYERS_PANEL_ID, title: "Layers", defaultPlacement: "left", component: sidePanel((v, c) => v.makeLayersPanel(c)) },
+    { id: INSPECTOR_PANEL_ID, title: "Inspector", defaultPlacement: "right", component: sidePanel((v, c) => v.makeInspectorPanel(c)) },
   ],
 }

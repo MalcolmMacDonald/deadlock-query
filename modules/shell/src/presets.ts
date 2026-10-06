@@ -12,6 +12,8 @@ export interface PresetPanel {
 
 /** Initial width in px of the editor column in the default "Query" layout. */
 export const EDITOR_WIDTH = 520
+/** Initial width in px of the inspector when it gets its own column right of the map. */
+export const INSPECTOR_WIDTH = 340
 /** Initial width in px of the tools/layers column left of the map. */
 export const SIDEBAR_WIDTH = 220
 
@@ -30,8 +32,9 @@ const buildPreset = (panels: ReadonlyArray<PanelDefinition>, opts: PresetOptions
   const editor = opts.editor ? byId.get("query.editor") : undefined
   const tools = byId.get("viewer.tools")
   const layers = byId.get("viewer.layers")
+  const inspector = byId.get("viewer.inspector")
   const extra = opts.extra ?? []
-  const placed = new Set<PanelDefinition>([viewer, editor, tools, layers, ...extra].filter((p): p is PanelDefinition => p !== undefined))
+  const placed = new Set<PanelDefinition>([viewer, editor, tools, layers, inspector, ...extra].filter((p): p is PanelDefinition => p !== undefined))
   const out: PresetPanel[] = []
   if (viewer) out.push({ id: viewer.id, title: viewer.title })
   if (tools)
@@ -64,6 +67,17 @@ const buildPreset = (panels: ReadonlyArray<PanelDefinition>, opts: PresetOptions
       ...(viewer ? { position: { referencePanel: viewer.id, direction: "right" as const } } : {}),
       initialWidth: EDITOR_WIDTH,
     })
+  // The inspector sits under the editor when there is one, else in its own column right of the map.
+  if (inspector) {
+    if (editor) out.push({ id: inspector.id, title: inspector.title, position: { referencePanel: editor.id, direction: "below" } })
+    else
+      out.push({
+        id: inspector.id,
+        title: inspector.title,
+        ...(viewer ? { position: { referencePanel: viewer.id, direction: "right" as const } } : {}),
+        initialWidth: INSPECTOR_WIDTH,
+      })
+  }
   // Anything else (dummy/demo modules) is split below the viewer so it stays visible; `shell.*` panels (About) open on demand.
   if (opts.rest)
     for (const p of panels)
