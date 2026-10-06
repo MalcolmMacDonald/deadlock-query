@@ -1,5 +1,8 @@
 import { EntityList, MapEntity, type EntityKind, type Lane, type RawEntity } from "./entities.ts"
 import { Vec3 } from "./Vec3.ts"
+import { SampleApi } from "./sample.ts"
+import { isProvisional, setActiveSpatial } from "./active.ts"
+import type { SpatialInput } from "./spatial.ts"
 
 /**
  * Tunable settings. Defaults are proposals for the project owner to confirm.
@@ -18,6 +21,8 @@ export const DEFAULT_SETTINGS: MapSettings = { laneColors: { 1: "yellow", 2: "bl
 export interface BundleInput {
   readonly manifest: { readonly mapName: string; readonly gameBuildId: string }
   readonly entities: ReadonlyArray<RawEntity>
+  /** Raycaster + owner semantics. Without it, spatial methods (`height`, `visibleFrom`, `sample`) throw. */
+  readonly spatial?: SpatialInput
 }
 
 /**
@@ -39,6 +44,7 @@ export class MapContext {
    * @category Context
    */
   static fromBundle(bundle: BundleInput, settings: Partial<MapSettings> = {}): MapContext {
+    setActiveSpatial(bundle.spatial)
     const s: MapSettings = { ...DEFAULT_SETTINGS, ...settings }
     const all = bundle.entities.map((e) => new MapEntity(
       e.id, e.class, e.kind as EntityKind | undefined, new Vec3(...e.position), e.team,
@@ -55,6 +61,11 @@ export class MapContext {
   ofKind(kind: EntityKind): EntityList {
     return new EntityList(this.all).where((e) => e.kind === kind)
   }
+
+  /** True when results rely on placeholder (non-final) semantics; mark them provisional. @category Context */
+  get provisional(): boolean { return isProvisional() }
+  /** Point samplers over the map geometry. @category Context */
+  get sample(): SampleApi { return new SampleApi() }
 
   /** Every entity, including classes without a normalised kind. @category Context */
   get entities(): EntityList { return new EntityList(this.all) }

@@ -1,3 +1,6 @@
+import { requireSemantics, requireSpatial } from "./active.ts"
+import type { VisibleOpts } from "./spatial.ts"
+
 /**
  * A point or vector in Source world units (right-handed, Z-up).
  * @example vec(0, 0, 0).distanceTo(vec(3, 4, 0)) // 5
@@ -22,6 +25,50 @@ export class Vec3 {
    */
   crowFliesTo(other: Vec3): number {
     return this.distanceTo(other)
+  }
+
+  /**
+   * Elevation above the lowest point of the map bounds, in Source units. O(1).
+   * @example map.sample.grid(300).filter(p => p.height() > 800)
+   * @category Geometry
+   */
+  height(): number {
+    return this.z - requireSpatial("height()").raycaster.bounds.min[2]
+  }
+
+  /**
+   * Whether the point is inside a building/room (owner-authored semantics; needs spatial backend).
+   * @example map.healingOrbs.where(o => o.position.isInterior())
+   * @category Geometry
+   */
+  isInterior(): boolean {
+    const { s, sem } = requireSemantics("isInterior()")
+    return sem.isInterior(s.raycaster, this.toArray(), s.params ?? {})
+  }
+
+  /**
+   * The nearest wall surface to the point, or `undefined` when none is in range
+   * (owner-authored semantics).
+   * @example vec(0, 0, 0).nearestWall()?.distance
+   * @category Geometry
+   */
+  nearestWall(): { readonly point: Vec3; readonly normal: Vec3; readonly distance: number } | undefined {
+    const { s, sem } = requireSemantics("nearestWall()")
+    const w = sem.nearestWall(s.raycaster, this.toArray(), s.params ?? {})
+    return w ? { point: new Vec3(...w.point), normal: new Vec3(...w.normal), distance: w.distance } : undefined
+  }
+
+  /**
+   * True when this point is visible from the given viewpoint, or from any of several
+   * (owner-authored semantics). O(viewpoints) ray tests.
+   * @example map.creepCamps.where(c => c.position.visibleFrom(map.guardians.select(g => g.position)))
+   * @category Geometry
+   */
+  visibleFrom(from: Vec3 | Iterable<Vec3>, opts: VisibleOpts = {}): boolean {
+    const { s, sem } = requireSemantics("visibleFrom()")
+    const params = { ...(s.params ?? {}), ...(opts.eyeHeight === undefined ? {} : { eyeHeight: opts.eyeHeight }), ...(opts.targetHeight === undefined ? {} : { targetHeight: opts.targetHeight }), ...(opts.maxRange === undefined ? {} : { maxRange: opts.maxRange }) }
+    for (const v of from instanceof Vec3 ? [from] : from) if (sem.isVisible(s.raycaster, v.toArray(), this.toArray(), params)) return true
+    return false
   }
 
   /**
