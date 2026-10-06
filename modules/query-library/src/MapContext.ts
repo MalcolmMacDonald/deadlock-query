@@ -1,5 +1,6 @@
 import { EntityList, MapEntity, type EntityKind, type Lane, type RawEntity } from "./entities.ts"
 import { Vec3 } from "./Vec3.ts"
+import { NavApi } from "./nav.ts"
 import { SampleApi } from "./sample.ts"
 import { isProvisional, setActiveSpatial } from "./active.ts"
 import type { SpatialInput } from "./spatial.ts"
@@ -64,6 +65,8 @@ export class MapContext {
 
   /** True when results rely on placeholder (non-final) semantics; mark them provisional. @category Context */
   get provisional(): boolean { return isProvisional() }
+  /** Navigation queries (paths, travel time). @category Context */
+  get nav(): NavApi { return new NavApi() }
   /** Point samplers over the map geometry. @category Context */
   get sample(): SampleApi { return new SampleApi() }
 

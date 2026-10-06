@@ -1,4 +1,5 @@
 import { Seq } from "./Seq.ts"
+import { timeField } from "./nav.ts"
 import { Vec3 } from "./Vec3.ts"
 import type { VisibleOpts } from "./spatial.ts"
 
@@ -119,6 +120,17 @@ export class EntityList extends Seq<MapEntity> {
   within(range: number, of: Locatable | Iterable<Locatable>): EntityList {
     const targets = (of instanceof Vec3 || of instanceof MapEntity ? [of] : [...of]).map(where)
     return this.where((e) => targets.some((t) => e.position.distanceTo(t) <= range))
+  }
+
+  /**
+   * Entities reachable within `time` seconds from any of the given points/entities
+   * (navmesh + ziplines). One cached distance field over all sources: O(polygons log polygons).
+   * @example map.healingOrbs.withinTravelTime(seconds(10), map.guardians.inLane("yellow"))
+   * @category Entities
+   */
+  withinTravelTime(time: number, of: Locatable | Iterable<Locatable>): EntityList {
+    const costAt = timeField("withinTravelTime()", (of instanceof Vec3 || of instanceof MapEntity ? [of] : [...of]).map(where))
+    return this.where((e) => costAt(e.position) <= time)
   }
 
   /**
