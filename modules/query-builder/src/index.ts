@@ -4,6 +4,10 @@
  */
 export { makeQueryEditorPanel, mountQueryEditor } from "./panel/QueryEditorPanel.ts"
 export type { QueryBundle, QueryEditorHandle, QueryEditorPanelOptions, SelectionBusShape, ViewerServiceShape } from "./panel/QueryEditorPanel.ts"
+export { checkApiVersion, decodeShare, encodeShare } from "./share/shareLink.ts"
+export type { ApiVersionCheck, SharedQuery } from "./share/shareLink.ts"
+export { buildExport, resultToAnnotations } from "./export/exports.ts"
+export type { ExportFile, ExportFormat, ExportMeta } from "./export/exports.ts"
 export type { LibraryArtifact } from "./engine/prelude.ts"
 
 /** Fetches a `library.json` (as written next to the standalone app, e.g. `./editor/library.json`). */

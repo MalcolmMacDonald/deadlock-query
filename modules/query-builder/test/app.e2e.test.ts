@@ -19,11 +19,11 @@ beforeAll(async () => {
 }, 120_000)
 afterAll(async () => { await browser?.close(); server?.stop(true) })
 
-const open = async () => {
+const open = async (hash = "") => {
   const page = await browser.newPage()
   const errors: string[] = []
   page.on("pageerror", (e) => errors.push(e.message))
-  await page.goto(`http://localhost:${server.port}/`)
+  await page.goto(`http://localhost:${server.port}/${hash}`)
   await page.waitForFunction(() => (self as any).__qb, undefined, { timeout: 30_000 })
   return { page, errors }
 }
@@ -197,3 +197,118 @@ test.skipIf(!haveBrowser)("type errors come with plain-language advice", async (
   expect(await page.textContent("[data-testid=error]")).toMatch(/1:\d+ .*Did you mean `closest`\?.*\(Property 'closet' does not exist/s)
   await page.close()
 }, 60_000)
+
+// M5: exports, share links, saved queries and history.
+const STARTER = "[data-query-id=guardian-nearest-orb] [data-testid=gallery-run]"
+const runStarter = async (page: Awaited<ReturnType<typeof open>>["page"]) => {
+  await page.click("[data-testid=toggle-gallery]")
+  await page.click(STARTER)
+  await page.waitForSelector("[data-testid=results-table] tbody tr", { timeout: 20_000 })
+}
+const download = async (page: Awaited<ReturnType<typeof open>>["page"], testid: string) => {
+  const [d] = await Promise.all([page.waitForEvent("download"), page.click(`[data-testid=${testid}]`)])
+  const stream = await d.createReadStream()
+  let text = ""
+  for await (const chunk of stream) text += chunk
+  return { name: d.suggestedFilename(), text }
+}
+
+test.skipIf(!haveBrowser)("results export as CSV, JSON, GeoJSON and annotations; PNG explains a missing image", async () => {
+  const { page, errors } = await open()
+  const mini = buildMiniMap()
+  await runStarter(page)
+  const n = mini.expectedGuardianOrbDistance.rows.length
+
+  const csv = await download(page, "export-csv")
+  expect(csv.name).toBe("query-result.csv")
+  expect(csv.text.trim().split("\n")).toHaveLength(n + 1)
+
+  const json = await download(page, "export-json")
+  const parsed = JSON.parse(json.text)
+  expect(parsed.rows).toHaveLength(n)
+  expect(parsed.metadata).toMatchObject({ provisional: false, mapName: mini.manifest.mapName, apiVersion: expect.any(String) })
+  expect(parsed.metadata.source).toContain("healingOrbs.closest(g)")
+
+  const geo = JSON.parse((await download(page, "export-geojson")).text)
+  expect(geo.features).toHaveLength(n)
+
+  const ann = JSON.parse((await download(page, "export-annotations")).text)
+  expect(ann.annotations).toHaveLength(n)
+  expect(ann.layers[0].id).toBe("query-result")
+
+  // The standalone viewer has no screen: the button says so instead of saving an empty file.
+  await page.click("[data-testid=export-png]")
+  await page.waitForSelector("[data-testid=notice].error")
+  expect(await page.textContent("[data-testid=notice]")).toMatch(/returned no image/)
+  expect(errors).toEqual([])
+  await page.close()
+}, 90_000)
+
+test.skipIf(!haveBrowser)("a share link fills the editor, never runs it, and warns about a stale apiVersion", async () => {
+  const first = await open()
+  await setSource(first.page, "map.guardians.count()")
+  const url = await first.page.evaluate(() => (self as any).__qb.shareUrl() as Promise<string>)
+  await first.page.click("[data-testid=share]")
+  await first.page.waitForSelector("[data-testid=share-url]")
+  expect(await first.page.inputValue("[data-testid=share-url]")).toBe(url)
+  await first.page.close()
+
+  const hash = url.slice(url.indexOf("#"))
+  const same = await open(hash)
+  expect(await editorValue(same.page)).toBe("map.guardians.count()")
+  expect(await same.page.textContent("[data-testid=notice]")).toMatch(/has not been run/)
+  expect(await same.page.textContent("[data-testid=notice]")).not.toMatch(/library/)
+  expect(await same.page.$("[data-testid=results-table]")).toBeNull()
+  expect(await same.page.textContent("#status")).toBe("idle")
+  await same.page.close()
+
+  const stale = await open(hash.replace(/api=[^&]+/, "api=9.9.9"))
+  expect(await stale.page.textContent("[data-testid=notice]")).toMatch(/different major version/)
+  await stale.page.close()
+
+  const broken = await open("#q=AAAA")
+  expect(await broken.page.textContent("[data-testid=notice]")).toMatch(/damaged/)
+  await broken.page.close()
+}, 90_000)
+
+test.skipIf(!haveBrowser)("saved queries and history persist across reloads; .dlq.json round-trips; stale versions warn", async () => {
+  const { page, errors } = await open()
+  await runStarter(page)
+  // History records the run.
+  await page.click("[data-testid=toggle-history]")
+  expect(await page.$$eval("[data-testid=history-item]", (r) => r.length)).toBe(1)
+  expect(await page.textContent("[data-testid=history-item]")).toMatch(/\d+ rows/)
+
+  // Save, reload (same origin storage), see it again.
+  await setSource(page, "map.healingOrbs.count()")
+  await page.click("[data-testid=toggle-saved]")
+  await page.fill("[data-testid=saved-name]", "Orb count")
+  await page.click("[data-testid=saved-save]")
+  await page.waitForSelector("[data-testid=saved-item]")
+  const file = await download(page, "saved-export")
+  expect(file.name).toBe("orb-count.dlq.json")
+  expect(JSON.parse(file.text)).toMatchObject({ kind: "deadlock-query", version: 1, queries: [{ name: "Orb count", source: "map.healingOrbs.count()" }] })
+
+  await page.reload()
+  await page.waitForFunction(() => (self as any).__qb)
+  await page.click("[data-testid=toggle-saved]")
+  expect(await page.$$eval("[data-testid=saved-item]", (r) => r.map((x) => (x as HTMLElement).dataset.name))).toEqual(["Orb count"])
+  await page.click("[data-testid=saved-load]")
+  expect(await editorValue(page)).toBe("map.healingOrbs.count()")
+  expect(await page.$("[data-testid=results-table]")).toBeNull() // loading never runs
+
+  // Import a file written for an older library: it is saved and flagged.
+  await page.setInputFiles("[data-testid=saved-import-file]", {
+    name: "x.dlq.json", mimeType: "application/json",
+    buffer: Buffer.from(JSON.stringify({ kind: "deadlock-query", version: 1, queries: [{ name: "Old", source: "map.guardians.count()", apiVersion: "0.0.1" }] }))
+  })
+  await page.waitForSelector("[data-testid=saved-version-warning]")
+  expect(await page.textContent("[data-testid=saved-version-warning]")).toMatch(/0\.0\.1/)
+  await page.setInputFiles("[data-testid=saved-import-file]", { name: "bad.json", mimeType: "application/json", buffer: Buffer.from("{}") })
+  await page.waitForFunction(() => /not a Deadlock Query file/.test(document.querySelector("[data-testid=saved-status]")?.textContent ?? ""))
+
+  await page.click("[data-testid=saved-item][data-name=Old] [data-testid=saved-delete]")
+  expect(await page.$$eval("[data-testid=saved-item]", (r) => r.length)).toBe(1)
+  expect(errors).toEqual([])
+  await page.close()
+}, 90_000)
