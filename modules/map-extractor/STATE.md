@@ -1,7 +1,7 @@
 # map-extractor — state
 
 - **Status:** S2 spike complete — **GO** (render, collision, entities, nav all obtainable)
-- **Version:** 0.6.1 (module); `EXTRACTOR_VERSION` stays 0.3.0 (the lite render stage key now includes `materials`, so old caches are not reused)
+- **Version:** 0.7.0 (module); `EXTRACTOR_VERSION` 0.4.0 (lite reduction changed: cached lite stages rebuild, and with `--keep-work` they reuse the cached full export)
 - **Current milestone:** M0-M5 code done and run on real `dl_midtown` data (2026-10-06); **blocked on a walkable collision source** (see "Collision finding"); navmesh sign-off pending
 - **Last updated:** 2026-10-06
 
@@ -203,12 +203,33 @@ Disk: the lite bundle is 125 MB published; transient scratch is about 2.8 GB (`.
 4. **Zipline / jump pad link keys were guesses.** Real keys: jump pads use `target` (a `info_target_server_only` landing, all 17 resolve); zipline nodes share `path_uniqueid` and are ordered by `path_index`. Nodes hang in the air, so each path's first and last node become one link (3 paths), and endpoints must be within 256 units of the navmesh (13 of 20 links were dropped on this navmesh, mostly because it does not cover the real ground).
 5. **`pack-lite` counted scratch.** `.work/` and `.stage-*` were summed into the 900 MB budget though `publish-data` excludes them; they are now listed as a note and excluded from the total.
 
+## Lite decimation (2026-10-06, extractor 0.4.0)
+
+`buildLiteTiles` (`src/liteRender.ts`) no longer keeps or drops whole primitives. The largest primitives (bbox diagonal) are kept at full detail for `fullFraction` of `--tri-budget` (default 0.6 of 5 M); every other primitive is simplified per primitive with meshoptimizer (`simplify` with `Prune`, falling back to `simplifySloppy` when the error bound blocks the target) by one common ratio that fills the rest of the budget, with a floor of `minTris` (12) triangles per primitive (or all of them if it has fewer). Priority is largest-first when the budget runs out. `--full-fraction 1` restores the old behaviour. New flag `--full-fraction <0..1>`; options `fullFraction`, `minTris`, `decimateError` (0.1 of the primitive's extent) in `LiteOptions`. `liteReady` must be awaited before `buildLiteTiles` (the simplifier is WASM).
+
+Real dl_midtown (build 25738777), default budget 5.0 M triangles:
+
+| | before (whole-primitive cut) | after (decimation) |
+|---|---|---|
+| primitives kept | 674 of 27,690 (2 %) | **22,505 (81 %)**: 4,422 at full detail, 18,083 decimated from 24.4 M to 2.0 M triangles |
+| triangles | 5.0 M | 5.0 M |
+| tiles (before `tile`) | 63, 281 MB | 64, 250 MB |
+| after `tile` (LOD0 + LOD1) | 126 files, 102.9 MB | 128 files, **87.3 MB**, largest 4.2 MB |
+| `pack-lite` total | 125.0 MB | **109.3 MB** (budget 900 MB) |
+| reduction time from the cached export | about 1 min | **53 s** (96 s via `extract`, which also redoes entities/collision) |
+
+Full cached rerun: `extract` 96 s + `tile` 24 s + `bake` 50 s (BVH, grid, navmesh) about 3 min; the Source2Viewer export (about 8 min) is only needed once per build when `--keep-work` is used.
+
+Speed: the first decimation took 549 s because every fragment of an aggregate re-read, and meshopt re-processed, the aggregate's whole shared vertex buffer (22,480 distinct simplifications). Now accessor reads are cached (LRU, 384 MB), jobs run grouped by vertex buffer, and each job simplifies only the vertices its indices reference: analysis 63 s -> 3 s, simplification 429 s -> 24 s.
+
+Not verified visually: the triangle selection is by size and a uniform ratio, so thin or detailed small props may look coarse; check the lite tiles in map-viewer next to the collision GLB, then tune `--full-fraction`, `minTris` and the error bound. The budget (5 M) could be raised: tiles are only 87 MB after compression.
+
 ## In progress
 - Collision input for floors/navmesh (see "Collision finding"); decision needed.
 
 ## Next
 1. **Get walkable collision** (see "Collision finding"): without it the grid floor, `interior`, `wallDistance` and the navmesh are not meaningful. Then re-run `bake`, check the floor-height histogram looks like a ground floor, open `<bundle>.qa/navmesh.obj`, tune `--agent-*` / `--nav-exclude-layers`, record the sign-off. Then M6 (caching/resume/`diff`, README, update runbook).
-2. Triangle cut quality (open question d): 5 M of 30 M triangles chosen by bbox diagonal drops small props and interiors. Render the lite tiles in map-viewer next to the collision GLB and tune `--tri-budget` (the whole lite bundle is only 125 MB, so there is room to raise it a lot), or add a real decimation pass. Check `tile` LOD1 ratio at the same time.
+2. Triangle cut quality (open question d): decimation is in (see above). Look at the lite tiles in map-viewer next to the collision GLB and tune `--tri-budget` (the bundle is only 109 MB, so there is room to raise it a lot), `--full-fraction` and `minTris`. Check `tile` LOD1 ratio at the same time.
 3. Open questions: (a) physics vs render frame **settled, same frame** (see M1 findings); (b) all hulls exported and (c) per-entity volume models (interior/trigger shapes) still open.
 4. Check `dl_hideout` / `new_player_basics` only if the owner wants them (not in Slice 1).
 
@@ -238,6 +259,8 @@ Disk: the lite bundle is 125 MB published; transient scratch is about 2.8 GB (`.
 - 2026-10-06 — M5: navmesh is a second stage of `bake` (default on, `--no-navmesh` to skip) so one command yields all baked data and the manifest keeps one `baked` record; tiled Recast + explicit tile-border stitching rather than a solo mesh, because a solo build of the ~43k x 38k unit map at cell 8 would be a ~25M-column heightfield; agent size defaults are Source-engine values until measured; QA OBJ lives beside the bundle, not in it, so pack-lite never counts or ships it; zipline/jump pad link keys are guesses and flagged.
 
 - 2026-10-06 - Real run: world_physics lacks walkable ground (floors are clip lids), recorded as a finding rather than worked around; zipline links are first-to-last node per path, jump pads follow `target`; `--gltf_export_materials` is opt-in because it hangs the real export; lite tile reduction emits only referenced vertices; guardian marker is read from `bossname` as well as `subclass_name`; `pack-lite` size excludes scratch.
+
+- 2026-10-06 - Lite decimation: per-primitive meshopt simplification with a common ratio for everything outside the largest-primitive full-detail share (default 0.6 of the budget), a per-primitive triangle floor, cached accessor reads and vertex compaction for speed; `EXTRACTOR_VERSION` bumped to 0.4.0 so old lite stages rebuild.
 
 ## Open questions
 - (see PLAN.md §9, and "Next" item 2 above)

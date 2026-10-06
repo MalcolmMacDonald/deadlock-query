@@ -2,11 +2,16 @@ import { closeSync, copyFileSync, existsSync, mkdirSync, openSync, readFileSync,
 import { dirname, join } from "node:path"
 import { createHash } from "node:crypto"
 import { transformPoint, type Aabb, type Mat4 } from "@deadlock-query/contracts"
+import { MeshoptSimplifier } from "meshoptimizer"
 import { readGltfJson } from "./gltfInfo.ts"
+
+/** Await before `buildLiteTiles` (the decimation pass uses the meshopt WASM simplifier). */
+export const liteReady: Promise<void> = MeshoptSimplifier.ready
 
 /**
  * Derives the `lite` render tier from a full glTF export (which has ~29 M triangles): keeps the largest primitives
- * (by bounding-box diagonal) up to a triangle budget, bakes node matrices into the vertices, groups them into
+ * (by bounding-box diagonal) at full detail for `fullFraction` of the triangle budget and decimates all the others
+ * (meshoptimizer, per primitive) into the rest, bakes node matrices into the vertices, groups them into
  * horizontal grid tiles split to stay under a byte budget, and writes one `.glb` per tile. Materials (and the
  * image files they reference) are carried over; textures are copied unmodified.
  */
@@ -14,6 +19,16 @@ import { readGltfJson } from "./gltfInfo.ts"
 export interface LiteOptions {
   /** Total triangles to keep (default 5 M, roughly 150 MB of tiles). */
   readonly triBudget?: number
+  /**
+   * Share of `triBudget` spent on the largest primitives at full detail (default 0.6). The remaining primitives are all
+   * simplified by one common ratio to fit the rest, so small props survive coarsely instead of being dropped.
+   * 1 disables decimation (the old behaviour: whole primitives kept or dropped).
+   */
+  readonly fullFraction?: number
+  /** Decimation keeps at least this many triangles per primitive (all of them if it has fewer) while budget remains (default 12). */
+  readonly minTris?: number
+  /** Simplifier error bound relative to the primitive's extent (default 0.1). */
+  readonly decimateError?: number
   /** Max bytes of one tile .glb (default 18 MB, under the 20 MB site tile budget). */
   readonly tileBytes?: number
   /** Grid cell edge in loaded-frame units (metres; default 128). */
@@ -125,7 +140,7 @@ const readAccessor = (g: G, r: BufferReader, idx: number): { data: Float32Array 
   return { data: out, comps }
 }
 
-interface Cand { node: number; prim: number; mesh: number; matrix: Mat4; tris: number; /** vertices actually referenced by the indices */ verts: number; diag: number; centre: [number, number, number]; material: number; hasUv: boolean }
+interface Cand { node: number; prim: number; mesh: number; matrix: Mat4; tris: number; /** vertices actually referenced by the indices */ verts: number; /** key of decimated indices in `decimated`, when simplified */ dec?: string; diag: number; centre: [number, number, number]; material: number; hasUv: boolean }
 
 /** Nodes with their world matrices (scene graph walk; no hierarchy is typical for VRF exports). */
 const worldNodes = (g: G): Array<{ node: number; matrix: Mat4 }> => {
@@ -163,11 +178,29 @@ export const buildLiteTiles = (gltfPath: string, outDir: string, opts: LiteOptio
   const triBudget = opts.triBudget ?? 5_000_000
   const tileBytes = opts.tileBytes ?? 18 * 1024 * 1024
   const cell = opts.cell ?? 128
+  const fullFraction = Math.min(1, Math.max(0, opts.fullFraction ?? 0.6))
+  const minTris = opts.minTris ?? 12
+  const decimateError = opts.decimateError ?? 0.1
   const warnings: string[] = []
   const g = readGltfJson(gltfPath) as unknown as G
   const srcDir = dirname(gltfPath)
   const reader = new BufferReader(g, srcDir)
   try {
+    // Fragments of one aggregate share a vertex buffer: keep recently read accessors so consecutive fragments do not re-read it.
+    const accCache = new Map<number, Float32Array | Uint32Array>()
+    let accBytes = 0
+    const read = (idx: number): Float32Array | Uint32Array => {
+      const hit = accCache.get(idx)
+      if (hit) { accCache.delete(idx); accCache.set(idx, hit); return hit }
+      const data = readAccessor(g, reader, idx).data
+      accCache.set(idx, data); accBytes += data.byteLength
+      while (accBytes > 384 * 1048576 && accCache.size > 1) {
+        const [k, v] = accCache.entries().next().value!
+        accCache.delete(k); accBytes -= v.byteLength
+      }
+      return data
+    }
+    const t0 = Date.now()
     const cands: Cand[] = []
     let total = 0
     // A primitive's vertex buffer is often shared by many fragments (each indexes a small part of it), so tris, size and bounds
@@ -180,9 +213,9 @@ export const buildLiteTiles = (gltfPath: string, outDir: string, opts: LiteOptio
       const p = g.meshes![mesh]!.primitives[prim]!
       let info: Info | undefined
       if ((p.mode ?? 4) === 4 && p.attributes["POSITION"] !== undefined) {
-        const pos = readAccessor(g, reader, p.attributes["POSITION"]).data as Float32Array
+        const pos = read(p.attributes["POSITION"]) as Float32Array
         const nv = pos.length / 3
-        const idx = p.indices !== undefined ? (readAccessor(g, reader, p.indices).data as Uint32Array) : undefined
+        const idx = p.indices !== undefined ? (read(p.indices) as Uint32Array) : undefined
         const n3 = Math.floor((idx ? idx.length : nv) / 3) * 3
         const seen = new Uint8Array(nv)
         const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity]
@@ -218,15 +251,84 @@ export const buildLiteTiles = (gltfPath: string, outDir: string, opts: LiteOptio
         })
       })
     }
+    opts.log?.(`lite render: analysed ${cands.length} primitives in ${((Date.now() - t0) / 1000).toFixed(0)} s`)
     // Largest first, deterministic on ties.
     cands.sort((a, b) => b.diag - a.diag || a.node - b.node || a.prim - b.prim)
     const kept: Cand[] = []
     let keptTris = 0
+    // Phase 1: the largest primitives at full detail, up to `fullFraction` of the budget.
+    const fullBudget = fullFraction >= 1 ? triBudget : Math.floor(triBudget * fullFraction)
+    const rest: Cand[] = []
     for (const c of cands) {
-      if (keptTris + c.tris > triBudget) continue
+      if (keptTris + c.tris > fullBudget) { rest.push(c); continue }
       kept.push(c); keptTris += c.tris
     }
-    opts.log?.(`lite render: keeping ${kept.length}/${cands.length} primitives, ${keptTris}/${total} triangles`)
+    // Phase 2: everything else, simplified by one common ratio so the total fits the remaining budget.
+    const decimated = new Map<string, { idx: Uint32Array; tris: number; verts: number } | null>()
+    let decimatedPrims = 0, decimatedFrom = 0, decimatedTo = 0, decTime = 0, decCalls = 0, decIn = 0
+    if (fullFraction < 1 && rest.length) {
+      // The per-primitive floor is paid first; the common ratio shares out what is left.
+      const floorMass = rest.reduce((n, c) => n + Math.min(c.tris, minTris), 0)
+      const ratio = Math.min(1, Math.max(0, triBudget - keptTris - floorMass) / rest.reduce((n, c) => n + c.tris, 0))
+      const targetOf = (c: Cand) => Math.max(Math.floor(c.tris * ratio), Math.min(c.tris, minTris))
+      // Simplify each distinct (mesh, primitive, target) once, grouped by vertex buffer so the cached reads hit. Only the vertices a
+      // primitive's indices reference go to the simplifier (a fragment's buffer is often far larger than its slice of it).
+      const jobs = new Map<string, { mesh: number; prim: number; target: number; acc: number }>()
+      for (const c of rest) {
+        const target = targetOf(c)
+        if (target >= c.tris) continue
+        const key = `${c.mesh}:${c.prim}:${target}`
+        if (!jobs.has(key)) jobs.set(key, { mesh: c.mesh, prim: c.prim, target, acc: g.meshes![c.mesh]!.primitives[c.prim]!.attributes["POSITION"]! })
+      }
+      let maxNv = 0
+      for (const j of jobs.values()) maxNv = Math.max(maxNv, g.accessors![j.acc]!.count)
+      const scratch = new Int32Array(maxNv).fill(-1)
+      const tD = Date.now()
+      for (const [key, j] of [...jobs.entries()].sort((x, y) => x[1].acc - y[1].acc || x[1].mesh - y[1].mesh || x[1].prim - y[1].prim)) {
+        const p = g.meshes![j.mesh]!.primitives[j.prim]!
+        const pos = read(p.attributes["POSITION"]!) as Float32Array
+        const src = p.indices !== undefined ? (read(p.indices) as Uint32Array) : undefined
+        const n3 = Math.floor((src ? src.length : pos.length / 3) / 3) * 3
+        const used: number[] = []
+        const cidx = new Uint32Array(n3)
+        for (let i = 0; i < n3; i++) {
+          const v = src ? src[i]! : i
+          let o = scratch[v]!
+          if (o < 0) { o = used.length; scratch[v] = o; used.push(v) }
+          cidx[i] = o
+        }
+        const cpos = new Float32Array(used.length * 3)
+        for (let i = 0; i < used.length; i++) { const v = used[i]!; cpos[i * 3] = pos[v * 3]!; cpos[i * 3 + 1] = pos[v * 3 + 1]!; cpos[i * 3 + 2] = pos[v * 3 + 2]! }
+        for (const v of used) scratch[v] = -1
+        const targetIdx = j.target * 3
+        let [out] = MeshoptSimplifier.simplify(cidx, cpos, 3, targetIdx, decimateError, ["Prune"])
+        if (out.length > targetIdx * 1.3) { // topology blocks the error bound: fall back to the sloppy simplifier
+          const [sloppy] = MeshoptSimplifier.simplifySloppy(cidx, cpos, 3, null, targetIdx, decimateError)
+          if (sloppy.length < out.length) out = sloppy
+        }
+        let d: { idx: Uint32Array; tris: number; verts: number } | null = null
+        if (out.length >= 3) {
+          const seen = new Uint8Array(used.length); let verts = 0
+          const orig = new Uint32Array(out.length)
+          for (let i = 0; i < out.length; i++) { const v = out[i]!; if (!seen[v]) { seen[v] = 1; verts++ } orig[i] = used[v]! }
+          d = { idx: orig, tris: out.length / 3, verts }
+        }
+        decimated.set(key, d)
+        decCalls++; decIn += n3 / 3
+      }
+      decTime = Date.now() - tD
+      // Spend the budget in priority (largest-first) order.
+      for (const c of rest) {
+        const target = targetOf(c)
+        if (target >= c.tris) { if (keptTris + c.tris <= triBudget) { kept.push(c); keptTris += c.tris } continue }
+        const key = `${c.mesh}:${c.prim}:${target}`, d = decimated.get(key)
+        if (!d || keptTris + d.tris > triBudget) continue
+        decimatedPrims++; decimatedFrom += c.tris; decimatedTo += d.tris
+        kept.push({ ...c, tris: d.tris, verts: d.verts, dec: key }); keptTris += d.tris
+      }
+    }
+    opts.log?.(`lite render: ${decCalls} distinct simplifications (${decIn} input triangles) took ${(decTime / 1000).toFixed(0)} s`)
+    opts.log?.(`lite render: keeping ${kept.length}/${cands.length} primitives, ${keptTris}/${total} triangles (${decimatedPrims} decimated from ${decimatedFrom} to ${decimatedTo} triangles)`)
 
     // Group by grid cell (loaded X/Z), then fill tiles up to the byte budget.
     const cells = new Map<string, Cand[]>()
@@ -282,10 +384,10 @@ export const buildLiteTiles = (gltfPath: string, outDir: string, opts: LiteOptio
         let vo = 0, io = 0
         for (const c of list) {
           const p = g.meshes![c.mesh]!.primitives[c.prim]!
-          const pos = readAccessor(g, reader, p.attributes["POSITION"]!).data as Float32Array
-          const nor = p.attributes["NORMAL"] !== undefined ? (readAccessor(g, reader, p.attributes["NORMAL"]).data as Float32Array) : undefined
-          const uv = withUv ? (readAccessor(g, reader, p.attributes["TEXCOORD_0"]!).data as Float32Array) : undefined
-          const idx = p.indices !== undefined ? (readAccessor(g, reader, p.indices).data as Uint32Array) : undefined
+          const pos = read(p.attributes["POSITION"]!) as Float32Array
+          const nor = p.attributes["NORMAL"] !== undefined ? (read(p.attributes["NORMAL"]) as Float32Array) : undefined
+          const uv = withUv ? (read(p.attributes["TEXCOORD_0"]!) as Float32Array) : undefined
+          const idx = c.dec !== undefined ? decimated.get(c.dec)!.idx : p.indices !== undefined ? (read(p.indices) as Uint32Array) : undefined
           const m = c.matrix
           // Only the referenced vertices are emitted (first-use order, so output stays deterministic).
           const remap = new Int32Array(pos.length / 3).fill(-1)
