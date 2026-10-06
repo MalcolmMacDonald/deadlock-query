@@ -9,6 +9,11 @@ import {
 import { LayerStore, type LayerAppearance } from "./layers.ts"
 import { ToolMachine } from "./tools.ts"
 import { DEFAULT_COLOR } from "./overlays.ts"
+import {
+  autosaveKey, indexedDbStorage, parseDocument, serializeDocument, toDocument, type AnnotationStorage, type MapIdentity, type ParsedDocument
+} from "./persistence.ts"
+
+const AUTOSAVE_DELAY_MS = 400
 
 /** What a mounted panel gives the controller; absent until a panel mounts. */
 export interface ViewerSurface {
@@ -43,6 +48,11 @@ export class ViewerController {
   readonly annotations = new AnnotationStore()
   readonly tools = new ToolMachine((a) => { this.annotations.add(a) })
   private selectedId: string | undefined
+  private map: MapIdentity = {}
+  private storage: AnnotationStorage | undefined
+  private autosaveReady = false
+  private saveTimer: ReturnType<typeof setTimeout> | undefined
+  private autosaveDelay = AUTOSAVE_DELAY_MS
   private readonly selectionListeners = new Set<() => void>()
 
   constructor() {
@@ -50,7 +60,77 @@ export class ViewerController {
       for (const l of this.layers.list()) this.surface?.setAppearance(l.id, this.layers.appearance(l.id))
     })
     this.tools.subscribe(() => this.surface?.setDraft(this.tools.draft()))
-    this.annotations.subscribe(() => this.syncAnnotations())
+    this.annotations.subscribe(() => { this.syncAnnotations(); this.scheduleSave() })
+  }
+
+  get mapIdentity(): MapIdentity { return this.map }
+
+  /** Records which map is shown; annotations are exported with it and autosaved under its name. */
+  setMap(map: MapIdentity) {
+    const changed = autosaveKey(map) !== autosaveKey(this.map)
+    this.map = map
+    if (this.storage && (changed || !this.autosaveReady)) void this.restore()
+  }
+
+  /** Turns on autosave (debounced) to `storage` and restores the saved document for the current map, if any. */
+  useStorage(storage: AnnotationStorage | undefined, delayMs = AUTOSAVE_DELAY_MS) {
+    this.storage = storage
+    this.autosaveDelay = delayMs
+    this.autosaveReady = false
+    if (storage && this.map.mapName !== undefined) void this.restore()
+  }
+
+  /** Autosaves to IndexedDB unless a storage was already chosen (no-op where IndexedDB is unavailable). */
+  useDefaultStorage() {
+    if (!this.storage) this.useStorage(indexedDbStorage())
+  }
+
+  /** Current annotations as a schema-valid `AnnotationDocument` serialized to JSON. */
+  exportJson(): string {
+    return serializeDocument(toDocument(this.annotations.annotations, this.annotations.layers, this.map))
+  }
+
+  /** Replaces the annotations with an exported document (one undoable step); returns why it was refused, if so. */
+  importJson(text: string): ParsedDocument {
+    const parsed = parseDocument(text, this.map)
+    if (parsed.ok) {
+      this.annotations.replace(parsed.doc.annotations, parsed.doc.layers)
+      this.selectAnnotation(undefined)
+    }
+    return parsed
+  }
+
+  /** Writes the autosave now instead of waiting for the debounce. */
+  async flushAutosave(): Promise<void> {
+    if (this.saveTimer !== undefined) { clearTimeout(this.saveTimer); this.saveTimer = undefined }
+    const storage = this.storage
+    if (!storage || !this.autosaveReady) return
+    await storage.save(autosaveKey(this.map), this.exportJson()).catch(() => undefined)
+  }
+
+  private scheduleSave() {
+    if (!this.storage || !this.autosaveReady) return
+    if (this.saveTimer !== undefined) clearTimeout(this.saveTimer)
+    this.saveTimer = setTimeout(() => { this.saveTimer = undefined; void this.flushAutosave() }, this.autosaveDelay)
+  }
+
+  /** Loads the autosave for the current map unless the user already drew something; saving starts afterwards. */
+  private async restore() {
+    const storage = this.storage
+    const key = autosaveKey(this.map)
+    const before = this.annotations.annotations
+    this.autosaveReady = false
+    let saved: string | undefined
+    try { saved = await storage?.load(key) } catch { saved = undefined }
+    if (this.storage !== storage || autosaveKey(this.map) !== key) return
+    const untouched = this.annotations.annotations === before
+    const parsed = saved !== undefined && untouched ? parseDocument(saved) : undefined
+    if (parsed?.ok) {
+      this.annotations.reset(parsed.doc.annotations, parsed.doc.layers)
+      this.selectAnnotation(undefined)
+    }
+    this.autosaveReady = true
+    if (!untouched) this.scheduleSave()
   }
 
   emit(e: ViewerEvent) { PubSub.publishUnsafe(this.bus, e) }
