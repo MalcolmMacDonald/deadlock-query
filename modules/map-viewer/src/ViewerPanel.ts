@@ -21,8 +21,6 @@ export interface ViewerData {
   readonly entities: ReadonlyArray<Entity>
   /** Raw render-tile GLB bytes keyed by tile id. */
   readonly tiles: ReadonlyMap<string, Uint8Array>
-  /** Raw collision GLB bytes (drawn when the bundle has no render tiles). */
-  readonly collision?: Uint8Array | undefined
 }
 
 export const loadViewerData = Effect.gen(function* () {
@@ -170,8 +168,7 @@ export const makeViewerPanel = (data: ViewerData, controller: ViewerController =
         const entities = ((await (await get(manifest.entitiesFile)).json()) as { entities: Entity[] }).entities
         const tiles = new Map<string, Uint8Array>()
         for (const t of manifest.tiles) tiles.set(t.id, new Uint8Array(await (await get(t.file)).arrayBuffer()))
-        const collision = manifest.collision ? new Uint8Array(await (await get(manifest.collision.file)).arrayBuffer()) : undefined
-        const g = await buildScene({ manifest, entities, tiles, collision })
+        const g = await buildScene({ manifest, entities, tiles })
         if (!disposed) {
           setWorld(g)
           controls.setPose(frameBounds(manifest.bounds.min, manifest.bounds.max, FOV_DEG))

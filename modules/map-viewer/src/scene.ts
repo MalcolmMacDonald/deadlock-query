@@ -34,16 +34,6 @@ export const buildScene = async (data: ViewerData): Promise<THREE.Group> => {
     holder.add(group)
     root.add(holder)
   }
-  if (data.collision && data.manifest.collision) {
-    const group = await parseGlb(data.collision)
-    const collisionMat = new THREE.MeshStandardMaterial({ color: 0x6f8fb0, roughness: 0.9, side: THREE.DoubleSide, flatShading: true })
-    group.traverse((o) => { if ((o as THREE.Mesh).isMesh) (o as THREE.Mesh).material = collisionMat })
-    const holder = new THREE.Group()
-    holder.matrixAutoUpdate = false
-    holder.matrix.copy(glbToThreeMatrix(data.manifest.collision.glbToWorld))
-    holder.add(group)
-    root.add(holder)
-  }
   const geo = new THREE.SphereGeometry(40, 12, 8)
   for (const e of data.entities) {
     const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: ENTITY_COLORS[e.kind ?? ""] ?? 0x8a8f98 }))

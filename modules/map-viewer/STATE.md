@@ -12,8 +12,6 @@
 
 - M2: `ViewerService` overlay API. `src/overlays.ts` (`OverlayScene`: points = one `THREE.Points` draw call with screen-space size, polylines/segments = `LineSegments`, polygons = triangulated translucent fill + outline; highlight layer; CPU picking `pickFeature` in screen space) and `src/viewerService.ts` (`ViewerController` remembers overlays/highlight/pose and replays them when a panel mounts; `makeViewerService(controller)` is the `ViewerService` layer; events `pick`/`hover`/`camera` via a sliding `PubSub`; `captureImage` = PNG of the canvas; `loadBundle(url)` fetches manifest/entities/tiles over HTTP and reframes). Feature ids are `"<layerId>:<index>"`; a bare `Vec3[]` is a point layer. Tests: bun unit (picking, scene objects, service replay, `MockViewerService` parity) and e2e (10k points visible, pick/hover/camera events, PNG capture).
 
-- 2026-10-06 — Collision GLB is drawn (`ViewerData.collision`, `buildScene` uses `manifest.collision.glbToWorld`; `loadBundle` fetches it). Checked against the real dl_midtown lite bundle: mesh bounds equal manifest bounds in Three space.
-
 ## In progress
 - (nothing)
 
@@ -21,6 +19,7 @@
 - M1 leftover (needs Malcolm's machine): open the real single-tile bundle and confirm >= 30 fps; the viewer loads any manifest via `MapDataService`, so no code change expected.
 - M3: annotation tools, layers panel (`viewer.layers`).
 - M2 leftover: confirm 10k points at 60 fps on real hardware (software GL in CI measures ~15 fps for the whole scene, informational only).
+- Collision GLB is not rendered yet; `ViewerData` carries render tiles only.
 
 ## Blockers / Requests to other modules
 - Shell/contracts: `ModuleDefinition.layer` is typed `Layer<never>` and shell provides `MockViewerService` in its base layer, so the real service is not reachable by other modules yet. Shell should create one `ViewerController`, pass it to `makeViewerModule(data, controller)` and provide `makeViewerService(controller)` instead of the mock.
