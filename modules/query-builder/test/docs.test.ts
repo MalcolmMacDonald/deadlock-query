@@ -46,7 +46,7 @@ test("every gallery query and every snippet (with default placeholders) type-che
   const results = typecheck(sources)
   for (const [name, problems] of Object.entries(results)) expect({ name, problems }).toEqual({ name, problems: [] })
   expect(Object.keys(results).length).toBe(GALLERY.length + SNIPPETS.length)
-})
+}, 120_000)
 
 test("the gallery carries the three PLAN.md headline queries", () => {
   const text = GALLERY.map((q) => q.source).join("\n")

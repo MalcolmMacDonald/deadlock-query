@@ -9,11 +9,27 @@ import { docIndexFromSource, typecheck } from "./librarySource.ts"
 const friendly = makeFriendly(docIndexFromSource())
 const diag = (message: string): QueryDiagnostic => ({ message, line: 1, column: 1, severity: "error" })
 
-/** Real TypeScript messages for broken queries, rewritten. */
+/** Real TypeScript messages for broken queries, rewritten. One program for all of them: a type-check per test is slow on busy CI. */
+const BROKEN = [
+  "guardians.count()",
+  "secondz(10)",
+  "wibble",
+  "map.healingOrbs.closet(map.guardians.first()!)",
+  "map.guardians.first()!.position.travelTimeToo",
+  "map.guardians.filter((g) => g.team === 1)",
+  "map.guardians.map((g) => g.id)",
+  "map.healingOrbs.length",
+  'map.guardians.inLane("red")',
+  "map.guardians.first()!.position.distanceTo(5)",
+]
+let raw: Record<string, string[]>
+beforeAll(() => {
+  raw = typecheck(Object.fromEntries(BROKEN.map((src, i) => [String(i), src])))
+}, 120_000)
 const advise = (source: string): string => {
-  const [raw] = typecheck({ q: source })["q"]!
-  expect(raw).toBeTruthy()
-  return friendly.diagnostic(diag(raw!)).message
+  const [first] = raw[String(BROKEN.indexOf(source))]!
+  expect(first).toBeTruthy()
+  return friendly.diagnostic(diag(first!)).message
 }
 
 test("unknown names point at map members and near misses", () => {
