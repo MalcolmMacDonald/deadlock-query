@@ -52,6 +52,7 @@
 - 2026-10-06 — M4: shots from these generators use `lookAt` (not angles), so the plan states what the picture is of. Standoff bearings start on +X and go counter-clockwise; ids are `<target>-s<k>` with the target id made filesystem safe. Polylines/polygons are skipped rather than guessed (a centroid can be inside a wall).
 - 2026-10-06 — M4 line of sight: `spatial-core` added to `dependsOn` as an optional dependency (coordinator default; Malcolm not asked, easy to revert by deleting `src/occlusion.ts` and the dependency). The check runs only when `--bundle` points at a baked bundle.
 - 2026-10-06 — M5: thumbnails use `jpeg-js` and `pngjs` (pure JS, widely used) rather than a native image library, so `bun install` stays portable on Windows; decoding a 1920x1080 JPEG takes a few hundred ms, fine for a CLI. `verify` treats a missing thumbnail as a warning (it is derived data) and a changed image as an error. A `verify` of a `--fake` set always passes with a "placeholder set" note.
+- 2026-10-06 — Flaky `verify:all` fix: `gridPlan`/`ringPlan` check the shot cap from the planned count before building any shot. The old check ran after building every spec, so `grid --bounds 0,0,100000,100000 --spacing 100` allocated 4 M shot objects (about 0.8 s idle, over the 5 s test timeout when `verify:all` runs every module at once).
 
 ## Open questions
 - (see PLAN.md §9; transport, command availability and screenshot folder await S3)

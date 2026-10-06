@@ -93,8 +93,13 @@ export const DEFAULT_FOV = 90
 /** Refuse plans that would take hours by accident. */
 export const MAX_SHOTS = 5000
 
+/** Called with the planned count before any shot is built, so an absurd request fails at once instead of allocating millions of specs first. */
+const assertWithinCap = (count: number): void => {
+  if (count > MAX_SHOTS) throw new PlanError([`plan would have ${count} shots (max ${MAX_SHOTS}); use a larger spacing or fewer yaws`])
+}
+
 export const buildPlan = (meta: PlanMeta, shots: ShotSpec[]): ShotPlan => {
-  if (shots.length > MAX_SHOTS) throw new PlanError([`plan would have ${shots.length} shots (max ${MAX_SHOTS}); use a larger spacing or fewer yaws`])
+  assertWithinCap(shots.length)
   return parsePlan({
     schemaVersion: SCHEMA_VERSION,
     ...(meta.gameBuildId !== undefined ? { gameBuildId: meta.gameBuildId } : {}),
@@ -119,6 +124,7 @@ export interface RingOptions { readonly at: ReadonlyArray<Vec3>; readonly yaws?:
 /** One group per position, `yaws` shots turning on the spot (default 8, panorama-ready). */
 export const ringPlan = (meta: PlanMeta, o: RingOptions): ShotPlan => {
   const yaws = yawsOf(o.yaws ?? 8)
+  assertWithinCap(o.at.length * yaws.length)
   const pitch = o.pitch ?? 0
   const shots = o.at.flatMap((position, i): ShotSpec[] => {
     const group = `ring-${String(i + 1).padStart(3, "0")}`
@@ -145,6 +151,7 @@ export const gridPlan = (meta: PlanMeta, o: GridOptions): ShotPlan => {
   const cols = Math.floor((maxX - minX) / o.spacing), rows = Math.floor((maxY - minY) / o.spacing)
   if (cols < 1 || rows < 1) throw new PlanError([`spacing ${o.spacing} leaves no whole cell in bounds ${o.bounds.join(",")}`])
   const yaws = yawsOf(o.yaws ?? 4)
+  assertWithinCap(cols * rows * yaws.length)
   const pitch = o.pitch ?? 0
   // Centre the lattice in the bounds so the margin is split evenly.
   const x0 = minX + ((maxX - minX) - (cols - 1) * o.spacing) / 2
