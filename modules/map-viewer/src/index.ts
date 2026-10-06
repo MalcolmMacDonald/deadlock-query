@@ -4,6 +4,9 @@ import { VIEWER_PANEL_ID, makeViewerPanel, type ViewerData } from "./ViewerPanel
 
 export * from "./ViewerPanel.ts"
 export * from "./projection.ts"
+export * from "./camera.ts"
+export * from "./hashState.ts"
+export { buildScene, glbToThreeMatrix, WORLD_TO_THREE } from "./scene.ts"
 
 export const makeViewerModule = (data: ViewerData): ModuleDefinition => ({
   id: "map-viewer",

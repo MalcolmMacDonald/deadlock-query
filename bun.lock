@@ -41,6 +41,11 @@
       "dependencies": {
         "@deadlock-query/contracts": "workspace:*",
         "effect": "4.0.1",
+        "three": "^0.170.0",
+      },
+      "devDependencies": {
+        "@types/three": "^0.170.0",
+        "playwright-core": "^1.49.0",
       },
     },
     "modules/query-builder": {
