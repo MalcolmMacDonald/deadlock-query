@@ -3,6 +3,8 @@ import { MockMapDataService, MockViewerService, ViewerService, type ModuleDefini
 import type { ViewerController } from "@deadlock-query/map-viewer"
 
 const VIEWER_PANEL_ID = "viewer.main"
+const LAYERS_PANEL_ID = "viewer.layers"
+const TOOLS_PANEL_ID = "viewer.tools"
 
 /** Where the deploy unzips the published bundle (`tools/fetch-data.ts` → `<site>/data/<map>`). */
 export const BUNDLE_MANIFEST_URL = "./data/dl_midtown/manifest.json"
@@ -20,6 +22,20 @@ export const viewerServiceLayer: Layer.Layer<ViewerService> = Layer.unwrap(
     Effect.orElseSucceed(() => MockViewerService),
   ),
 )
+
+/** Mounts a map-viewer side panel built over the shared controller (the viewer chunk loads lazily). */
+const sidePanel = (make: (v: Awaited<ReturnType<typeof viewerPackage>>, c: ViewerController) => { mount: (container: HTMLElement) => () => void }) => ({
+  mount: (container: HTMLElement) => {
+    let dispose = () => {}
+    let cancelled = false
+    void Promise.all([viewerPackage(), getViewerController()]).then(([v, c]) => {
+      if (!cancelled) dispose = make(v, c).mount(container)
+    }).catch((e) => {
+      container.textContent = `Panel failed to load: ${String(e)}`
+    })
+    return () => { cancelled = true; dispose() }
+  },
+})
 
 /**
  * Map viewer module. Three.js and the mini-map fixture load lazily on first mount so the
@@ -52,5 +68,7 @@ export const viewerModule: ModuleDefinition = {
         },
       },
     },
+    { id: TOOLS_PANEL_ID, title: "Tools", defaultPlacement: "left", component: sidePanel((v, c) => v.makeToolsPanel(c)) },
+    { id: LAYERS_PANEL_ID, title: "Layers", defaultPlacement: "left", component: sidePanel((v, c) => v.makeLayersPanel(c)) },
   ],
 }

@@ -45,9 +45,21 @@ test("Query preset: viewer first, editor docked right of it, extras placed below
   expect(preset[2]!.position).toEqual({ referencePanel: "viewer.main", direction: "below" })
 })
 
+test("Query preset: tools left of the viewer, layers below tools", () => {
+  const p = { component: () => null } as const
+  const preset = queryPreset([
+    { id: "viewer.layers", title: "Layers", defaultPlacement: "left", ...p },
+    { id: "viewer.tools", title: "Tools", defaultPlacement: "left", ...p },
+    { id: "viewer.main", title: "Map", defaultPlacement: "center", ...p },
+  ])
+  expect(preset.map((x) => x.id)).toEqual(["viewer.main", "viewer.tools", "viewer.layers"])
+  expect(preset[1]!.position).toEqual({ referencePanel: "viewer.main", direction: "left" })
+  expect(preset[2]!.position).toEqual({ referencePanel: "viewer.tools", direction: "below" })
+})
+
 test("Query preset references only registered panels", () => {
   const real = queryPreset(modules.flatMap((m) => m.panels))
   const ids = new Set(real.map((x) => x.id))
   for (const x of real) if (x.position) expect(ids.has(x.position.referencePanel)).toBe(true)
-  expect(ids.has("viewer.main") && ids.has("query.editor")).toBe(true)
+  expect(["viewer.main", "viewer.tools", "viewer.layers", "query.editor"].every((id) => ids.has(id))).toBe(true)
 })
