@@ -1,8 +1,8 @@
 # query-builder — state
 
-- **Status:** M0 done
+- **Status:** M1 done
 - **Version:** 0.0.0
-- **Current milestone:** M0 complete; next is M1 (see PLAN.md §6)
+- **Current milestone:** M1 complete; next is M2 (see PLAN.md §6)
 - **Last updated:** 2026-10-06
 
 ## Done
@@ -26,14 +26,17 @@ Also verified: library-class member completions with TSDoc signature, string-lit
 
 - **M0** (`src/app/`, `test/app.e2e.test.ts`). Standalone app: Monaco editor on `file:///query.ts` with the fixture `.d.ts` (`src/app/fixtureDts.ts`, copied from the S1 spike fixture), Run button / Ctrl+Enter, contracts `MockQueryEngine` driven through Effect (`engine.ts`), plain results table with stats and warnings (`resultsTable.ts`). `bun run dev:standalone` builds to `.app-dist/` and serves on :5173. Playwright e2e (skipped when no Chromium is found): type `map.` → suggestion list contains `spawnsOf`; run → table rows + stats.
 
+- **M1** (`src/engine/`, `src/app/`, `test/engine.test.ts`, `test/project.test.ts`, `test/app.e2e.test.ts`). Real `QueryEngine` layer (`makeQueryEngine({ compiler, runner })`): compile via Monaco's TS worker (`monacoCompiler.ts`: syntactic+semantic diagnostics and `getEmitOutput` from the same service/`.d.ts` as completions), error diagnostics block the run (`line:col message`), JS runs in the sandbox, value projected to a `QueryResult` (`project.ts`). The library is consumed as a built artifact (`../query-library/dist`, read by `library.ts`; `buildApp` builds it first if missing): its ESM becomes the worker prelude (`toPrelude`: trailing `export {}` → globals + `__dlqLoad`), its `.d.ts` files plus a generated `globals.d.ts` shim make `map`, `meters`, `Vec3`… globals in the editor. The map bundle (`{manifest:{mapName,gameBuildId}, entities}`) is sent with `SandboxRunner.load`, remembered by the frame and replayed to every respawned worker. Standalone serves `library.json` + `bundle.json` (mini-map fixture) from `.app-dist/`. UI: live diagnostics markers (300 ms debounce), Run/Cancel buttons, error panel.
+  - Acceptance met: slice-1 guardian→nearest-orb query returns the contracts fixture's `expectedGuardianOrbDistance` rows (unit test with a Worker + real library build, and Chromium e2e through the real editor); `while (true) {}` is stopped by timeout or cancel and the next query runs (also when cancel lands mid-compile).
+
 ## In progress
 - (nothing)
 
 ## Next
-- M1: real runner against the library artifact + fixture bundle (`src/sandbox/` + `getEmitOutput`), diagnostics, result projection, run/cancel UI (PLAN.md §6). Replace `mockEngineLayer` in `src/app/engine.ts` with a real `QueryEngine` layer.
+- M2: results ↔ viewer overlay + selection sync with `MockViewerService`/`MockSelectionBus` (PLAN.md §6). The shell still has to supply the real bundle and library artifact (today only standalone loads them).
 
 ## Blockers / Requests to other modules
-- `NEXT.md` (root) still lists the S1 row as open; update it to "M1" in a follow-up outside this module (root files are out of scope for module PRs).
+- `NEXT.md` (root): query-builder row should now read "M2: results ↔ viewer overlay + selection sync"; root files are out of scope for module PRs, so someone outside this module must update it.
 
 ## Decisions log
 - 2026-10-05 — Module scaffolded (rev 2 of IMPLEMENTATION_PLAN.md).
@@ -41,6 +44,10 @@ Also verified: library-class member completions with TSDoc signature, string-lit
 - 2026-10-05 — S1: GO. Eval-completion-value wrapper, nonce+blob-worker sandbox, terminate-based cancel (details above).
 
 - 2026-10-06 — M0: the e2e test lives in `bun test` (so `verify` covers it) but self-skips without Chromium. Mock results ignore the source, per `MockQueryEngine`. Results table is unvirtualised until a later milestone.
+
+- 2026-10-06 — M1: result projection rules: array of arrays → columns `c1…`, array of objects → one column per key, scalars → `value`; 3-number arrays are `point`, longer lists of them `polyline`; objects with `id`+`position` (entities) become `entityRef` ids; mixed → `string`. Worker normalises with `toArray()` (Seq/Vec3) then plain objects. Rows capped at 100k with a warning until M3.
+- 2026-10-06 — M1: default run timeout 30 s. Warnings from the TS service are shown as result warnings; any error diagnostic blocks the run. `await`/`return` at top level remain unsupported (S1 wrapper strategy kept).
+- 2026-10-06 — M1: unit tests build the library JS straight from source into a temp dir and use `Bun.Transpiler` (no type-check) + a plain Worker; type-check paths are covered by the Chromium e2e only (self-skips without Chromium). The e2e needs `modules/query-library/dist` (built on demand by `buildApp`).
 
 ## Open questions
 - (see PLAN.md §9)

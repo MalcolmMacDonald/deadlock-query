@@ -51,6 +51,15 @@ export class SandboxRunner {
     await back
   }
 
+  /** Sends the map bundle to the worker; it is replayed after every respawn. Resolves once the worker is ready. */
+  async load(bundle: unknown): Promise<void> {
+    await this.ready()
+    this.isReady = false
+    const back = this.ready()
+    this.post({ type: "load", bundle })
+    await back
+  }
+
   async run(js: string, opts: RunOptions = {}): Promise<RunOutcome> {
     await this.ready()
     const runId = this.nextId++

@@ -1,9 +1,22 @@
-import { cpSync, mkdirSync, rmSync } from "node:fs"
+import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs"
 import { dirname, join } from "node:path"
+import { buildMiniMap } from "@deadlock-query/contracts"
+import { readLibraryArtifact } from "../engine/library.ts"
 
 const here = import.meta.dir
 export const OUT = join(here, "..", "..", ".app-dist")
 const monaco = dirname(Bun.resolveSync("monaco-editor/package.json", here))
+
+const LIBRARY_DIST = join(here, "..", "..", "..", "query-library", "dist")
+
+/** The library is consumed as a built artifact; build it first when it is missing. */
+export const ensureLibraryBuilt = (): string => {
+  if (!existsSync(join(LIBRARY_DIST, "apiCatalog.json"))) {
+    const r = Bun.spawnSync(["bun", "run", "build"], { cwd: join(LIBRARY_DIST, ".."), stdout: "inherit", stderr: "inherit" })
+    if (r.exitCode !== 0) throw new Error("query-library build failed")
+  }
+  return LIBRARY_DIST
+}
 
 /** Builds the standalone editor app (Monaco + workers) into `.app-dist/`. */
 export const buildApp = async (): Promise<string> => {
@@ -22,6 +35,10 @@ export const buildApp = async (): Promise<string> => {
   })
   if (!r.success) throw new Error(r.logs.join("\n"))
   cpSync(join(here, "index.html"), join(OUT, "index.html"))
+  // Library artifact + the fixture bundle (standalone mode; the shell supplies real bundles later).
+  writeFileSync(join(OUT, "library.json"), JSON.stringify(readLibraryArtifact(ensureLibraryBuilt())))
+  const mini = buildMiniMap()
+  writeFileSync(join(OUT, "bundle.json"), JSON.stringify({ manifest: { mapName: mini.manifest.mapName, gameBuildId: mini.manifest.gameBuildId }, entities: mini.entities }))
   return OUT
 }
 
