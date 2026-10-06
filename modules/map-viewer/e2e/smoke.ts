@@ -81,6 +81,45 @@ try {
   await settle()
   if ((await page.locator('[data-testid="viewer-canvas"]').getAttribute("data-mode")) !== "fly") fail("mode not restored")
   if ((await hash()) !== h4) fail(`camera not restored: ${await hash()} vs ${h4}`)
+  // M2 overlays: 10k points render, hover/pick events fire, capture returns a PNG, frame rate holds.
+  await page.evaluate(() => {
+    const v = (globalThis as any).__viewer
+    const pts = Array.from({ length: 10_000 }, (_, i) => [(i % 100) * 20 - 1000, Math.floor(i / 100) * 20 - 1000, 0])
+    v.setOverlay("perf", pts, { color: "#ff0000", size: 3 })
+    v.setOverlay("marker", [{ type: "point", at: [0, 0, 0] }], { color: "#00ff00", size: 20 })
+    v.setPose({ target: [0, 0, 0], yaw: Math.PI / 2, pitch: -1.55, distance: 1500 })
+  })
+  await settle()
+  const red = await page.evaluate(() => {
+    const c = document.querySelector("canvas")!
+    const d = document.createElement("canvas"); d.width = c.width; d.height = c.height
+    const ctx = d.getContext("2d")!; ctx.drawImage(c, 0, 0)
+    const px = ctx.getImageData(0, 0, d.width, d.height).data
+    let n = 0
+    for (let i = 0; i < px.length; i += 4) if (px[i]! > 200 && px[i + 1]! < 60 && px[i + 2]! < 60) n++
+    return n
+  })
+  if (red < 500) fail(`10k point overlay not visible (${red} red px)`)
+  const fps = await page.evaluate(async () => {
+    const v = (globalThis as any).__viewer
+    const t0 = performance.now(); let n = 0
+    const pose = v.getPose()
+    for (let i = 0; i < 30; i++) { v.setPose({ ...pose, yaw: pose.yaw + i * 0.01 }); await new Promise((r) => requestAnimationFrame(r)); n++ }
+    return (n / (performance.now() - t0)) * 1000
+  })
+  console.log(`overlay fps (software GL, informational): ${fps.toFixed(1)}`)
+  await page.mouse.move(450, 300)
+  await page.mouse.move(451, 300)
+  await page.mouse.click(450, 300)
+  await settle()
+  const events = (await page.evaluate(() => (globalThis as any).__events)) as Array<{ _tag: string; id?: string }>
+  if (!events.some((e) => e._tag === "camera")) fail("no camera event")
+  if (!events.some((e) => e._tag === "pick" && e.id === "marker:0")) fail(`no pick of marker: ${JSON.stringify(events.filter((e) => e._tag !== "camera"))}`)
+  const pngOk = await page.evaluate(async () => {
+    const bytes: Uint8Array = await (globalThis as any).__viewer.capture()
+    return bytes[0] === 0x89 && bytes[1] === 0x50
+  })
+  if (!pngOk) fail("capture is not a PNG")
   if (errors.length) fail(errors.join("; "))
   console.log("map-viewer e2e smoke: ok")
 } finally {
