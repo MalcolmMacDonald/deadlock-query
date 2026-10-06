@@ -32,7 +32,17 @@ try {
   await page.waitForFunction(() => (globalThis as any).__viewerController?.highlighted?.length > 0, null, { timeout: 10000 })
   const highlighted = await page.evaluate(() => (globalThis as any).__viewerController.highlighted as string[])
   if (!highlighted.every((id) => id.includes(":"))) throw new Error(`unexpected highlight ids: ${highlighted}`)
-  console.log(`e2e ok: map rendered, query ran in the embedded editor, ${rows} rows, overlay on the map, row click highlighted ${highlighted.join(",")}`)
+  // Selection sync both ways: the clicked row is marked; a pick on the map selects its row.
+  const selected = table.locator("tbody tr.selected")
+  const firstRow = await table.locator("tbody tr").first().getAttribute("data-row-id")
+  await selected.first().waitFor({ timeout: 5000 })
+  if ((await selected.count()) !== 1 || (await selected.first().getAttribute("data-row-id")) !== firstRow) throw new Error("clicked row should be the only selected row")
+  await table.locator("tbody tr").nth(1).click()
+  await page.waitForFunction((id) => document.querySelector(`tr.selected[data-row-id="${id}"]`) === null, firstRow, { timeout: 5000 })
+  await page.evaluate((id) => (globalThis as any).__viewerController.emit({ _tag: "pick", id }), highlighted[0])
+  await page.waitForSelector(`tr.selected[data-row-id="${firstRow}"]`, { timeout: 5000 })
+  if ((await selected.count()) !== 1) throw new Error("a map pick should leave exactly its row selected")
+  console.log(`e2e ok: map rendered, query ran in the embedded editor, ${rows} rows, overlay on the map, row click highlighted ${highlighted.join(",")}, row <-> map selection in sync`)
 } finally {
   await browser.close()
   server.stop(true)

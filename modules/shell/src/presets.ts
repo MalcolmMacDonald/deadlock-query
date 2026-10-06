@@ -15,17 +15,23 @@ export const EDITOR_WIDTH = 520
 /** Initial width in px of the tools/layers column left of the map. */
 export const SIDEBAR_WIDTH = 220
 
-/**
- * The default "Query" preset: tools (with layers below) docked left of the map viewer, query editor + results docked right.
- * Built only from the registered `panels`, so the layout never references a missing panel.
- */
-export const queryPreset = (panels: ReadonlyArray<PanelDefinition>): ReadonlyArray<PresetPanel> => {
+interface PresetOptions {
+  /** Dock the query editor (and results) right of the map. */
+  readonly editor: boolean
+  /** Dock these (e.g. metadata review) right of the map. */
+  readonly extra?: ReadonlyArray<PanelDefinition>
+  /** Split every other registered panel below the map (demo/dummy modules) instead of leaving it closed. */
+  readonly rest: boolean
+}
+
+const buildPreset = (panels: ReadonlyArray<PanelDefinition>, opts: PresetOptions): ReadonlyArray<PresetPanel> => {
   const byId = new Map(panels.map((p) => [p.id, p]))
   const viewer = byId.get("viewer.main")
-  const editor = byId.get("query.editor")
+  const editor = opts.editor ? byId.get("query.editor") : undefined
   const tools = byId.get("viewer.tools")
   const layers = byId.get("viewer.layers")
-  const rest = panels.filter((p) => p !== viewer && p !== editor && p !== tools && p !== layers)
+  const extra = opts.extra ?? []
+  const placed = new Set<PanelDefinition>([viewer, editor, tools, layers, ...extra].filter((p): p is PanelDefinition => p !== undefined))
   const out: PresetPanel[] = []
   if (viewer) out.push({ id: viewer.id, title: viewer.title })
   if (tools)
@@ -51,7 +57,66 @@ export const queryPreset = (panels: ReadonlyArray<PanelDefinition>): ReadonlyArr
       ...(viewer ? { position: { referencePanel: viewer.id, direction: "right" as const } } : {}),
       initialWidth: EDITOR_WIDTH,
     })
+  for (const p of extra)
+    out.push({
+      id: p.id,
+      title: p.title,
+      ...(viewer ? { position: { referencePanel: viewer.id, direction: "right" as const } } : {}),
+      initialWidth: EDITOR_WIDTH,
+    })
   // Anything else (dummy/demo modules) is split below the viewer so it stays visible.
-  for (const p of rest) out.push({ id: p.id, title: p.title, ...(viewer ? { position: { referencePanel: viewer.id, direction: "below" as const } } : {}) })
+  if (opts.rest)
+    for (const p of panels)
+      if (!placed.has(p)) out.push({ id: p.id, title: p.title, ...(viewer ? { position: { referencePanel: viewer.id, direction: "below" as const } } : {}) })
   return out
+}
+
+/**
+ * The default "Query" preset: tools (with layers below) docked left of the map viewer, query editor + results docked right.
+ * Built only from the registered `panels`, so the layout never references a missing panel.
+ */
+export const queryPreset = (panels: ReadonlyArray<PanelDefinition>): ReadonlyArray<PresetPanel> => buildPreset(panels, { editor: true, rest: true })
+
+/** "Explore": the map with its tools and layers, no editor. */
+export const explorePreset = (panels: ReadonlyArray<PanelDefinition>): ReadonlyArray<PresetPanel> => buildPreset(panels, { editor: false, rest: false })
+
+const isReviewPanel = (p: PanelDefinition) => p.id.startsWith("metadata.")
+
+/** "Review": the map with its tools and layers plus the metadata review panels (`metadata.*`) docked right. */
+export const reviewPreset = (panels: ReadonlyArray<PanelDefinition>): ReadonlyArray<PresetPanel> =>
+  buildPreset(panels, { editor: false, extra: panels.filter(isReviewPanel), rest: false })
+
+export interface Preset {
+  readonly id: "query" | "explore" | "review"
+  readonly title: string
+  readonly build: (panels: ReadonlyArray<PanelDefinition>) => ReadonlyArray<PresetPanel>
+  /** False when the registered panels cannot make this preset meaningful (e.g. Review before map-metadata ships). */
+  readonly available: (panels: ReadonlyArray<PanelDefinition>) => boolean
+}
+
+const hasViewer = (panels: ReadonlyArray<PanelDefinition>) => panels.some((p) => p.id === "viewer.main")
+
+export const PRESETS: ReadonlyArray<Preset> = [
+  { id: "query", title: "Query", build: queryPreset, available: hasViewer },
+  { id: "explore", title: "Explore", build: explorePreset, available: hasViewer },
+  { id: "review", title: "Review", build: reviewPreset, available: (panels) => hasViewer(panels) && panels.some(isReviewPanel) },
+]
+
+/** The preset applied on first load and by "Reset layout". */
+export const DEFAULT_PRESET_ID: Preset["id"] = "query"
+
+export const availablePresets = (panels: ReadonlyArray<PanelDefinition>): ReadonlyArray<Preset> => PRESETS.filter((p) => p.available(panels))
+
+type PanelPlacement = PanelDefinition["defaultPlacement"]
+
+/** Where a reopened panel goes, as dockview `addPanel` options (relative to the whole layout, not a given panel). */
+export const placementFor = (placement: PanelPlacement): { position?: { direction: Direction }; floating?: true } => {
+  switch (placement) {
+    case "left": return { position: { direction: "left" } }
+    case "right": return { position: { direction: "right" } }
+    case "top": return { position: { direction: "above" } }
+    case "bottom": return { position: { direction: "below" } }
+    case "float": return { floating: true }
+    case "center": return {}
+  }
 }

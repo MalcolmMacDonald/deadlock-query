@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { LAYOUT_KEY, LAYOUT_VERSION, loadLayout, parseLayout, resetLayout, saveLayout, serializeLayout } from "../src/layout.ts"
+import { isRestorable, LAYOUT_KEY, LAYOUT_VERSION, layoutPanelIds, loadLayout, parseLayout, resetLayout, saveLayout, serializeLayout } from "../src/layout.ts"
 import { modules } from "../src/modules.ts"
 import { queryPreset } from "../src/presets.ts"
 
@@ -62,4 +62,14 @@ test("Query preset references only registered panels", () => {
   const ids = new Set(real.map((x) => x.id))
   for (const x of real) if (x.position) expect(ids.has(x.position.referencePanel)).toBe(true)
   expect(["viewer.main", "viewer.tools", "viewer.layers", "query.editor"].every((id) => ids.has(id))).toBe(true)
+})
+
+test("restorable layouts name only registered panels", () => {
+  const layout = { grid: {}, panels: { "viewer.main": {}, "query.editor": {} } }
+  expect(isRestorable(layout, ["viewer.main", "query.editor", "other"])).toBe(true)
+  expect(isRestorable(layout, ["viewer.main"])).toBe(false)
+  expect(isRestorable({ panels: {} }, ["viewer.main"])).toBe(false)
+  expect(isRestorable({ grid: {} }, ["viewer.main"])).toBe(false)
+  expect(isRestorable(null, ["viewer.main"])).toBe(false)
+  expect(layoutPanelIds({ panels: ["a"] })).toBeNull()
 })

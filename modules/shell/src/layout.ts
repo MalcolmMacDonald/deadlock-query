@@ -33,3 +33,18 @@ export const loadLayout = (store: KeyValueStore): unknown | null => parseLayout(
 export const saveLayout = (store: KeyValueStore, layout: unknown): void =>
   store.setItem(LAYOUT_KEY, serializeLayout(layout))
 export const resetLayout = (store: KeyValueStore): void => store.removeItem(LAYOUT_KEY)
+
+/** Ids of the panels a dockview JSON layout refers to, or null when it has no recognisable `panels` map. */
+export const layoutPanelIds = (layout: unknown): ReadonlyArray<string> | null => {
+  if (typeof layout !== "object" || layout === null) return null
+  const panels = (layout as { panels?: unknown }).panels
+  return typeof panels === "object" && panels !== null && !Array.isArray(panels) ? Object.keys(panels) : null
+}
+
+/** True when `layout` is non-empty and every panel it names is registered (a renamed/removed panel would break `fromJSON`). */
+export const isRestorable = (layout: unknown, registered: Iterable<string>): boolean => {
+  const ids = layoutPanelIds(layout)
+  if (!ids || ids.length === 0) return false
+  const known = new Set(registered)
+  return ids.every((id) => known.has(id))
+}
