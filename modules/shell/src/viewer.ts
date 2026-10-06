@@ -1,7 +1,22 @@
 import { Effect, Layer } from "effect"
-import { MockMapDataService, type ModuleDefinition } from "@deadlock-query/contracts"
+import { MockMapDataService, MockViewerService, ViewerService, type ModuleDefinition } from "@deadlock-query/contracts"
+import type { ViewerController } from "@deadlock-query/map-viewer"
 
 const VIEWER_PANEL_ID = "viewer.main"
+
+const viewerPackage = () => import("@deadlock-query/map-viewer")
+
+let controller: Promise<ViewerController> | undefined
+/** The one ViewerController shared by the Map panel and the `ViewerService` layer. */
+export const getViewerController = (): Promise<ViewerController> =>
+  (controller ??= viewerPackage().then((v) => new v.ViewerController()))
+
+/** Real `ViewerService` backed by the shared controller (loads the viewer chunk before the runtime builds). */
+export const viewerServiceLayer: Layer.Layer<ViewerService> = Layer.unwrap(
+  Effect.tryPromise(async () => (await viewerPackage()).makeViewerService(await getViewerController())).pipe(
+    Effect.orElseSucceed(() => MockViewerService),
+  ),
+)
 
 /**
  * Map viewer module. Three.js and the mini-map fixture load lazily on first mount so the
@@ -20,10 +35,11 @@ export const viewerModule: ModuleDefinition = {
         mount: (container: HTMLElement) => {
           let dispose = () => {}
           let cancelled = false
-          void import("@deadlock-query/map-viewer").then(async (v) => {
+          void viewerPackage().then(async (v) => {
             const data = await Effect.runPromise(v.loadViewerData.pipe(Effect.provide(MockMapDataService)))
+            const c = await getViewerController()
             if (cancelled) return
-            dispose = v.makeViewerPanel(data).mount(container)
+            dispose = v.makeViewerPanel(data, c).mount(container)
           }).catch((e) => {
             container.textContent = `Map failed to load: ${String(e)}`
           })

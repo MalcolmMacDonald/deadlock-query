@@ -1,5 +1,6 @@
 import { Cause, Effect, Exit, Layer, ManagedRuntime, Scope } from "effect"
 import type { ModuleDefinition } from "@deadlock-query/contracts"
+import { viewerServiceLayer } from "./viewer.ts"
 import { MockDevAuth, MockSelectionBus, MockViewerService } from "@deadlock-query/contracts"
 
 export type AnyModule = ModuleDefinition<any>
@@ -18,6 +19,9 @@ export interface Composition {
 
 /** Services every module may require; swapped for real layers as modules ship them. */
 export const baseLayer = Layer.mergeAll(MockSelectionBus, MockViewerService, MockDevAuth)
+
+/** The app's base: the real `ViewerService` (shared controller with the Map panel), mocks elsewhere. */
+export const appBaseLayer = Layer.mergeAll(MockSelectionBus, viewerServiceLayer, MockDevAuth)
 
 const describe = (cause: Cause.Cause<unknown>): string => Cause.pretty(cause).split("\n")[0] ?? "Layer failed"
 

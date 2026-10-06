@@ -1,6 +1,6 @@
 # shell — state
 
-- **Status:** M1 done
+- **Status:** M2 viewer wiring done
 - **Version:** 0.1.0
 - **Current milestone:** M1 complete; M2 next (needs real viewer/editor/results modules)
 - **Last updated:** 2026-10-06
@@ -12,11 +12,13 @@
 
 - 2026-10-06 — Deployed site fix: `src/modules.ts` now mounts the real map-viewer (lazy import, mini-map fixture via `MockMapDataService`) and the query editor (iframe to `./editor/index.html`, the query-builder standalone app, still on `MockQueryEngine`). `tools/build.ts` now runs the shell Vite build and the editor build, so deploy no longer publishes the placeholder page.
 
+- 2026-10-06 — M2 (viewer): one shared `ViewerController` (`src/viewer.ts`, lazy) backs both the Map panel and `ViewerService` via `appBaseLayer` (`src/runtime.ts`), replacing `MockViewerService` in the app; falls back to the mock if the viewer chunk fails to load. Unit-tested.
+
 ## In progress
 - (nothing yet)
 
 ## Next
-- M2 (remaining): swap fixture/mock for published data-25712201 bundle once extractor emits MapBundles; real QueryEngine; wire viewer + query editor + results panels, default Query preset, lazy loading (add real modules to `src/modules.ts`).
+- M2 (remaining; viewer wiring done): swap fixture/mock for published data-25712201 bundle once extractor emits MapBundles; real QueryEngine; wire viewer + query editor + results panels, default Query preset, lazy loading (add real modules to `src/modules.ts`).
 
 ## Blockers / Requests to other modules
 - map-viewer: confirmed — shell mounts a panel `component` that is `{ mount(container) => dispose }` (see `src/panels.tsx`); React components also work. `viewer.main` can use the handle as-is.

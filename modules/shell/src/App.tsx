@@ -5,7 +5,7 @@ import { type FunctionComponent, useCallback, useEffect, useMemo, useState } fro
 import { loadLayout, resetLayout, saveLayout } from "./layout.ts"
 import { modules } from "./modules.ts"
 import { ErrorPanel, toDockviewComponent } from "./panels.tsx"
-import { composeModules, type Composition } from "./runtime.ts"
+import { appBaseLayer, composeModules, type Composition } from "./runtime.ts"
 
 const directions = { left: "left", right: "right", top: "above", bottom: "below", float: "within" } as const
 
@@ -25,7 +25,7 @@ export const App = () => {
   const [composition, setComposition] = useState<Composition>()
   const [fatal, setFatal] = useState<string>()
   useEffect(() => {
-    composeModules(modules).then(setComposition, (e) => setFatal(String(e)))
+    composeModules(modules, appBaseLayer).then(setComposition, (e) => setFatal(String(e)))
   }, [])
   if (fatal) return <ErrorPanel moduleId="shell" message={fatal} />
   if (!composition) return <div style={{ padding: 12 }}>Loading…</div>
