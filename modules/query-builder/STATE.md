@@ -129,6 +129,7 @@ Also verified: library-class member completions with TSDoc signature, string-lit
 - 2026-10-06 — M6: the lazy split lives inside the package (loader vs. panel) so every consumer, including the shell's existing `await import("@deadlock-query/query-builder")`, gets a loading view for free and the shell needs no change. Monaco features are an allowlist rather than `editor.all.js`; unlisted features simply do not exist, so check `monacoContributions.ts` first when a Monaco feature seems missing.
 
 - 2026-10-06 — M7: paging replaced the render cap instead of virtual scrolling. At most 500 rows are in the DOM, which keeps every row a real, focusable, labelled element (virtual scrolling would break row-by-row screen-reader and keyboard navigation) and removes the need for a scroll container hack; `LIMITS.maxRenderedRows` is gone. Filtering matches the displayed text (numbers rounded to 3 places, geometry as its JSON).
+- 2026-10-06 — The standalone viewer stub implements `registerTool` as a no-op (requested by the contracts thread; harmless while it is optional, required before contracts makes it required).
 
 ## Open questions
 - (see PLAN.md §9)
