@@ -6,9 +6,10 @@ import { ExportFailed } from "./errors.ts"
 import { gltfInfo, readGltfJson, type GltfInfo } from "./gltfInfo.ts"
 import { invertAffine } from "./mat4.ts"
 import { args, firstExceptionLine, lastRunOutput, run, type S2VRunner } from "./s2v.ts"
+import { buildLiteTiles, type LiteOptions } from "./liteRender.ts"
 import { toEntities, parseVents } from "./vents.ts"
 
-export const EXTRACTOR_VERSION = "0.2.0"
+export const EXTRACTOR_VERSION = "0.3.0"
 export type Tier = "full" | "lite"
 
 export interface ExtractOptions {
@@ -20,6 +21,10 @@ export interface ExtractOptions {
   readonly outRoot: string // data/bundles
   readonly runner: S2VRunner
   readonly force?: boolean
+  /** Lite tier: triangle/tile budgets for the reduced render. */
+  readonly lite?: LiteOptions
+  /** Lite tier: keep the multi-GB full render export in `.work` after deriving the lite tiles. */
+  readonly keepWork?: boolean
   readonly log?: (msg: string) => void
 }
 
@@ -125,7 +130,26 @@ export const extract = async (o: ExtractOptions): Promise<ExtractResult> => {
       file: "render/n0.gltf", bytes, sha256: sha256(gltf), materials: renderInfo.materials
     })
   } else {
-    warnings.push("lite: render geometry omitted until the triangle-cut strategy is settled (STATE.md); bundle holds collision + entities")
+    // The lite render is derived from a full export of the world node (cached in .work), then reduced.
+    const fullGltf = join(work, "render-full", "n0.gltf")
+    const liteDir = join(dir, "render")
+    const manifestTiles = join(work, "lite-tiles.json")
+    const liteKey = `render-lite-${createHash("sha256").update(JSON.stringify({ ...o.lite, log: undefined })).digest("hex").slice(0, 8)}`
+    await stage(o, dir, liteKey, [manifestTiles], async () => {
+      if (o.force || !existsSync(fullGltf)) {
+        rmSync(join(work, "render-full"), { recursive: true, force: true }); mkdirSync(join(work, "render-full"), { recursive: true })
+        await run(o.runner, "render", args.render(o.vpk, o.map, fullGltf))
+      }
+      for (const f of readdirSync(liteDir)) rmSync(join(liteDir, f), { recursive: true, force: true })
+      const r = buildLiteTiles(fullGltf, liteDir, { ...o.lite, log: o.log })
+      warnings.push(...r.warnings.map((w) => `lite render: ${w}`))
+      writeFileSync(manifestTiles, JSON.stringify({ tiles: r.tiles, keptTriangles: r.keptTriangles, totalTriangles: r.totalTriangles, textureBytes: r.textureBytes }))
+    })
+    const built = JSON.parse(readFileSync(manifestTiles, "utf8")) as { tiles: Array<{ id: string; file: string; bounds: Aabb; bytes: number; sha256: string; materials: string[] }>; keptTriangles: number; totalTriangles: number; textureBytes: number }
+    renderMatrix = fileGlbToWorld(gltfInfo(readGltfJson(physOut))).matrix
+    for (const t of built.tiles) tiles.push({ id: t.id, bounds: worldBounds({ loadedBounds: t.bounds } as GltfInfo, renderMatrix) ?? t.bounds, file: `render/${t.file}`, bytes: t.bytes, sha256: t.sha256, materials: t.materials })
+    warnings.push(`lite render: ${built.keptTriangles}/${built.totalTriangles} triangles in ${built.tiles.length} tiles; textures ${(built.textureBytes / 1048576).toFixed(1)} MB (copied unmodified)`)
+    if (!o.keepWork) rmSync(join(work, "render-full"), { recursive: true, force: true })
   }
 
   const physInfo = gltfInfo(readGltfJson(physOut))

@@ -89,7 +89,7 @@ test("extract (lite) writes a valid bundle and caches stages", async () => {
   const calls: string[][] = []
   const opts = { vpk: "m.vpk", map: "dl_midtown", buildId: "1", s2vVersion: "20.0", tier: "lite" as const, outRoot: root, runner: fakeRunner(calls) }
   const r = await extract(opts)
-  expect(calls.length).toBe(2)
+  expect(calls.length).toBe(3) // entities, collision, full render export (reduced to lite tiles)
   const manifest = JSON.parse(readFileSync(join(r.dir, "manifest.json"), "utf8"))
   expect(manifest.collision.file).toBe("collision/physics.glb")
   expect(manifest.tiles).toEqual([])
@@ -98,9 +98,9 @@ test("extract (lite) writes a valid bundle and caches stages", async () => {
   expect(rep.errors).toEqual([])
   expect(rep.info["entities"]).toBe(4)
   await extract(opts)
-  expect(calls.length).toBe(2) // cached
+  expect(calls.length).toBe(3) // entities, collision, full render export (reduced to lite tiles) // cached
   await extract({ ...opts, force: true })
-  expect(calls.length).toBe(4)
+  expect(calls.length).toBe(6)
 })
 
 test("failed CLI run surfaces ExportFailed with the first error line", async () => {
