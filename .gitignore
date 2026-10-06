@@ -2,6 +2,3 @@ node_modules
 dist
 .app-dist
 .dev.vars
-
-# extractor outputs (game-derived, large)
-data/

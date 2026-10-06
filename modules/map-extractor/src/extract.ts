@@ -84,6 +84,9 @@ export const extract = async (o: ExtractOptions): Promise<ExtractResult> => {
   mkdirSync(join(dir, "collision"), { recursive: true })
   mkdirSync(join(dir, "render"), { recursive: true })
   mkdirSync(work, { recursive: true })
+  // Bundles are game-derived and huge: keep them out of git without a root .gitignore change (module-scope rule).
+  const ignore = join(o.outRoot, ".gitignore")
+  if (!existsSync(ignore)) writeFileSync(ignore, "*\n")
   const warnings: string[] = []
 
   const entitiesRaw = join(work, "default_ents.vents")
