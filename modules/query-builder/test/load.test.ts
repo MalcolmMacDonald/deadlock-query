@@ -33,8 +33,11 @@ test("progress is reported as bytes arrive, ending at the full size, and the JSO
 test("without Content-Length no total is claimed until the end", async () => {
   const seen: Array<[number, number | undefined]> = []
   await fetchJsonWithProgress(url("/chunked"), (l, t) => seen.push([l, t]))
-  expect(seen.length).toBeGreaterThan(2)
+  // The network stack may coalesce chunks, so only one chunk plus the final report is guaranteed.
+  expect(seen.length).toBeGreaterThanOrEqual(2)
   expect(seen.slice(0, -1).every(([, t]) => t === undefined)).toBe(true)
+  const size = new TextEncoder().encode(payload).length
+  expect(seen.at(-1)).toEqual([size, size])
 })
 
 test("an HTTP error is a readable failure", async () => {
