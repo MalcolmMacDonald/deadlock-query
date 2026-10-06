@@ -1,13 +1,13 @@
 import * as THREE from "three"
 import type {
-  Annotation, AnnotationDocument, AnnotationKind, OverlayFeature, OverlayStyle, Vec3
+  Annotation, AnnotationDocument, AnnotationKind, AnnotationLayer as DocumentLayer, OverlayFeature, OverlayStyle, Vec3
 } from "@deadlock-query/contracts"
 
 /**
  * The annotation model is the contracts `Annotation` (geometry is world-space Source units, Z-up, same as overlays);
  * the store holds exactly what import/export and autosave read and write.
  */
-export type { Annotation, AnnotationKind }
+export type { Annotation, AnnotationKind, DocumentLayer }
 
 /** An annotation before the store assigns its id. */
 export type NewAnnotation = Annotation extends infer A ? (A extends unknown ? Omit<A, "id"> : never) : never
@@ -123,11 +123,53 @@ export class AnnotationStore {
     }
   }
 
-  remove(id: string): boolean {
+  remove(id: string): boolean { return this.removeMany([id]) }
+
+  /** Removes several annotations as one undo step; false when none of the ids exist. */
+  removeMany(ids: ReadonlyArray<string>): boolean {
     this.commitEdit()
-    if (!this.doc.some((a) => a.id === id)) return false
-    this.commit(this.doc.filter((a) => a.id !== id))
+    const drop = new Set(ids)
+    if (!this.doc.some((a) => drop.has(a.id))) return false
+    this.commit(this.doc.filter((a) => !drop.has(a.id)))
     return true
+  }
+
+  /** Puts annotations into document layer `layer` (`undefined` = no layer) as one undo step. */
+  assignLayer(ids: ReadonlyArray<string>, layer: string | undefined): boolean {
+    this.commitEdit()
+    const set = new Set(ids)
+    let changed = false
+    const next = this.doc.map((a) => {
+      if (!set.has(a.id) || a.layer === layer) return a
+      changed = true
+      const { layer: _old, ...rest } = a
+      return (layer === undefined ? rest : { ...rest, layer }) as Annotation
+    })
+    if (!changed) return false
+    this.commit(next)
+    return true
+  }
+
+  /** Replaces the document layer definitions (visibility, lock, colour). Layer settings are not part of undo history. */
+  setLayers(layers: AnnotationDocument["layers"]) {
+    this.docLayers = layers
+    this.emit()
+  }
+
+  /** Adds a document layer with a fresh id; returns it. */
+  addLayer(name?: string): DocumentLayer {
+    const layers = this.docLayers ?? []
+    let n = layers.length + 1
+    while (layers.some((l) => l.id === `L${n}`)) n++
+    const layer: DocumentLayer = { id: `L${n}`, name: name?.trim() || `Layer ${n}`, visible: true, locked: false }
+    this.setLayers([...layers, layer])
+    return layer
+  }
+
+  patchLayer(id: string, p: Partial<Pick<DocumentLayer, "name" | "visible" | "locked" | "color">>) {
+    const layers = this.docLayers
+    if (!layers?.some((l) => l.id === id)) return
+    this.setLayers(layers.map((l) => (l.id === id ? { ...l, ...p } : l)))
   }
 
   undo(): boolean {
@@ -238,6 +280,15 @@ export const normalizeColor = (css: string | undefined): string | undefined => {
 export const annotationColor = (a: Annotation, layers: AnnotationDocument["layers"]): string | undefined =>
   normalizeColor(a.color) ?? normalizeColor(layers?.find((l) => l.id === a.layer)?.color)
 
+const layerOf = (a: Annotation, layers: AnnotationDocument["layers"]): DocumentLayer | undefined =>
+  a.layer === undefined ? undefined : layers?.find((l) => l.id === a.layer)
+
+/** True when the annotation sits in a document layer that is locked: it cannot be selected, edited or deleted. */
+export const isLocked = (a: Annotation, layers: AnnotationDocument["layers"]): boolean => layerOf(a, layers)?.locked === true
+
+/** True when the annotation's document layer is switched off (`visible: false`): it is neither drawn nor picked. */
+export const isHidden = (a: Annotation, layers: AnnotationDocument["layers"]): boolean => layerOf(a, layers)?.visible === false
+
 const toFeature = (a: Annotation): OverlayFeature => {
   switch (a.kind) {
     case "point": return { type: "point", at: a.points[0]! }
@@ -263,7 +314,7 @@ export const annotationLayers = (
     const spec = KIND_LAYER[kind]
     const groups = new Map<string | undefined, Annotation[]>()
     for (const a of doc) {
-      if (a.kind !== kind) continue
+      if (a.kind !== kind || isHidden(a, layers)) continue
       const c = annotationColor(a, layers)
       groups.set(c, [...(groups.get(c) ?? []), a])
     }

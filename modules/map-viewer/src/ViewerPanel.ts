@@ -257,8 +257,8 @@ export const makeViewerPanel = (data: ViewerData, controller: ViewerController =
       const id = pickAt(e)
       if (id) {
         controller.emit({ _tag: "pick", id })
-        controller.selectFeature(id)
-      } else controller.selectAnnotation(undefined)
+        controller.selectFeature(id, e.shiftKey || e.ctrlKey || e.metaKey)
+      } else if (!(e.shiftKey || e.ctrlKey || e.metaKey)) controller.selectAnnotation(undefined)
     }
     const onKey = (e: KeyboardEvent) => {
       const mod = e.ctrlKey || e.metaKey
@@ -268,13 +268,14 @@ export const makeViewerPanel = (data: ViewerData, controller: ViewerController =
       }
       else if (e.key === "Enter") controller.tools.finish()
       else if (mod && e.key.toLowerCase() === "z") { e.preventDefault(); e.shiftKey ? controller.annotations.redo() : controller.annotations.undo() }
+      else if (mod && e.key.toLowerCase() === "a" && !toolActive()) { e.preventDefault(); controller.selectAll() }
       else if (mod && e.key.toLowerCase() === "y") { e.preventDefault(); controller.annotations.redo() }
       else if (e.key === "Delete" || e.key === "Backspace") controller.deleteVertexOrSelected()
     }
     // Select tool: double-click on an edge of the selected polyline/polygon inserts a vertex there.
     const onDblClick = (e: MouseEvent) => {
       if (toolActive()) { controller.tools.finish(); return }
-      const a = controller.annotations.annotations.find((x) => x.id === controller.selectedAnnotation)
+      const a = controller.selection.length === 1 ? controller.annotations.annotations.find((x) => x.id === controller.selectedAnnotation) : undefined
       if (!a) return
       const [x, y] = cursorOf(e as PointerEvent)
       const edge = nearestEdge(a, project, x, y)

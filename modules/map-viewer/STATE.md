@@ -1,8 +1,8 @@
 # map-viewer — state
 
-- **Status:** M3 done except multi-select, per-layer lock and label text rendering; M1/M2 real-hardware perf checks pending
-- **Version:** 0.5.0
-- **Current milestone:** M3 (leftovers) / M4
+- **Status:** M3 done (multi-select, per-layer lock and label text added 2026-10-06); M1/M2 real-hardware perf checks pending; M4 next
+- **Version:** 0.6.0
+- **Current milestone:** M4
 - **Last updated:** 2026-10-06
 
 ## Done
@@ -20,12 +20,16 @@
 
 - 2026-10-06 — M3 (part 3): BVH picking, snapping, vertex editing, annotation colour. `module.json` now lists `spatial-core` in `dependsOn` (the plan's "map-viewer optional" edge). `src/picking.ts`: `SurfacePicker` over spatial-core's `Raycaster`; `ViewerData.bakedBvh` / `loadBundle` read `manifest.baked.bvh.file` (`baked/collision.bvh`, world space) and `SurfacePicker.fromBaked` uses it, otherwise a BVH is built lazily from the visible scene meshes (`worldTriangleSoup`, Three space -> world); `canvas.dataset.picker` says which (`baked`/`meshes`). Terrain clicks and tool hover now use it (hover previously used the plane only). `src/snapping.ts`: `snap()` priority is existing vertex (annotations, overlay layers, points already placed in the shape) > corner of the hit triangle > surface hit > plane, radius 12 px in screen space; `SnapState` on `ViewerController.snapping` with three switches in the Tools panel (surface / vertices / features); a magenta/green marker shows feature/vertex snaps. `src/vertexEdit.ts` + `ViewerController`: with the Select tool, the selected annotation shows blue vertex handles; drag moves a vertex (snapping applies, own vertices excluded, camera does not pan: `ViewerControls.intercept`), the whole drag is one undo step (`AnnotationStore.edit/commitEdit/cancelEdit`), double-click an edge of a polyline/polygon inserts a vertex, Delete removes the selected vertex (or the annotation when it is already at its minimum), Esc cancels a drag. Annotation `color` (and the colour of the document layer named by `Annotation.layer`) is drawn: annotations become one overlay layer per kind and colour (`ann.lines`, `ann.lines.ff8800`), so each shows in the layers panel; invalid colours fall back to the kind default (`normalizeColor`). Tests: bun unit (`picking`, `snapping`, `editing`) and e2e (snap to a vertex and off, handle drag does not move the camera, undo/redo, insert/delete vertex, red polyline renders).
 
+- 2026-10-06 — M3 (part 4): multi-select, document-layer lock/visibility, label text. Selection is a list on `ViewerController` (`selection`, `setSelection`, `toggleAnnotation`, `selectAll`; `selectedAnnotation` is the last one added): Shift/Ctrl-click on the canvas or in the Tools list toggles, Ctrl+A selects everything selectable, Delete removes the whole selection as one undo step (`AnnotationStore.removeMany`), all selected annotations are highlighted, vertex handles and edge insertion only work with exactly one selected. The contracts `AnnotationLayer` flags are now applied: `locked` annotations cannot be selected (so not edited or deleted; they still draw, hover and snap), `visible: false` annotations are neither drawn nor picked (`isLocked`/`isHidden`, `annotationLayers` drops hidden ones). The Layers panel has an "Annotation layers" section (New layer, active-layer radio = where new drawings go, visible, locked, "Move selection here"); `AnnotationStore.addLayer/patchLayer/assignLayer/setLayers`. Layer settings are not part of undo history but are autosaved/exported with the document. Locking or hiding the active layer clears it; a locked/hidden layer cannot be made active. `src/labels.ts`: overlay features with a `label` (label and measure annotations, and any query layer that sets one) draw a billboard sprite (canvas texture, constant pixel size via `onBeforeRender`, render order just above the layer's geometry, at most 500 per layer, text cut at 120 chars, texture cache of 256); anchor is the point, the middle of a path by length, or a polygon's vertex mean. Highlight copies do not repeat the text. Fly camera no longer reacts to Ctrl/Meta/Alt + W/A/S/D/Q/E (Ctrl+A was flying the camera left). Tests: bun unit (`test/selection.test.ts`) and e2e (shift/ctrl-click, Ctrl+A, delete + one-step undo, lock/unlock/hide through the panel, label text plate drawn).
+
 ## In progress
 - (nothing)
 
 ## Next
 - M1 leftover (needs Malcolm's machine): open the real single-tile bundle and confirm >= 30 fps; the viewer loads any manifest via `MapDataService`, so no code change expected.
-- M3 remainder: multi-select, per-layer lock (needs a place for the lock flag: contracts `AnnotationLayer.locked` already exists, the viewer ignores it), text rendering for labels and measure results (shown only in the tools list for now; SDF labels are M7). Document layers' `visible`/`locked` are still round-tripped but not applied; only their `color` is.
+- M4: tile streaming, LOD selection, memory budget, Worker decode (acceptance: synthetic 500 MB map stays within the budget).
+- SDF/outlined labels with collision avoidance are M7; M3 labels are plain canvas sprites (overlap when crowded).
+- No UI to rename or delete a document layer yet (deleting would need undo to restore it).
 - Real-bundle check (Malcolm's machine): load a baked bundle and confirm `canvas.dataset.picker === "baked"` and that clicks land on the collision surface; the e2e only covers the mesh-built BVH because the fixture is not baked.
 - M2 leftover: confirm 10k points at 60 fps on real hardware (software GL in CI measures ~15 fps for the whole scene, informational only).
 
@@ -49,7 +53,9 @@
 
 - 2026-10-06 — M3: selecting an annotation reuses the viewer's single highlight slot, so it replaces any query highlight until cleared. Layer order is the draw order among overlay layers only; draft and highlight always draw above (render order 15 / 20). Annotation layers disappear (and their appearance resets) when their last annotation is deleted.
 
-- 2026-10-06 — M3: contract `Annotation.color`, `.layer` and `.properties` and the document's `layers` round-trip through import/export/autosave but are not rendered yet (annotation overlay layers are still one per kind with the viewer's default colours). Importing replaces rather than merges.
+- 2026-10-06 — M3: contract `Annotation.color`, `.layer` and `.properties` and the document's `layers` round-trip through import/export/autosave. Importing replaces rather than merges.
+- 2026-10-06 — M3: labels are canvas-texture sprites inside the WebGL canvas (not DOM), so `captureImage` includes them.
+- 2026-10-06 — M3: a click on a locked annotation clears the selection (it is treated as clicking nothing selectable); a locked layer's annotations still draw and snap targets still include their vertices.
 
 - 2026-10-06 — M3: picking against the baked collision BVH, not the render tiles, when the bundle has one (it has the sky volumes removed and is the geometry the query library reasons about); with no baked file the visible scene meshes are used. Meshes are treated as double-sided because collision GLBs are not consistently wound.
 - 2026-10-06 — M3: annotation colour is part of the overlay layer id, so recolouring an annotation moves it between layers and a layers-panel override (visibility, colour, opacity) applies to that colour group only. Document-layer membership beyond colour is not rendered yet.
