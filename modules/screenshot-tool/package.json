@@ -1,0 +1,18 @@
+{
+  "name": "@deadlock-query/screenshot-tool",
+  "version": "0.1.0",
+  "type": "module",
+  "bin": {
+    "dlq-shoot": "./src/cli.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p .",
+    "test": "bun test",
+    "verify": "bun run typecheck && bun run test",
+    "dlq-shoot": "bun src/cli.ts"
+  },
+  "dependencies": {
+    "@deadlock-query/contracts": "workspace:*",
+    "effect": "4.0.1"
+  }
+}
