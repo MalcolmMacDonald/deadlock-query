@@ -1,8 +1,8 @@
 # spatial-core — state
 
-- **Status:** S5 spike done (go)
-- **Version:** 0.0.0
-- **Current milestone:** S5 done; next M0
+- **Status:** M0 + M1 raycaster done
+- **Version:** 0.1.0
+- **Current milestone:** M1 done; next M2 (semantics scaffold)
 - **Last updated:** 2026-10-05
 
 ## Done
@@ -17,11 +17,13 @@
 
   Serialised BVH is 10 MB (`MeshBVH.serialize`, excludes geometry). Deserialise is zero-copy, so it excludes loading geometry buffers. The ray gate passes only in the browser Worker (what the gate targets) and with little margin (rays are vertical onto a heightfield; real collision will differ), so M1 should add `raycastFirstMany` batch APIs and re-measure on real collision. Not benchmarked yet: Dijkstra (M4).
 
+- **M0 + M1** (2026-10-06): `src/math.ts` (tuple Vec3/Aabb helpers), `src/raycaster.ts` (`Raycaster` over three-mesh-bvh: `raycastFirst/All`, `occluded`, `closestPoint`, `overlapsSphere/Capsule`, `raycastFirstMany`, `serialize`/`deserialize`). Serialised bytes embed geometry and are byte-deterministic; brute-force oracle tests for rays. Not done: sphereCast/capsuleCast sweeps (only overlap tests), AbortSignal/progress options (M5).
+
 ## In progress
-- (nothing yet)
+- (nothing)
 
 ## Next
-- M0: scaffold math, `Raycaster` interface + three-mesh-bvh impl, deterministic serialise tests.
+- M2: `semantics/` scaffold (signatures, params, placeholders, cases.json harness). Then M3 SampleGrid, M4 NavMesh (query-library M4 needs it).
 
 ## Blockers / Requests to other modules
 - (none)
@@ -36,3 +38,5 @@
 
 - 2026-10-05 — S5 follow-up: added a real capsule shapecast to `bench/s5.ts` (segment z -150..150, radius 30, `bvh.shapecast` with AABB prune + `triangle.closestPointToSegment`). 1000 queries: ~32-38 ms in Bun main and Bun Worker (~0.035 ms each), on this slower CI-class sandbox where 100k rays took 585-800 ms (the 286 ms Chromium number above is from a faster machine; ray gate margin stays thin, so M1 batch API advice stands). Gates unchanged: go.
 - 2026-10-05 — S5 result: keep three-mesh-bvh (D15); no fallback ADR needed. Bench scene lives in `bench/scene.ts`.
+
+- 2026-10-06 — Serialise format: 16-byte header (vertexCount, triCount, bvhIndexLen, rootBytes) + positions + indices + BVH index + root; single-root only. `Raycaster.fromGeometry` copies nothing and BVH reorders the given index in place.

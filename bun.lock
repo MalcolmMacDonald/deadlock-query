@@ -90,6 +90,7 @@
       "name": "@deadlock-query/spatial-core",
       "version": "0.0.0",
       "dependencies": {
+        "@deadlock-query/contracts": "workspace:*",
         "three": "^0.170.0",
         "three-mesh-bvh": "^0.8.3",
       },
