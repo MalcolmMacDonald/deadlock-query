@@ -2,6 +2,7 @@ import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { dirname, join, resolve } from "node:path"
 import { spawnSync } from "node:child_process"
 import { parsePointer, sha256Hex } from "./lib/data.ts"
+import { writeZip } from "./lib/zip.ts"
 import { assetName, bundleFiles, checkBundleBudget, parseBundleManifest, releaseTag, updatePointer } from "./lib/publish.ts"
 
 const USAGE = `bun tools/publish-data.ts <bundle-dir> [--upload]
@@ -26,7 +27,7 @@ if (import.meta.main) {
 
   const zip = join(dirname(dir), assetName(info))
   rmSync(zip, { force: true })
-  run("zip", ["-q", "-X", zip, ...files], dir) // paths relative to the bundle root, so manifest.json is at the zip root
+  writeZip(zip, dir, files) // paths relative to the bundle root, so manifest.json is at the zip root
   const sha = sha256Hex(new Uint8Array(readFileSync(zip)))
   console.log(`zip: ${zip}\nsha256: ${sha}`)
 
