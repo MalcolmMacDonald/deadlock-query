@@ -4,8 +4,6 @@ export const LIMITS = {
   maxRows: 100_000,
   /** Total values the result may contain (cells, nested values, strings weighted by length) before the run is failed. */
   maxResultNodes: 5_000_000,
-  /** Rows the plain results table puts in the DOM (the full result stays in memory for exports/overlay) until it is virtualised. */
-  maxRenderedRows: 2_000,
   /** Largest single ArrayBuffer / typed array / repeated string a query may allocate, in bytes (chars for strings). */
   maxAllocBytes: 256 * 1024 * 1024
 } as const

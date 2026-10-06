@@ -14,6 +14,8 @@ export interface SidebarOptions {
   readonly onInsertExample: (source: string) => void
   /** Put a gallery query into the editor; `run` also runs it. */
   readonly onLoadQuery: (query: GalleryQuery, run: boolean) => void
+  /** Escape inside the sidebar: the panel closes it and puts focus back on its toggle. */
+  readonly onClose?: () => void
 }
 
 export interface Sidebar {
@@ -41,11 +43,21 @@ const button = (doc: Document, label: string, testid: string, onClick: () => voi
 export const renderSidebar = (doc: Document, opts: SidebarOptions): Sidebar => {
   const root = el(doc, "aside", "qb-side")
   root.dataset.testid = "sidebar"
+  root.setAttribute("aria-label", "Docs, gallery, saved queries and history")
+  root.addEventListener("keydown", (e) => { if (e.key === "Escape" && !e.defaultPrevented) { e.preventDefault(); opts.onClose?.() } })
   const tabs = el(doc, "div", "tabs")
+  tabs.setAttribute("role", "tablist")
+  tabs.setAttribute("aria-label", "Sidebar sections")
   const tabButtons = new Map<SidebarTab, HTMLButtonElement>()
   const panes = new Map<SidebarTab, HTMLElement>()
   const addTab = (tab: SidebarTab, label: string, pane: HTMLElement) => {
     const b = button(doc, label, `tab-${tab}`, () => show(tab))
+    b.setAttribute("role", "tab")
+    b.id = `qb-tab-${tab}`
+    b.setAttribute("aria-controls", `qb-pane-${tab}`)
+    pane.id = `qb-pane-${tab}`
+    pane.setAttribute("role", "tabpanel")
+    pane.setAttribute("aria-labelledby", b.id)
     tabButtons.set(tab, b)
     panes.set(tab, pane)
     tabs.append(b)
@@ -59,6 +71,7 @@ export const renderSidebar = (doc: Document, opts: SidebarOptions): Sidebar => {
   search.type = "search"
   search.placeholder = `Search ${index?.items.length ?? 0} entries (name, category, text)`
   search.dataset.testid = "docs-search"
+  search.setAttribute("aria-label", "Search the API docs")
   const list = el(doc, "div", "doc-list")
   list.dataset.testid = "docs-list"
   const detail = el(doc, "div", "doc-detail")
@@ -89,7 +102,10 @@ export const renderSidebar = (doc: Document, opts: SidebarOptions): Sidebar => {
     const item = index?.byId.get(id)
     if (!item) return
     selectedId = id
-    for (const r of Array.from(list.querySelectorAll<HTMLElement>(".doc-item"))) r.classList.toggle("selected", r.dataset.docId === id)
+    for (const r of Array.from(list.querySelectorAll<HTMLElement>(".doc-item"))) {
+      r.classList.toggle("selected", r.dataset.docId === id)
+      if (r.dataset.docId === id) r.setAttribute("aria-current", "true"); else r.removeAttribute("aria-current")
+    }
     detail.replaceChildren()
     const title = el(doc, "div", "title")
     title.append(el(doc, "strong", undefined, item.id), el(doc, "span", "kind", ` ${item.kind} · ${item.category}`))
@@ -111,6 +127,8 @@ export const renderSidebar = (doc: Document, opts: SidebarOptions): Sidebar => {
   for (const q of GALLERY) {
     const card = el(doc, "div", "card")
     card.dataset.queryId = q.id
+    card.setAttribute("role", "group")
+    card.setAttribute("aria-label", q.title)
     card.dataset.testid = "gallery-card"
     card.append(el(doc, "strong", undefined, q.title), el(doc, "p", undefined, q.description))
     if (q.requires.length > 0) card.append(el(doc, "div", "needs", `Needs: ${q.requires.join(", ")}`))
@@ -135,9 +153,23 @@ export const renderSidebar = (doc: Document, opts: SidebarOptions): Sidebar => {
   const show = (tab: SidebarTab) => {
     if (!panes.has(tab)) tab = "gallery"
     for (const [t, pane] of panes) pane.hidden = t !== tab
-    for (const [t, b] of tabButtons) b.classList.toggle("active", t === tab)
+    for (const [t, b] of tabButtons) {
+      b.classList.toggle("active", t === tab)
+      b.setAttribute("aria-selected", String(t === tab))
+      b.tabIndex = t === tab ? 0 : -1 // roving tabindex: arrow keys move between tabs
+    }
     root.dataset.tab = tab
   }
+  tabs.addEventListener("keydown", (e) => {
+    const order = [...tabButtons.keys()]
+    const at = order.indexOf(root.dataset.tab as SidebarTab)
+    const to = e.key === "ArrowRight" ? at + 1 : e.key === "ArrowLeft" ? at - 1 : e.key === "Home" ? 0 : e.key === "End" ? order.length - 1 : undefined
+    if (to === undefined) return
+    e.preventDefault()
+    const tab = order[(to + order.length) % order.length]!
+    show(tab)
+    tabButtons.get(tab)!.focus()
+  })
   show(index ? "docs" : "gallery")
   return {
     el: root,

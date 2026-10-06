@@ -6,7 +6,7 @@ import { Effect, Layer, Stream } from "effect"
 import { QueryEngine, SelectionBus, ViewerService, type QueryResult } from "@deadlock-query/contracts"
 import { runQuery } from "../app/engine.ts"
 import { monacoCompiler } from "../app/monacoCompiler.ts"
-import { renderResults } from "../app/resultsTable.ts"
+import { createResultsTable, type ResultsTable } from "../results/resultsTable.ts"
 import { overlayFeatures, setResultOverlay } from "../app/viewerIntegration.ts"
 import { buildDocIndex, insertionFor, type DocIndex, type DocItem } from "../docs/catalog.ts"
 import { makeQueryEngine } from "../engine/engine.ts"
@@ -17,8 +17,10 @@ import type { GalleryQuery } from "../gallery/queries.ts"
 import { checkApiVersion, decodeShare, encodeShare } from "../share/shareLink.ts"
 import { makeQueryStore, type KeyValueStorage, type QueryStore } from "../store/queryStore.ts"
 import { SandboxRunner } from "../sandbox/runner.ts"
+import { STYLE } from "../ui/styles.ts"
 import { downloadBlob } from "../ui/download.ts"
 import { renderExportBar } from "../ui/exportBar.ts"
+import { renderProblems, summarizeProblems } from "../ui/problems.ts"
 import { registerDocsHover } from "../ui/docsHover.ts"
 import { renderSavedPanes } from "../ui/savedPanes.ts"
 import { renderSidebar, type Sidebar, type SidebarTab } from "../ui/sidebar.ts"
@@ -74,41 +76,8 @@ const DEFAULT_SOURCE = `map.guardians
   .toArray()
 `
 const STYLE_ID = "dlq-qb-style"
-const STYLE = `
-.dlq-qb{display:flex;flex-direction:column;height:100%;min-height:0;background:#1e1e1e;color:#ddd;font:13px system-ui,sans-serif}
-.dlq-qb header{display:flex;gap:8px;align-items:center;padding:6px 8px;border-bottom:1px solid #333}
-.dlq-qb .qb-body{flex:1;display:flex;min-height:0}
-.dlq-qb .qb-main{flex:1;display:flex;flex-direction:column;min-width:0;min-height:0}
-.dlq-qb .qb-editor{height:40%;min-height:160px}
-.dlq-qb .qb-results{flex:1;overflow:auto;padding:8px}
-.dlq-qb .qb-side{width:340px;flex:none;display:flex;flex-direction:column;border-left:1px solid #333;min-height:0}
-.dlq-qb .qb-side[hidden]{display:none}
-.dlq-qb .qb-side .tabs{display:flex;gap:4px;padding:6px 8px;border-bottom:1px solid #333}
-.dlq-qb .qb-side .tabs .active,.dlq-qb header .active{background:#264f78}
-.dlq-qb .qb-side .pane{flex:1;min-height:0;overflow:auto;padding:8px;display:flex;flex-direction:column;gap:6px}
-.dlq-qb .qb-side .pane[hidden]{display:none}
-.dlq-qb .qb-side .docs{overflow:hidden}
-.dlq-qb .doc-list{flex:0 1 45%;overflow:auto;display:flex;flex-direction:column;border:1px solid #333}
-.dlq-qb .doc-list .cat{background:#252526;padding:2px 6px;font-weight:600;position:sticky;top:0}
-.dlq-qb .doc-list .doc-item{text-align:left;background:none;border:0;color:inherit;padding:2px 10px;cursor:pointer;font:12px ui-monospace,monospace}
-.dlq-qb .doc-list .doc-item:hover,.dlq-qb .doc-list .doc-item.selected{background:#264f78}
-.dlq-qb .doc-detail{flex:1;overflow:auto}
-.dlq-qb .doc-detail .kind{color:#999}
-.dlq-qb .qb-side pre{background:#252526;padding:6px;margin:4px 0;overflow:auto;white-space:pre-wrap;font:12px ui-monospace,monospace}
-.dlq-qb .card{border:1px solid #333;padding:8px;display:flex;flex-direction:column;gap:4px}
-.dlq-qb .export-bar{display:flex;flex-wrap:wrap;gap:4px;align-items:center;margin-bottom:6px}
-.dlq-qb .export-bar .provisional{color:#e2c08d}
-.dlq-qb .notices .notice{padding:4px 8px;border-bottom:1px solid #333;display:flex;gap:8px;align-items:center}
-.dlq-qb .notices .notice.warning{background:#5a4a1a}.dlq-qb .notices .notice.error{background:#5a1d1d}.dlq-qb .notices .notice.info{background:#1f3a52}
-.dlq-qb .notices .notice input{flex:1;min-width:0}
-.dlq-qb .notices .notice button{margin-left:auto}
-.dlq-qb .qb-side input{min-width:0}.dlq-qb .qb-side .actions{flex-wrap:wrap}.dlq-qb .qb-side .empty{color:#999}
-.dlq-qb .card p{margin:0}.dlq-qb .card .needs{color:#999}.dlq-qb .card .actions{display:flex;gap:6px}
-.dlq-qb table{border-collapse:collapse}.dlq-qb th,.dlq-qb td{border:1px solid #333;padding:2px 8px;text-align:left}.dlq-qb th{background:#252526}
-.dlq-qb tr.selected td{background:#264f78}
-.dlq-qb .error{color:#f48771;white-space:pre-wrap}.dlq-qb .warning{background:#5a4a1a;padding:2px 6px;margin:4px 0}
-`
 const SELECTION_POLL_MS = 250
+const SHORTCUTS = "Ctrl+Enter runs the query. Ctrl+Space shows suggestions, Ctrl+Shift+Space parameter hints, F12 goes to a definition, Ctrl+F finds. Tab indents; press Ctrl+M first to make Tab and Shift+Tab move focus out of the editor. In the results table: Tab to enter it, Arrow keys, Home and End move between rows, Enter or Space selects a row, Page Up and Page Down change page. Escape closes the sidebar."
 
 let active = false
 let configured = false
@@ -160,7 +129,7 @@ export const mountQueryEditor = async (container: HTMLElement, opts: QueryEditor
     }
     const rootEl = doc.createElement("div")
     rootEl.className = "dlq-qb"
-    rootEl.innerHTML = `<header><button id="run" type="button">Run (Ctrl+Enter)</button><button id="cancel" type="button" disabled>Cancel</button><span id="status">idle</span><span style="flex:1"></span><button id="share" type="button" data-testid="share" title="Copy a link to this query">Share</button><span id="side-toggles"></span></header><div class="qb-body"><div class="qb-main"><div id="notices" class="notices"></div><div id="editor" class="qb-editor"></div><div id="results" class="qb-results"></div></div></div>`
+    rootEl.innerHTML = `<header><button id="run" type="button" aria-keyshortcuts="Control+Enter">Run (Ctrl+Enter)</button><button id="cancel" type="button" disabled>Cancel</button><span id="status" role="status" aria-live="polite">idle</span><span style="flex:1"></span><button id="problems-toggle" type="button" data-testid="problems-toggle" aria-expanded="false" aria-controls="qb-problems">No problems</button><button id="shortcuts" type="button" data-testid="shortcuts">Keys</button><button id="share" type="button" data-testid="share" title="Copy a link to this query">Share</button><span id="side-toggles" role="group" aria-label="Sidebar"></span></header><div class="qb-body"><div class="qb-main"><div id="notices" class="notices"></div><div id="editor" class="qb-editor" role="region" aria-label="Query editor"></div><div id="qb-problems" class="problems" data-testid="problems" role="region" aria-label="Problems" hidden></div><div id="results" class="qb-results" role="region" aria-label="Results" tabindex="-1"></div></div></div>`
     container.append(rootEl)
     cleanups.push(() => rootEl.remove())
     const q = <T extends HTMLElement>(sel: string) => rootEl.querySelector<T>(sel)!
@@ -177,7 +146,12 @@ export const mountQueryEditor = async (container: HTMLElement, opts: QueryEditor
     const modelUri = monaco.Uri.parse("file:///query.ts")
     const model = monaco.editor.createModel(opts.initialSource ?? DEFAULT_SOURCE, "typescript", modelUri)
     cleanups.push(() => model.dispose())
-    const editor = monaco.editor.create(q("#editor"), { model, automaticLayout: true, theme: "vs-dark", minimap: { enabled: false } })
+    const editor = monaco.editor.create(q("#editor"), {
+      model, automaticLayout: true, theme: "vs-dark", minimap: { enabled: false },
+      // Tab inserts indentation by default; Ctrl+M switches Tab to move focus, so keyboard users can leave the editor.
+      ariaLabel: "Query editor. Press Control+M to make Tab move focus out of the editor.",
+      accessibilitySupport: "auto", renderWhitespace: "none"
+    })
     cleanups.push(() => editor.dispose())
 
     const runner = new SandboxRunner(doc, toPrelude(lib.js))
@@ -198,6 +172,7 @@ export const mountQueryEditor = async (container: HTMLElement, opts: QueryEditor
       const n = doc.createElement("div")
       n.className = `notice ${kind}`
       n.dataset.testid = "notice"
+      n.setAttribute("role", kind === "error" ? "alert" : "status")
       const t = doc.createElement("span")
       t.textContent = text
       const x = doc.createElement("button")
@@ -242,6 +217,11 @@ export const mountQueryEditor = async (container: HTMLElement, opts: QueryEditor
         insertAtCursor(ins.text, ins.cursorBack)
       },
       onInsertExample: (source) => insertAtCursor(source, 0),
+      onClose: () => {
+        sidebar.el.hidden = true
+        syncToggles()
+        toggles.querySelector<HTMLButtonElement>(`[data-tab="${sidebar.el.dataset.tab}"]`)?.focus()
+      },
       onLoadQuery: (query: GalleryQuery, runNow: boolean) => {
         loadSource(query.source)
         if (runNow) void run()
@@ -250,7 +230,11 @@ export const mountQueryEditor = async (container: HTMLElement, opts: QueryEditor
     sidebar.el.hidden = true
     const toggles = q("#side-toggles")
     const syncToggles = () => {
-      for (const b of Array.from(toggles.querySelectorAll("button"))) b.classList.toggle("active", !sidebar.el.hidden && b.dataset.tab === sidebar.el.dataset.tab)
+      for (const b of Array.from(toggles.querySelectorAll("button"))) {
+        const on = !sidebar.el.hidden && b.dataset.tab === sidebar.el.dataset.tab
+        b.classList.toggle("active", on)
+        b.setAttribute("aria-expanded", String(on))
+      }
     }
     const toggle = (tab: SidebarTab) => {
       const closing = !sidebar.el.hidden && sidebar.el.dataset.tab === tab
@@ -268,6 +252,8 @@ export const mountQueryEditor = async (container: HTMLElement, opts: QueryEditor
       b.addEventListener("click", () => toggle(tab))
       toggles.append(b)
     }
+    sidebar.el.id = "qb-sidebar"
+    for (const b of Array.from(toggles.querySelectorAll("button"))) b.setAttribute("aria-controls", "qb-sidebar")
     q(".qb-body").append(sidebar.el)
     if (docIndex) cleanups.push(registerDocsHover(monaco, docIndex, modelUri, (id) => { sidebar.el.hidden = false; sidebar.showDoc(id); syncToggles() }).dispose)
     if (opts.initialSidebar) toggle(opts.initialSidebar)
@@ -277,6 +263,7 @@ export const mountQueryEditor = async (container: HTMLElement, opts: QueryEditor
       const base = (opts.shareBaseUrl ?? (() => `${doc.defaultView!.location.origin}${doc.defaultView!.location.pathname}${doc.defaultView!.location.search}`))()
       return `${base}#${await encodeShare({ source: model.getValue(), apiVersion: lib.apiVersion })}`
     }
+    q("#shortcuts").addEventListener("click", () => notify("info", SHORTCUTS))
     q("#share").addEventListener("click", () => {
       void shareUrl().then(async (url) => {
         const field = doc.createElement("input")
@@ -303,21 +290,41 @@ export const mountQueryEditor = async (container: HTMLElement, opts: QueryEditor
 
     // Live diagnostics as markers on the visible model (same service the engine uses).
     let checkTimer: ReturnType<typeof setTimeout> | undefined
+    const problemsToggle = q<HTMLButtonElement>("#problems-toggle")
+    const problemsEl = q("#qb-problems")
+    problemsToggle.addEventListener("click", () => {
+      problemsEl.hidden = !problemsEl.hidden
+      problemsToggle.setAttribute("aria-expanded", String(!problemsEl.hidden))
+    })
+    const goToProblem = (d: { line: number; column: number }) => {
+      editor.setPosition({ lineNumber: d.line, column: d.column })
+      editor.revealLineInCenterIfOutsideViewport(d.line)
+      editor.focus()
+    }
     const check = () =>
-      Effect.runPromise(Effect.gen(function* () { return yield* (yield* QueryEngine).check(model.getValue()) }).pipe(Effect.provide(engineLayer))).then((ds) =>
+      Effect.runPromise(Effect.gen(function* () { return yield* (yield* QueryEngine).check(model.getValue()) }).pipe(Effect.provide(engineLayer))).then((ds) => {
         monaco.editor.setModelMarkers(model, "query", ds.map((d) => ({
           message: d.message, startLineNumber: d.line, startColumn: d.column, endLineNumber: d.line, endColumn: d.column + 1,
           severity: d.severity === "error" ? monaco.MarkerSeverity.Error : monaco.MarkerSeverity.Warning
-        })))).catch(() => {})
+        })))
+        const summary = summarizeProblems(ds)
+        problemsToggle.textContent = summary.label
+        problemsToggle.classList.toggle("has-errors", summary.errors > 0)
+        problemsToggle.classList.toggle("has-warnings", summary.errors === 0 && summary.warnings > 0)
+        renderProblems(doc, problemsEl, ds, goToProblem)
+      }).catch(() => {})
     const sub = model.onDidChangeContent(() => { clearTimeout(checkTimer); checkTimer = setTimeout(() => void check(), 300) })
     cleanups.push(() => { clearTimeout(checkTimer); sub.dispose() })
+    void check()
 
     // Result ↔ viewer ↔ shared selection.
     let currentResult: QueryResult | null = null
     let lastRunSource = model.getValue()
     let features = overlayFeatures({ columns: [], rows: [], rowIds: [], geometryColumns: [] } as unknown as QueryResult)
     let selectedRowIds: ReadonlyArray<string> = []
-    const renderTable = () => {
+    let table: ResultsTable | null = null
+    /** Builds the export bar and the table for the current result (once per run; selection changes only update row marks). */
+    const showResult = () => {
       if (!currentResult) return
       const result = currentResult
       const meta: ExportMeta = { source: lastRunSource, apiVersion: lib.apiVersion, mapName: bundle.manifest.mapName, gameBuildId: bundle.manifest.gameBuildId }
@@ -337,17 +344,17 @@ export const mountQueryEditor = async (container: HTMLElement, opts: QueryEditor
             downloadBlob(doc, `query-result${isProvisional(result) ? ".provisional" : ""}.png`, new Blob([png as BlobPart], { type: "image/png" }))
           })
         }),
-        renderResults(doc, result, {
+        (table = createResultsTable(doc, result, {
           selectedRows: new Set(selectedRowIds),
           onRowSelect: (rowId: string) => applySelection([rowId], true)
-        })
+        })).el
       )
     }
     /** Adopts `ids` as the selection: table highlight, viewer highlight, and (when it came from here) the shared bus. */
     const applySelection = (ids: ReadonlyArray<string>, publish: boolean) => {
       if (sameIds(ids, selectedRowIds) && !publish) return
       selectedRowIds = ids
-      renderTable()
+      table?.setSelected(new Set(ids))
       fire(viewer.highlight(ids.flatMap((id) => features.rowToFeatures.get(id) ?? [])))
       if (publish) fire(selection.select(ids))
     }
@@ -381,7 +388,7 @@ export const mountQueryEditor = async (container: HTMLElement, opts: QueryEditor
         features = overlayFeatures(result)
         await Effect.runPromise(setResultOverlay(layerId, result).pipe(Effect.provide(servicesLayer))).catch(() => {})
         selectedRowIds = []
-        renderTable()
+        showResult()
         status.textContent = "done"
       } catch (e) {
         const err = doc.createElement("pre")
@@ -392,6 +399,7 @@ export const mountQueryEditor = async (container: HTMLElement, opts: QueryEditor
         if (!(e instanceof Error && e.message === "Query cancelled.")) store.record({ source, status: "error", error: err.textContent ?? "" })
         status.textContent = "error"
         currentResult = null
+        table = null
       } finally {
         runBtn.disabled = false
         cancelBtn.disabled = true
