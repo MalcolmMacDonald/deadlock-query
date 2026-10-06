@@ -5,13 +5,18 @@ import { join } from "node:path"
 import { parseArgs } from "node:util"
 import { EXIT } from "./errors.ts"
 import { DEFAULT_FOV, DEFAULT_RESOLUTION, gridPlan, parsePlan, PlanError, ringPlan, serializePlan, type PlanMeta, type ShotPlan } from "./plan.ts"
+import { standoffPlan, targetsFromAnnotations, targetsFromMetadata, type Extracted } from "./targets.ts"
 
 export const PLAN_USAGE = `dlq-shoot plan <generator> [options]   (prints the plan JSON, or writes it with --out)
   common     [--map <name>] [--build <gameBuildId>] [--bundle <dir>] [--fov ${DEFAULT_FOV}] [--resolution ${DEFAULT_RESOLUTION.width}x${DEFAULT_RESOLUTION.height}] [--show-hud] [--out <file>]
              --bundle takes the map name, build id and (for grid) the xy bounds from <dir>/manifest.json
   grid       --z <height> --spacing <units> [--bounds minX,minY,maxX,maxY] [--yaws 4] [--pitch 0]
   ring       --at x,y,z [--at x,y,z ...] [--yaws 8] [--pitch 0]
-  from-file  <plan.json>   validate and rewrite in canonical form`
+  from-file  <plan.json>   validate and rewrite in canonical form
+  from-annotations  <annotations.json> [--layer <id>]   look at each point/label annotation from several sides
+  from-metadata     <metadata.bundle.json> [--all-status]   same for accepted creep camps, Sinner's Sacrifice, healing orbs (--all-status adds proposed ones)
+             both: [--standoffs 3] [--distance 600] [--eye-height 64] [--bearing-offset 0]; map and build id come from the file unless --map/--build/--bundle say otherwise;
+             --bundle also keeps cameras inside the map bounds. Line of sight is not checked yet (no collision data): see STATE.md`
 
 const nums = (s: string, n: number, what: string): number[] => {
   const v = s.split(",").map((x) => Number(x.trim()))
@@ -34,11 +39,12 @@ export const planMain = (argv: ReadonlyArray<string>, write: (text: string) => v
         map: { type: "string" }, build: { type: "string" }, bundle: { type: "string" }, out: { type: "string" },
         fov: { type: "string" }, resolution: { type: "string" }, "show-hud": { type: "boolean" },
         bounds: { type: "string" }, spacing: { type: "string" }, z: { type: "string" }, yaws: { type: "string" }, pitch: { type: "string" },
-        at: { type: "string", multiple: true }
+        at: { type: "string", multiple: true },
+        layer: { type: "string" }, "all-status": { type: "boolean" }, standoffs: { type: "string" }, distance: { type: "string" }, "eye-height": { type: "string" }, "bearing-offset": { type: "string" }
       }
     })
     const [generator, file] = positionals
-    if (generator !== "grid" && generator !== "ring" && generator !== "from-file") {
+    if (generator !== "grid" && generator !== "ring" && generator !== "from-file" && generator !== "from-annotations" && generator !== "from-metadata") {
       console.error(PLAN_USAGE)
       return generator === undefined ? EXIT.ok : EXIT.usage
     }
@@ -50,12 +56,19 @@ export const planMain = (argv: ReadonlyArray<string>, write: (text: string) => v
       try { raw = JSON.parse(readFileSync(file, "utf8")) } catch (e) { throw new PlanError([`cannot read ${file}: ${(e as Error).message}`]) }
       plan = parsePlan(raw)
     } else {
+      let extracted: Extracted | undefined
+      if (generator === "from-annotations" || generator === "from-metadata") {
+        if (!file) { console.error(PLAN_USAGE); return EXIT.usage }
+        let raw: unknown
+        try { raw = JSON.parse(readFileSync(file, "utf8")) } catch (e) { throw new PlanError([`cannot read ${file}: ${(e as Error).message}`]) }
+        extracted = generator === "from-annotations" ? targetsFromAnnotations(raw, { layer: values.layer }) : targetsFromMetadata(raw, { allStatuses: values["all-status"] === true })
+      }
       let manifest: Manifest | undefined
       if (values.bundle) {
         try { manifest = Schema.decodeUnknownSync(Manifest)(JSON.parse(readFileSync(join(values.bundle, "manifest.json"), "utf8"))) }
         catch (e) { throw new PlanError([`cannot read a bundle manifest in ${values.bundle}: ${(e as Error).message.split("\n")[0]}`]) }
       }
-      const map = values.map ?? manifest?.mapName
+      const map = values.map ?? extracted?.mapName ?? manifest?.mapName
       if (!map) throw new PlanError(["pass --map <name> or --bundle <dir>"])
       let resolution: PlanMeta["resolution"] = DEFAULT_RESOLUTION
       if (values.resolution !== undefined) {
@@ -63,10 +76,23 @@ export const planMain = (argv: ReadonlyArray<string>, write: (text: string) => v
         if (!m || Number(m[1]) < 1 || Number(m[2]) < 1) throw new PlanError([`resolution must look like 1920x1080, got "${values.resolution}"`])
         resolution = { width: Number(m[1]), height: Number(m[2]) }
       }
-      const meta: PlanMeta = { map, gameBuildId: values.build ?? manifest?.gameBuildId, resolution, fov: num(values.fov, DEFAULT_FOV, "fov")!, hideHud: !values["show-hud"] }
+      const meta: PlanMeta = { map, gameBuildId: values.build ?? extracted?.gameBuildId ?? manifest?.gameBuildId, resolution, fov: num(values.fov, DEFAULT_FOV, "fov")!, hideHud: !values["show-hud"] }
       const yaws = num(values.yaws, undefined, "yaws")
       const pitch = num(values.pitch, undefined, "pitch")
-      if (generator === "ring") {
+      if (extracted !== undefined) {
+        const standoffs = num(values.standoffs, undefined, "standoffs")
+        const distance = num(values.distance, undefined, "distance")
+        const eyeHeight = num(values["eye-height"], undefined, "eye-height")
+        const bearingOffset = num(values["bearing-offset"], undefined, "bearing-offset")
+        const r = standoffPlan(meta, extracted.targets, {
+          ...(standoffs !== undefined ? { standoffs } : {}), ...(distance !== undefined ? { distance } : {}),
+          ...(eyeHeight !== undefined ? { eyeHeight } : {}), ...(bearingOffset !== undefined ? { bearingOffset } : {}),
+          ...(manifest ? { bounds: manifest.bounds } : {})
+        })
+        for (const sk of [...extracted.skipped, ...r.skipped]) console.error(`! skipped ${sk.id}: ${sk.reason}`)
+        for (const w of r.warnings) console.error(`! ${w}`)
+        plan = r.plan
+      } else if (generator === "ring") {
         if (!values.at || values.at.length === 0) throw new PlanError(["ring needs at least one --at x,y,z"])
         plan = ringPlan(meta, { at: values.at.map((a) => nums(a, 3, "--at") as unknown as Vec3), ...(yaws !== undefined ? { yaws } : {}), ...(pitch !== undefined ? { pitch } : {}) })
       } else {
