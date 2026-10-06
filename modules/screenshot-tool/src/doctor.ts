@@ -24,6 +24,9 @@ export const listProcesses = (platform: string = process.platform): string[] => 
   }
 }
 
+/** True while a Deadlock process exists. */
+export const gameRunning = (processes: () => ReadonlyArray<string> = () => listProcesses()): boolean => processes().some((p) => PROCESS_NAMES.includes(p))
+
 export interface DoctorOptions {
   readonly port: number
   /** Game install root (`.../steamapps/common/Deadlock`); screenshots land in `game/citadel/screenshots` **[VERIFY]**. */
@@ -42,7 +45,7 @@ export const screenshotDirOf = (o: Pick<DoctorOptions, "gameDir" | "screenshotDi
 export const doctor = (o: DoctorOptions): Effect.Effect<{ ok: boolean; checks: Check[]; launchOptions: string }, never, GameConsole> =>
   Effect.gen(function* () {
     const checks: Check[] = []
-    const running = (o.processes ?? (() => listProcesses()))().some((p) => PROCESS_NAMES.includes(p))
+    const running = gameRunning(o.processes)
     checks.push(running
       ? { name: "game-process", ok: true, detail: "Deadlock is running" }
       : { name: "game-process", ok: false, detail: "no Deadlock process found", fix: `start Deadlock offline with: ${LAUNCH_OPTIONS(o.port)}` })
