@@ -1,9 +1,9 @@
 # query-builder — state
 
-- **Status:** S1 spike done — **GO**
+- **Status:** M0 done
 - **Version:** 0.0.0
-- **Current milestone:** S1 complete; next is M0 (see PLAN.md §6)
-- **Last updated:** 2026-10-05
+- **Current milestone:** M0 complete; next is M1 (see PLAN.md §6)
+- **Last updated:** 2026-10-06
 
 ## Done
 - **S1 spike** (`spike/`, `src/sandbox/`, `bench/s1.ts`, `test/worker.test.ts`). Run `bun run bench` (needs Chromium via Playwright; builds the spike with `Bun.build`, serves it, drives it headless).
@@ -24,19 +24,23 @@ Also verified: library-class member completions with TSDoc signature, string-lit
 - **Monaco bundling (Bun.build):** needs `editor.all.js` (suggest widget etc.), `basic-languages/typescript/typescript.contribution.js` (language registration; without it there is no highlighting and no TS worker), and `monaco.contribution.js` from `language/typescript`. `editor.worker.js` and `ts.worker.js` are built as separate entrypoints and found through `MonacoEnvironment.getWorkerUrl`. `ts.worker.js` is the dominant cost (6.1 MB min, ~1.4 MB gz); `entry.js` with `editor.all` is ~2.5 MB min (~0.87 MB gz). M6 should trim contributions and lazy-load.
 - **Not covered (later milestones):** real library artifact (`index.d.ts`, runtime), transferring bundle buffers to the worker, row/memory caps, escape corpus (M3), warm numbers on a slow device or over a real network (first-suggestion budget is measured against local files only; CDN/Pages latency adds to it).
 
+- **M0** (`src/app/`, `test/app.e2e.test.ts`). Standalone app: Monaco editor on `file:///query.ts` with the fixture `.d.ts` (`src/app/fixtureDts.ts`, copied from the S1 spike fixture), Run button / Ctrl+Enter, contracts `MockQueryEngine` driven through Effect (`engine.ts`), plain results table with stats and warnings (`resultsTable.ts`). `bun run dev:standalone` builds to `.app-dist/` and serves on :5173. Playwright e2e (skipped when no Chromium is found): type `map.` → suggestion list contains `spawnsOf`; run → table rows + stats.
+
 ## In progress
 - (nothing)
 
 ## Next
-- M0: scaffold the real editor panel with fixture `.d.ts`, `MockQueryEngine`, results table (PLAN.md §6). Reuse `src/sandbox/` and the Bun.build recipe above.
+- M1: real runner against the library artifact + fixture bundle (`src/sandbox/` + `getEmitOutput`), diagnostics, result projection, run/cancel UI (PLAN.md §6). Replace `mockEngineLayer` in `src/app/engine.ts` with a real `QueryEngine` layer.
 
 ## Blockers / Requests to other modules
-- `NEXT.md` (root) still lists the S1 row as open; update it to "M0" in a follow-up outside this module (root files are out of scope for module PRs).
+- `NEXT.md` (root) still lists the S1 row as open; update it to "M1" in a follow-up outside this module (root files are out of scope for module PRs).
 
 ## Decisions log
 - 2026-10-05 — Module scaffolded (rev 2 of IMPLEMENTATION_PLAN.md).
 - 2026-10-05 — Show a "provisional semantics" banner when results carry the PLACEHOLDER_SEMANTICS flag.
 - 2026-10-05 — S1: GO. Eval-completion-value wrapper, nonce+blob-worker sandbox, terminate-based cancel (details above).
+
+- 2026-10-06 — M0: the e2e test lives in `bun test` (so `verify` covers it) but self-skips without Chromium. Mock results ignore the source, per `MockQueryEngine`. Results table is unvirtualised until a later milestone.
 
 ## Open questions
 - (see PLAN.md §9)

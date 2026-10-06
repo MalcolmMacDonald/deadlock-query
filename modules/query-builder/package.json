@@ -6,8 +6,15 @@
     "typecheck": "tsc -p .",
     "test": "bun test",
     "bench": "bun bench/s1.ts",
-    "verify": "bun run typecheck && bun run test"
+    "verify": "bun run typecheck && bun run test",
+    "dev:standalone": "bun src/app/build.ts"
   },
-  "dependencies": { "monaco-editor": "^0.52.2" },
-  "devDependencies": { "playwright-core": "^1.56.1" }
+  "dependencies": {
+    "@deadlock-query/contracts": "workspace:*",
+    "effect": "4.0.1",
+    "monaco-editor": "^0.52.2"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.56.1"
+  }
 }
