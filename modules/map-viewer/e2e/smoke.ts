@@ -128,6 +128,41 @@ try {
   const events = (await page.evaluate(() => (globalThis as any).__events)) as Array<{ _tag: string; id?: string }>
   if (!events.some((e) => e._tag === "camera")) fail("no camera event")
   if (!events.some((e) => e._tag === "pick" && e.id === "marker:0")) fail(`no pick of marker: ${JSON.stringify(events.filter((e) => e._tag !== "camera"))}`)
+  // Inspector: the click selected the overlay feature and the panel lists its fields and row properties.
+  const inspectorText = () => page.locator('[data-testid="inspector"]').innerText()
+  const markerText = await inspectorText()
+  if (!markerText.includes("1 selected") || !markerText.includes("marker #0") || !markerText.includes("[0, 0, 0]")) fail(`inspector for overlay feature: ${markerText}`)
+  const pose0 = await page.evaluate(() => (globalThis as any).__viewer.getPose())
+  await page.evaluate(() => {
+    const v = (globalThis as any).__viewer
+    v.removeOverlay("perf"); v.removeOverlay("marker")
+    v.setOverlay("rows", [{ type: "point", at: [0, 0, 0], label: "row", properties: { entity: "g1", dist: 12.5 } }], { size: 20 })
+    v.highlight(["rows:0"])
+  })
+  await settle()
+  const rowText = await inspectorText()
+  for (const want of ["row", "entity", "g1", "dist", "12.5"]) if (!rowText.includes(want)) fail(`inspector lacks row property "${want}": ${rowText}`)
+  // Clicking an entity marker lists every entity field; two selected entities list two items; empty space clears.
+  await page.evaluate(() => {
+    const v = (globalThis as any).__viewer
+    v.removeOverlay("rows")
+    v.setPose({ target: [-3000, 0, 20], yaw: Math.PI / 2, pitch: -1.55, distance: 1500 })
+  })
+  await settle()
+  await page.mouse.click(450, 300)
+  await settle()
+  const entityText = await inspectorText()
+  for (const want of ["walker-2-1", "npc_boss_tier2", "walker", "team", "lane", "position", "[-3000, 0, 20]"]) {
+    if (!entityText.includes(want)) fail(`inspector for entity lacks "${want}": ${entityText}`)
+  }
+  await page.evaluate(() => (globalThis as any).__viewer.highlight(["entities.walker:0", "entities.walker:1"]))
+  await settle()
+  if ((await page.locator('[data-testid="inspector-item"]').count()) !== 2) fail("two highlighted entities should list two items")
+  await page.mouse.click(450, 60)
+  await settle()
+  if (!(await inspectorText()).includes("Nothing selected")) fail("clicking empty space should clear the inspector")
+  await page.evaluate((p) => (globalThis as any).__viewer.setPose(p), pose0)
+  await settle()
   const pngOk = await page.evaluate(async () => {
     const bytes: Uint8Array = await (globalThis as any).__viewer.capture()
     return bytes[0] === 0x89 && bytes[1] === 0x50
