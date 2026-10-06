@@ -31,3 +31,19 @@ describe("composeModules", () => {
     await c.runtime.dispose()
   })
 })
+
+describe("appBaseLayer", () => {
+  test("ViewerService is backed by the controller the Map panel shares", async () => {
+    const { appBaseLayer } = await import("../src/runtime.ts")
+    const { getViewerController } = await import("../src/viewer.ts")
+    const { ViewerService } = await import("@deadlock-query/contracts")
+    const c = await composeModules([mod("x", Layer.empty)], appBaseLayer)
+    await c.runtime.runPromise(Effect.gen(function* () {
+      const v = yield* ViewerService
+      yield* v.setCamera([0, 0, 500], [0, 0, 0])
+    }))
+    const ctrl = await getViewerController()
+    expect(ctrl.getPose().target).toEqual([0, 0, 0])
+    expect(ctrl.getPose().distance).toBeCloseTo(500, 0)
+  })
+})
