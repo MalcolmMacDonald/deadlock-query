@@ -18,11 +18,17 @@ import { MeshoptDecoder, MeshoptEncoder, MeshoptSimplifier } from "meshoptimizer
 export const TILE_BUDGET_BYTES = 20 * 1024 * 1024
 
 export interface TileOptions {
-  /** Total LODs per tile including LOD0 (default 2). */
+  /**
+   * Total LODs per tile including LOD0 (default 3: with every triangle at LOD0, the far LODs are what a streaming viewer
+   * holds for the whole visible map, so they must be small).
+   */
   readonly lods?: number
-  /** Triangle fraction kept by each next LOD relative to the previous one (default 0.25). */
+  /** Triangle fraction LOD*n* aims for relative to LOD0, as `lodRatio^n` (default 0.25: LOD1 25 %, LOD2 6 %). */
   readonly lodRatio?: number
-  /** Simplifier error bound relative to the mesh extent (default 0.02). */
+  /**
+   * Simplifier error bound relative to the tile's extent (default 0.1). 0.02 stopped LOD1 at about 68 % of LOD0 on dl_midtown,
+   * well above the ratio asked for; a far LOD may lose small props entirely.
+   */
   readonly lodError?: number
   /** Keep material textures (embedded in the GLB). The lite tier is untextured by default (PLAN §5.9). */
   readonly keepTextures?: boolean
@@ -70,7 +76,7 @@ const removeEmptyDirs = (dir: string, stop: string) => {
  * wrote itself (hence the decoder).
  */
 export const tileBundle = async (dir: string, opts: TileOptions = {}): Promise<TileReport> => {
-  const lods = Math.max(1, opts.lods ?? 2)
+  const lods = Math.max(1, opts.lods ?? 3)
   const ratio = opts.lodRatio ?? 0.25
   const maxBytes = opts.maxTileBytes ?? TILE_BUDGET_BYTES
   const errors: string[] = [], warnings: string[] = []
@@ -107,7 +113,7 @@ export const tileBundle = async (dir: string, opts: TileOptions = {}): Promise<T
     for (let lod = 0; lod < lods; lod++) {
       const doc = cloneDocument(source).setLogger(new Logger(Logger.Verbosity.WARN))
       await doc.transform(
-        ...(lod > 0 ? [simplify({ simplifier: MeshoptSimplifier, ratio: ratio ** lod, error: opts.lodError ?? 0.02 })] : []),
+        ...(lod > 0 ? [simplify({ simplifier: MeshoptSimplifier, ratio: ratio ** lod, error: opts.lodError ?? 0.1 })] : []),
         prune({ keepAttributes: true }),
         meshopt({ encoder: MeshoptEncoder, level: "high" })
       )
@@ -117,6 +123,7 @@ export const tileBundle = async (dir: string, opts: TileOptions = {}): Promise<T
       const tris = triangleCount(doc)
       outTiles.push({
         id: lodId(tile.id, lod), bounds: tile.bounds, file, bytes: bin.length, sha256: sha256(bin),
+        ...(lod > 0 ? { lod, lodOf: tile.id } : {}),
         ...(tile.materials ? { materials: tile.materials } : {})
       })
       entries.push({ id: lodId(tile.id, lod), file, lod, bytes: bin.length, triangles: tris })

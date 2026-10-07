@@ -147,3 +147,107 @@ test("decimates the primitives that do not fit at full detail instead of droppin
   const floored = buildLiteTiles(join(dir, "n0.gltf"), mkdtempSync(join(tmpdir(), "dlq-out-")), { triBudget: 1000, fullFraction: 0.1, minTris: 700, decimateError: 1e-4, cell: 1e6 })
   expect(floored.keptTriangles).toBeGreaterThanOrEqual(700)
 })
+
+/** One glTF with the given primitives (positions, optional uvs, indices, material index), each in its own mesh named `<name>_mt_<material>`. */
+const gltfOf = (prims: Array<{ name: string; pos: Float32Array; idx: Uint32Array; uv?: Float32Array; material?: number }>, materials: object[] = []) => {
+  const dir = mkdtempSync(join(tmpdir(), "dlq-lite-"))
+  const chunks: Buffer[] = [], views: object[] = [], accessors: object[] = []
+  let off = 0
+  const add = (a: ArrayBufferView, type: string, componentType: number, count: number, extra: object = {}) => {
+    const b = Buffer.from(a.buffer, a.byteOffset, a.byteLength)
+    views.push({ buffer: 0, byteOffset: off, byteLength: b.length })
+    accessors.push({ bufferView: views.length - 1, componentType, count, type, ...extra })
+    chunks.push(b); off += b.length
+    return accessors.length - 1
+  }
+  const meshes = prims.map((m) => {
+    const n = m.pos.length / 3
+    const mn = [0, 1, 2].map((k) => Math.min(...Array.from({ length: n }, (_, v) => m.pos[v * 3 + k]!)))
+    const mx = [0, 1, 2].map((k) => Math.max(...Array.from({ length: n }, (_, v) => m.pos[v * 3 + k]!)))
+    const attributes: Record<string, number> = { POSITION: add(m.pos, "VEC3", 5126, n, { min: mn, max: mx }) }
+    if (m.uv) attributes["TEXCOORD_0"] = add(m.uv, "VEC2", 5126, n)
+    return { name: m.name, primitives: [{ attributes, indices: add(m.idx, "SCALAR", 5125, m.idx.length), ...(m.material !== undefined ? { material: m.material } : {}) }] }
+  })
+  writeFileSync(join(dir, "n0.bin"), Buffer.concat(chunks))
+  writeFileSync(join(dir, "n0.gltf"), JSON.stringify({
+    asset: { version: "2.0" }, scene: 0, scenes: [{ nodes: prims.map((_, i) => i) }], nodes: prims.map((_, i) => ({ mesh: i })), meshes, accessors, bufferViews: views,
+    buffers: [{ uri: "n0.bin", byteLength: off }], ...(materials.length ? { materials } : {})
+  }))
+  return join(dir, "n0.gltf")
+}
+
+test("a primitive too big for one tile is split into tile-sized parts instead of being dropped", () => {
+  const g = grid(40, 4000) // 3,200 triangles
+  const src = gltfOf([{ name: "terrain", pos: g.pos, idx: g.idx }])
+  const out = mkdtempSync(join(tmpdir(), "dlq-out-"))
+  const r = buildLiteTiles(src, out, { cell: 1e6, tileBytes: 30_000 })
+  expect(r.totalTriangles).toBe(3200)
+  expect(r.keptTriangles).toBe(3200)
+  expect(r.splitTriangles).toBe(3200)
+  expect(r.warnings).toEqual([])
+  expect(r.tiles.length).toBeGreaterThan(3)
+  for (const t of r.tiles) expect(t.bytes).toBeLessThan(30_000 * 1.5)
+  // the parts cover the whole surface
+  expect(Math.min(...r.tiles.map((t) => t.bounds.min[0]))).toBeCloseTo(0, 3)
+  expect(Math.max(...r.tiles.map((t) => t.bounds.max[0]))).toBeCloseTo(4000, 3)
+  expect(Math.max(...r.tiles.map((t) => t.bounds.max[2]))).toBeCloseTo(4000, 3)
+})
+
+/** The tile's COLOR_0 bytes (RGBA8) in file order, read from the GLB's binary chunk. */
+const colorsOf = (path: string): Uint8Array[] => {
+  const buf = readFileSync(path)
+  const jl = buf.readUInt32LE(12), j = JSON.parse(buf.subarray(20, 20 + jl).toString("utf8"))
+  const bin = buf.subarray(20 + jl + 8)
+  return j.meshes.flatMap((m: any) => m.primitives).map((p: any) => {
+    const a = j.accessors[p.attributes.COLOR_0], bv = j.bufferViews[a.bufferView]
+    expect(a.componentType).toBe(5121); expect(a.normalized).toBe(true); expect(a.type).toBe("VEC4")
+    return new Uint8Array(bin.subarray(bv.byteOffset, bv.byteOffset + a.count * 4))
+  })
+}
+
+test("bakes a COLOR_0 per vertex from the material paint: tint, texture sampled at the vertex UV, fallback when unresolved", async () => {
+  await liteReady
+  const { mapProvider, buildMips, solidMips } = await import("../src/colors.ts")
+  // a 2 x 2 texture: left column red, right column blue (sRGB bytes), sampled by a dense quad (4 vertices over the whole texture)
+  const px = new Uint8Array([255, 0, 0, 255, 0, 0, 255, 255, 255, 0, 0, 255, 0, 0, 255, 255])
+  const mips = buildMips(px, 2, 2)
+  const q = quad(100)
+  const src = gltfOf([
+    { name: "a_mt_painted", pos: q.pos, idx: new Uint32Array(q.idx), uv: new Float32Array([0.25, 0.25, 0.75, 0.25, 0.75, 0.75, 0.25, 0.75]) }, // texel centres
+    { name: "b_mt_unknown", pos: q.pos.map((v, i) => (i % 3 === 0 ? v + 500 : v)), idx: new Uint32Array(q.idx) },
+    { name: "c_mt_tinted", pos: q.pos.map((v, i) => (i % 3 === 0 ? v + 1000 : v)), idx: new Uint32Array(q.idx), uv: q.uv }
+  ])
+  const provider = mapProvider(new Map([
+    ["painted", { tint: [1, 1, 1] as const, texture: mips }],
+    ["tinted", { tint: [0.5, 0.25, 1] as const, texture: solidMips([1, 1, 1]) }]
+  ]), [0.2, 0.2, 0.2])
+  const out = mkdtempSync(join(tmpdir(), "dlq-out-"))
+  const r = buildLiteTiles(src, out, { cell: 1e6, colors: provider })
+  expect(r.colors).toEqual({ primitives: 3, painted: 2, textured: 2, unpainted: ["unknown"] })
+  expect(r.tiles).toHaveLength(1)
+  const [C] = colorsOf(join(out, r.tiles[0]!.file))
+  const rgba = (i: number) => [...C!.subarray(i * 4, i * 4 + 4)]
+  // vertex order per primitive is first-use: quad corners with u = 0.25, 0.75, 0.75, 0.25 (the centres of the red and blue columns)
+  const painted = [0, 1, 2, 3].map(rgba)
+  expect(painted[0]![0]).toBeGreaterThan(painted[0]![2]!) // red column
+  expect(painted[1]![2]).toBeGreaterThan(painted[1]![0]!) // blue column
+  for (const p of painted) expect(p[3]).toBe(255)
+  // unresolved: the fallback 0.2 linear = 51
+  expect([4, 5, 6, 7].map(rgba)).toEqual(Array(4).fill([51, 51, 51, 255]))
+  // tinted: 0.5, 0.25, 1 linear -> 128, 64, 255 (white texture)
+  expect([8, 9, 10, 11].map(rgba)).toEqual(Array(4).fill([128, 64, 255, 255]))
+  // UVs are not written once colours are baked
+  const j = readGltfJson(join(out, r.tiles[0]!.file)) as any
+  expect(j.meshes[0].primitives.every((p: any) => p.attributes.TEXCOORD_0 === undefined && p.attributes.COLOR_0 !== undefined)).toBe(true)
+})
+
+test("without a colour provider the tiles carry no COLOR_0, and the default budget keeps every triangle", () => {
+  const g = grid(10, 100)
+  const src = gltfOf([{ name: "m", pos: g.pos, idx: g.idx }])
+  const out = mkdtempSync(join(tmpdir(), "dlq-out-"))
+  const r = buildLiteTiles(src, out, { cell: 1e6 })
+  expect(r.keptTriangles).toBe(r.totalTriangles)
+  expect(r.colors).toBeUndefined()
+  const j = readGltfJson(join(out, r.tiles[0]!.file)) as any
+  expect(j.meshes[0].primitives[0].attributes.COLOR_0).toBeUndefined()
+})
