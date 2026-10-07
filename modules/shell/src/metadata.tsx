@@ -29,7 +29,7 @@ const mountMetadata = (container: HTMLElement): (() => void) => {
         expect: { mapName: manifest.mapName, gameBuildId: manifest.gameBuildId },
         ...(support ? { bounds: support.manifest.bounds, ...(support.collision ? { collision: support.collision } : {}), existing: support.accepted } : {}),
       })
-      const controller = md.createEditorController({ viewer, drafts, context })
+      const controller = md.createEditorController({ viewer, drafts, context, identity: () => ({ mapName: manifest.mapName, gameBuildId: manifest.gameBuildId }) })
       if (support) controller.setAccepted(support.accepted)
       const panel = md.mountEditorPanel(container, controller)
       dispose = () => { panel.dispose(); controller.dispose() }
@@ -55,6 +55,47 @@ export const metadataModule: ModuleDefinition<ViewerService> = {
       title: "Metadata",
       defaultPlacement: "right",
       component: ({ api }: IDockviewPanelProps) => <LazyPanel api={api}>{() => <MetadataHost />}</LazyPanel>,
+    },
+  ],
+}
+
+/** Mounts the reviewer panel (dev-only): submissions come through the dev proxy's GitHub routes, drawn over the shared viewer. */
+const mountReview = (container: HTMLElement): (() => void) => {
+  let dispose = () => {}
+  let cancelled = false
+  void Promise.all([import("@deadlock-query/map-metadata/editor"), viewerReady])
+    .then(([md, viewer]) => {
+      if (cancelled) return
+      const controller = md.createReviewController({
+        api: md.proxyApi(),
+        viewer,
+        reviewer: () => (container.querySelector<HTMLInputElement>("#dlq-rv-name")?.value ?? ""),
+      })
+      const panel = md.mountReviewPanel(container, controller)
+      dispose = () => panel.dispose()
+    })
+    .catch((e) => {
+      container.textContent = `Review panel failed to load: ${String(e)}`
+    })
+  return () => { cancelled = true; dispose() }
+}
+
+const ReviewHost = () => {
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => mountReview(ref.current!), [])
+  return <div ref={ref} style={{ width: "100%", height: "100%", overflow: "auto" }} />
+}
+
+/** Reviewer tools: dev builds only (behind the lock screen), since they act through the dev GitHub proxy. */
+export const metadataReviewModule: ModuleDefinition<ViewerService> = {
+  id: "map-metadata-review",
+  layer: Layer.empty,
+  panels: [
+    {
+      id: "metadata.review",
+      title: "Review submissions",
+      defaultPlacement: "right",
+      component: ({ api }: IDockviewPanelProps) => <LazyPanel api={api}>{() => <ReviewHost />}</LazyPanel>,
     },
   ],
 }

@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import { Layer } from "effect"
 import type { ModuleDefinition } from "@deadlock-query/contracts"
-import { modulesFor, requiresLogin, type ModuleEntry } from "../src/modules.ts"
+import { moduleEntries, modulesFor, requiresLogin, type ModuleEntry } from "../src/modules.ts"
 import { resolveTarget } from "../src/target.ts"
 
 const mod = (id: string): ModuleDefinition => ({ id, layer: Layer.empty, panels: [] })
@@ -24,4 +24,11 @@ test("login is required only on dev builds that ship a dev-only module", () => {
   expect(requiresLogin(entries, "dev")).toBe(true)
   expect(requiresLogin(entries, "prod")).toBe(false)
   expect(requiresLogin([{ module: mod("public") }], "dev")).toBe(false)
+})
+
+test("the metadata review panel ships on dev builds only; the editor is public", () => {
+  const panels = (t: "dev" | "prod") => modulesFor(moduleEntries, t).flatMap((m) => m.panels.map((p) => p.id))
+  expect(panels("prod")).toContain("metadata.editor")
+  expect(panels("prod")).not.toContain("metadata.review")
+  expect(panels("dev")).toContain("metadata.review")
 })
