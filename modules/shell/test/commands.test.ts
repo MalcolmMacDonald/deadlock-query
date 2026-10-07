@@ -21,6 +21,7 @@ const actions: CommandActions = {
   focusPrevious: () => void calls.push("previous"),
   closeActive: () => void calls.push("close"),
   toggleMaximize: () => void calls.push("maximize"),
+  resize: (d) => void calls.push(`resize:${d}`),
   moveToNextGroup: () => void calls.push("move"),
   split: (d) => void calls.push(`split:${d}`),
   toggleTheme: () => void calls.push("theme"),
@@ -33,7 +34,7 @@ const commands = buildCommands(
 
 test("one command per panel and preset, plus reset, share and module commands", () => {
   expect(commands.map((c) => c.id)).toEqual([
-    "panel:next", "panel:previous", "panel:close-active", "panel:maximize-active", "panel:move-next-group", "panel:split-right", "panel:split-below",
+    "panel:next", "panel:previous", "panel:close-active", "panel:maximize-active", "panel:wider", "panel:narrower", "panel:taller", "panel:shorter", "panel:move-next-group", "panel:split-right", "panel:split-below",
     "panel:viewer.main", "panel:viewer.layers", "preset:query", "preset:explore", "layout:reset", "layout:share", "view:toggle-theme", "module:map-viewer:go",
   ])
 })
@@ -42,7 +43,7 @@ test("commands call the matching action", async () => {
   calls.length = 0
   for (const c of commands) await c.run()
   expect(calls).toEqual([
-    "next", "previous", "close", "maximize", "move", "split:right", "split:bottom",
+    "next", "previous", "close", "maximize", "resize:wider", "resize:narrower", "resize:taller", "resize:shorter", "move", "split:right", "split:bottom",
     "show:viewer.main", "show:viewer.layers", "preset:query", "preset:explore", "reset", "share", "theme", "module",
   ])
 })

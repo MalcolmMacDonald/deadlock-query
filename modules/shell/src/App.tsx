@@ -6,7 +6,7 @@ import { Effect } from "effect"
 import { buildCommands } from "./commands.ts"
 import { CommandPalette } from "./CommandPalette.tsx"
 import { ABOUT_PANEL_ID } from "./about.tsx"
-import { addPreset, applyPreset, closeActivePanel, cyclePanel, moveActiveToNextGroup, showPanel, splitActive, toggleMaximizeActive } from "./dock.ts"
+import { addPreset, applyPreset, closeActivePanel, cyclePanel, moveActiveToNextGroup, resizeActiveGroup, showPanel, splitActive, toggleMaximizeActive } from "./dock.ts"
 import { keepDockviewAriaValid } from "./dockviewAria.ts"
 import { isRestorable, loadLayout, resetLayout, saveLayout } from "./layout.ts"
 import { LockScreen } from "./LockScreen.tsx"
@@ -135,6 +135,9 @@ const Shell = ({ composition }: { composition: Composition }) => {
           if (title) notify("info", `Closed “${title}”. Reopen it from the command palette (Ctrl+K).`)
         },
         toggleMaximize: () => apiRef.current && toggleMaximizeActive(apiRef.current),
+        resize: (direction) => {
+          if (apiRef.current && !resizeActiveGroup(apiRef.current, direction)) notify("info", "There is no other panel group to resize against.")
+        },
         moveToNextGroup: () => {
           if (apiRef.current && !moveActiveToNextGroup(apiRef.current)) notify("info", "There is no other panel group to move into.")
         },
