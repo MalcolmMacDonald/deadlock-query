@@ -20,7 +20,7 @@ import { WALKABLE_FLOW_FILE, WALKABLE_NAV_FILE, loadWalkable, type WalkableStats
  * Recast (`source: "game-nav"`): `world_physics` holds only clip volumes, so Recast over it describes clip lids, not the walkable map.
  */
 
-export const NAVMESH_BAKE_VERSION = "1.2.0"
+export const NAVMESH_BAKE_VERSION = "1.3.0"
 
 /** Source units. Provisional: these are Source-engine defaults, not measured from Deadlock heroes. */
 export interface NavAgent { readonly radius: number; readonly height: number; readonly climb: number; readonly slopeDegrees: number }
@@ -469,8 +469,8 @@ export const bakeNavmesh = async (dir: string, o: NavmeshOptions = {}): Promise<
 // Game nav source
 // ---------------------------------------------------------------------------------------------------------------------
 
-/** Connected components counting `links` as connections between the polygons nearest their endpoints (union-find over the base components). */
-const componentsWithLinks = (soup: PolygonSoup, base: Int32Array, nm: NavMesh, links: ReadonlyArray<NavLink>): number[] => {
+/** Root label per polygon: shared-edge components joined further wherever a link connects the polygons nearest its endpoints. */
+const labelsWithLinks = (base: Int32Array, nm: NavMesh, links: ReadonlyArray<NavLink>): Int32Array => {
   const parent = Int32Array.from({ length: base.length }, (_, i) => i)
   const find = (i: number): number => { while (parent[i] !== i) { parent[i] = parent[parent[i]!]!; i = parent[i]! } return i }
   const union = (a: number, b: number) => { const ra = find(a), rb = find(b); if (ra !== rb) parent[ra] = rb }
@@ -481,8 +481,14 @@ const componentsWithLinks = (soup: PolygonSoup, base: Int32Array, nm: NavMesh, l
     const a = nm.nearestPoint(l.from)?.poly, b = nm.nearestPoint(l.to)?.poly
     if (a !== undefined && b !== undefined) union(a, b)
   }
+  return Int32Array.from(base, (_, p) => find(p))
+}
+
+/** Connected components counting `links` as connections between the polygons nearest their endpoints (sizes, largest first). */
+const componentsWithLinks = (soup: PolygonSoup, base: Int32Array, nm: NavMesh, links: ReadonlyArray<NavLink>): number[] => {
+  const labels = labelsWithLinks(base, nm, links)
   const sizes = new Map<number, number>()
-  for (let p = 0; p < soup.polys.length; p++) { const r = find(p); sizes.set(r, (sizes.get(r) ?? 0) + 1) }
+  for (let p = 0; p < soup.polys.length; p++) sizes.set(labels[p]!, (sizes.get(labels[p]!) ?? 0) + 1)
   return [...sizes.values()].sort((a, b) => b - a)
 }
 
@@ -554,7 +560,10 @@ const bakeGameNavmesh = async (
     }
   } else warnings.push(`no ${WALKABLE_FLOW_FILE}: the mesh has no game-provided jump/drop connections`)
   const mantles = mantleLinks(flowKept)
-  const links = [...entityKept, ...flowKept, ...mantles]
+  const linked = [...entityKept, ...flowKept, ...mantles]
+  const stitches = islandLinks(soup, labelsWithLinks(component, NavMesh.fromPolygons(toNavMeshData(soup), linked), linked))
+  if (stitches.length > 0) o.log?.(`navmesh: ${stitches.length} small islands stitched to the nearest larger piece`)
+  const links = [...linked, ...stitches]
   const byKind: Record<string, number> = {}
   for (const l of links) byKind[l.kind] = (byKind[l.kind] ?? 0) + 1
 
