@@ -1,6 +1,7 @@
 import type { Entity } from "@deadlock-query/contracts"
 import { entityKind } from "./entityKinds.ts"
 import { laneNumberFromProperties, ziplineLanes } from "./lanes.ts"
+import { teamFromProperties } from "./teams.ts"
 
 export type VentValue = string | number | boolean | number[] | string[]
 export interface RawEntity {
@@ -104,7 +105,7 @@ export const toEntities = (raw: ReadonlyArray<RawEntity>): Entity[] => {
     const sub = [rest["subclass_name"], rest["bossname"]].find((v): v is string => typeof v === "string" && v !== "")
     const kind = entityKind(cls, sub)
     const rot = vec3(angles)
-    const team = num(teamnumber)
+    const team = num(teamnumber) ?? teamFromProperties(kind, cls, properties)
     const lane = num(lanenum) ?? laneNumberFromProperties(kind, properties)
     return [{
       id, class: cls,
