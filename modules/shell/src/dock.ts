@@ -11,6 +11,7 @@ export const addPreset = (api: DockviewApi, preset: ReadonlyArray<PresetPanel>):
       component: p.id,
       ...(p.position ? { position: p.position } : {}),
       ...(p.initialWidth ? { initialWidth: p.initialWidth } : {}),
+      ...(p.initialHeight ? { initialHeight: p.initialHeight } : {}),
     })
 }
 

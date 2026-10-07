@@ -8,6 +8,7 @@ export interface PresetPanel {
   /** Placement relative to the previously placed panel; the first panel has none. */
   readonly position?: { readonly referencePanel: string; readonly direction: Direction }
   readonly initialWidth?: number
+  readonly initialHeight?: number
 }
 
 /** Initial width in px of the editor column in the default "Query" layout. */
@@ -16,6 +17,8 @@ export const EDITOR_WIDTH = 520
 export const INSPECTOR_WIDTH = 340
 /** Initial width in px of the tools/layers column left of the map. */
 export const SIDEBAR_WIDTH = 220
+/** Initial height in px of the inspector under the editor, so the editor and its results table keep most of the column. */
+export const INSPECTOR_HEIGHT = 240
 
 interface PresetOptions {
   /** Dock the query editor (and results) right of the map. */
@@ -69,7 +72,7 @@ const buildPreset = (panels: ReadonlyArray<PanelDefinition>, opts: PresetOptions
     })
   // The inspector sits under the editor when there is one, else in its own column right of the map.
   if (inspector) {
-    if (editor) out.push({ id: inspector.id, title: inspector.title, position: { referencePanel: editor.id, direction: "below" } })
+    if (editor) out.push({ id: inspector.id, title: inspector.title, position: { referencePanel: editor.id, direction: "below" }, initialHeight: INSPECTOR_HEIGHT })
     else
       out.push({
         id: inspector.id,

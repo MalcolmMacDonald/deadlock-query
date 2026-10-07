@@ -42,6 +42,18 @@ const sidePanel = (make: (v: Awaited<ReturnType<typeof viewerPackage>>, c: Viewe
   },
 })
 
+/** A "Loading map…" cover over `container` (which gets `position: relative` if it is static); the caller removes it. */
+const loadingOverlay = (container: HTMLElement): HTMLElement => {
+  if (getComputedStyle(container).position === "static") container.style.position = "relative"
+  const el = container.ownerDocument.createElement("div")
+  el.setAttribute("role", "status")
+  el.setAttribute("data-testid", "map-loading")
+  el.textContent = "Loading map…"
+  Object.assign(el.style, { position: "absolute", inset: "0", zIndex: "5", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--bg, #111)", color: "var(--fg, #ddd)", font: "inherit" })
+  container.append(el)
+  return el
+}
+
 /**
  * Map viewer module. Three.js and the mini-map fixture load lazily on first mount so the
  * initial bundle stays small. The zipped bundle published to the data Release (unzipped into
@@ -64,8 +76,11 @@ export const viewerModule: ModuleDefinition = {
             const c = await getViewerController()
             if (cancelled) return
             dispose = v.makeViewerPanel(data, c).mount(container)
+            // Cover the mini-map fixture while the published bundle loads, so the wrong map never flashes up.
+            const overlay = loadingOverlay(container)
             // Prefer the published bundle; keep the fixture when it is absent (local dev, no fetch-data).
             await c.loadBundle(BUNDLE_MANIFEST_URL).catch((e) => console.warn("bundle not loaded, using fixture:", e))
+            overlay.remove()
           }).catch((e) => {
             container.textContent = `Map failed to load: ${String(e)}`
           })
