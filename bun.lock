@@ -44,7 +44,7 @@
     },
     "modules/map-metadata": {
       "name": "@deadlock-query/map-metadata",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "dependencies": {
         "@deadlock-query/contracts": "workspace:*",
         "effect": "4.0.1",
@@ -110,8 +110,10 @@
       "version": "0.0.0",
       "dependencies": {
         "@deadlock-query/contracts": "workspace:*",
+        "@deadlock-query/map-metadata": "workspace:*",
         "@deadlock-query/map-viewer": "workspace:*",
         "@deadlock-query/query-builder": "workspace:*",
+        "@deadlock-query/spatial-core": "workspace:*",
         "dockview": "^4.2.0",
         "effect": "4.0.1",
         "monaco-editor": "^0.52.2",
