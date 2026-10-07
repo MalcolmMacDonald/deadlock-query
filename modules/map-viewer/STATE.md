@@ -1,7 +1,7 @@
 # map-viewer — state
 
 - **Status:** M6 done (entity layers, screenshot markers and popups); M5 done (`registerTool` is on the `ViewerService` layer); M4 done; real-hardware perf checks pending
-- **Version:** 0.14.0
+- **Version:** 0.15.0
 - **Current milestone:** M7 (SDF labels, performance pass)
 - **Last updated:** 2026-10-07
 
@@ -40,6 +40,8 @@
 
 - 2026-10-07 — F frames the selection. With the canvas focused, F moves the camera to the selected features: a lone point or entity gets a close-up (`FOCUS_MIN_DISTANCE` = 300 units), several features or a long line get their bounding box (`frameSelection` in `src/camera.ts`: centred, distance fits the bounding sphere in the field of view with 15% margin). The viewing direction (yaw/pitch) and camera mode are kept. `ViewerController.focusSelection()` / `selectionPoints()` read the vertices of every highlighted feature (picked entity, query point, screenshot marker, selected annotation, or a service `highlight`), so it works for all of them; F does nothing with no selection, ignores Ctrl/Cmd/Alt+F (browser find) and is ignored while typing in an input. The Select tool's hint mentions it; there is no other in-app shortcut list (the shell's registry is for global commands). Tests: `camera.test.ts`, `selection.test.ts`, e2e smoke.
 
+- 2026-10-07 — M7 (outlined labels): label sprites are drawn as haloed text (dark stroke, round joins, mipmapped texture) instead of text on a dark pill, so they stay readable over any surface without hiding the map. Chose a canvas halo over a true SDF atlas: no new dependency or font asset, same declutter and constant-pixel sizing; revisit with a glyph atlas only if label counts need it. Remaining M7: theming, touch, keyboard-only a11y, docs.
+
 ## In progress
 - (nothing)
 
@@ -47,7 +49,6 @@
 - M1 leftover (needs Malcolm's machine): open the real single-tile bundle and confirm >= 30 fps; the viewer loads any manifest via `MapDataService`, so no code change expected.
 - Real-bundle check (Malcolm's machine): load the published dl_midtown bundle (126 tile files, LOD0 + `#lod1`, meshopt) and confirm tiles stream, `data-tile-bytes` stays under the budget, and fps. Only the unit/e2e synthetic map was exercised here; the real tiles use EXT_meshopt_compression + KHR_mesh_quantization, which `decodeTileGlb` handles through GLTFLoader but is only covered by plain float GLBs in tests.
 - Tile fetches are not cancelled when the camera moves on (the tile still lands in the cache, and is evicted first when it is not wanted); fine for LAN-sized tiles, revisit with an `AbortSignal` if bandwidth matters. No tile prefetch ahead of the camera or cross-fade between LODs yet.
-- SDF/outlined labels are M7; labels are plain canvas sprites with per-frame declutter.
 - Screenshots: where the shell publishes a set (`data/screenshots/<gameBuildId>/index.json`) is undecided, so `loadBundle` only fetches one when `ViewerData.screenshotsUrl` is set; once the publish path is fixed, point the shell at it. Check on the real map with a real `dlq-shoot` set (poses, cone size, thumbnails).
 - No UI to rename or delete a document layer yet (deleting would need undo to restore it).
 - Real-bundle check (Malcolm's machine): load a baked bundle and confirm `canvas.dataset.picker === "baked"` and that clicks land on the collision surface; the e2e only covers the mesh-built BVH because the fixture is not baked.
