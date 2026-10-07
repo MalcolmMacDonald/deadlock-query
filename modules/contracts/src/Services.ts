@@ -123,9 +123,9 @@ export class ViewerService extends Context.Service<
      */
     readonly registerTool: (tool: ExternalTool) => Effect.Effect<() => void>
     /** Makes the tool with this id (built-in or registered) the active viewer tool; fails (defect) on an unknown id. */
-    readonly activateTool?: (id: string) => Effect.Effect<void>
+    readonly activateTool: (id: string) => Effect.Effect<void>
     /** Returns the viewer to its default tool. */
-    readonly deactivateTool?: () => Effect.Effect<void>
+    readonly deactivateTool: () => Effect.Effect<void>
   }
 >()("@deadlock-query/ViewerService") {}
 
@@ -155,26 +155,40 @@ const mockViewerService: (typeof ViewerService)["Service"] = {
   setOverlay: () => Effect.void,
   removeOverlay: () => Effect.void,
   highlight: () => Effect.void,
-  registerTool: () => Effect.succeed(() => {})
+  registerTool: () => Effect.succeed(() => {}),
+  activateTool: () => Effect.void,
+  deactivateTool: () => Effect.void
 }
 
 export const MockViewerService = Layer.succeed(ViewerService)(mockViewerService)
 
 /**
- * `MockViewerService` with a `registerTool` that records the tools (visible through `registeredTools`) and rejects a
+ * `MockViewerService` with a `registerTool` that records the tools (visible through `registeredTools`), tracks the active tool (`activeTool`, built-ins plus registered ids; unknown ids are defects) and rejects a
  * duplicate id like the real viewer; for modules that contribute tools (map-metadata, screenshots).
  */
+const BUILTIN_TOOL_IDS: ReadonlyArray<string> = ["select", "point", "label", "polyline", "polygon", "measure"]
+
 export const makeMockViewerServiceWithTools = () => {
   const tools = new Map<string, ExternalTool>()
+  let active = "select"
   const layer = Layer.succeed(ViewerService)({
     ...mockViewerService,
     registerTool: (tool: ExternalTool) => Effect.sync(() => {
       if (tools.has(tool.id)) throw new Error(`tool "${tool.id}" is already registered`)
       tools.set(tool.id, tool)
-      return () => { if (tools.get(tool.id) === tool) tools.delete(tool.id) }
-    })
+      return () => {
+        if (tools.get(tool.id) !== tool) return
+        if (active === tool.id) active = "select"
+        tools.delete(tool.id)
+      }
+    }),
+    activateTool: (id: string) => Effect.sync(() => {
+      if (!tools.has(id) && !BUILTIN_TOOL_IDS.includes(id)) throw new Error(`unknown tool "${id}"`)
+      active = id
+    }),
+    deactivateTool: () => Effect.sync(() => { active = "select" })
   })
-  return { layer, registeredTools: (): ReadonlyArray<ExternalTool> => [...tools.values()] }
+  return { layer, registeredTools: (): ReadonlyArray<ExternalTool> => [...tools.values()], activeTool: (): string => active }
 }
 
 export const MockDevAuth = Layer.succeed(DevAuth)({
