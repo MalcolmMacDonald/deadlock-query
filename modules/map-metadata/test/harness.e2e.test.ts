@@ -59,3 +59,23 @@ test.skipIf(!haveBrowser)("drafts drawn in the harness persist across a reload",
   expect(errors).toEqual([])
   await page.close()
 }, 60_000)
+
+// M5: the review panel lists the queued submission, bulk-accepts the valid records and merges.
+test.skipIf(!haveBrowser)("review panel: open a submission, accept valid records, commit and merge", async () => {
+  const page = await browser.newPage({ viewport: { width: 1200, height: 700 } })
+  const errors: string[] = []
+  page.on("pageerror", (e) => errors.push(e.message))
+  await page.goto(`http://localhost:${server.port}/?review`)
+  await page.waitForFunction(() => (self as any).__md?.review)
+  await page.getByRole("button", { name: /^#1 / }).click()
+  await page.getByRole("button", { name: "Accept all valid" }).click()
+  await page.getByLabel("Reviewer").fill("Malcolm")
+  await page.getByRole("button", { name: /^Commit decisions/ }).click()
+  await page.getByText(/^Merged:/).waitFor()
+  const calls: string[] = await page.evaluate(() => (self as any).__md.calls)
+  expect(calls.some((c) => c.startsWith("commit data/metadata/"))).toBe(true)
+  expect(calls.at(-1)).toBe("merge")
+  await page.getByText("No open submissions").waitFor()
+  expect(errors).toEqual([])
+  await page.close()
+}, 60_000)

@@ -1,6 +1,7 @@
 import { Effect, Stream } from "effect"
 import { ViewerService, type ExternalTool, type OverlayFeature, type OverlayStyle, type ToolContext, type Vec3 } from "@deadlock-query/contracts"
-import { createEditorController, indexedDbDraftStorage, mountEditorPanel, openDraftStore } from "../src/editor/index.ts"
+import { createEditorController, createReviewController, indexedDbDraftStorage, mountEditorPanel, mountReviewPanel, openDraftStore, type QueueItem, type ReviewApi } from "../src/editor/index.ts"
+import seeded from "../fixtures/submissions/valid.json"
 
 // A mock viewer: a top-down canvas where 1 pixel = 4 world units, centred on the origin. Enough to draw and reload.
 const SCALE = 4
@@ -75,8 +76,24 @@ window.addEventListener("keydown", (e) => {
 })
 window.addEventListener("resize", redraw)
 
+// `?review` mounts the dev-only review panel against a fake GitHub holding the fixture submission.
+if (new URLSearchParams(location.search).has("review")) {
+  const item: QueueItem = { number: 1, title: "fixture", branch: `metadata-submission/${seeded.id}`, submissionId: seeded.id, url: "#", author: "bot", updatedAt: "" }
+  const calls: string[] = []
+  let queue: QueueItem[] = [item]
+  const api: ReviewApi = {
+    queue: async () => queue, submission: async () => seeded as never, dataFile: async () => undefined,
+    commitFile: async (_i, path) => { calls.push(`commit ${path}`) }, merge: async () => { calls.push("merge"); queue = [] },
+    close: async () => { calls.push("close"); queue = [] }, comment: async (_i, t) => { calls.push(`comment ${t}`) }
+  }
+  const review = createReviewController({ api, viewer, reviewer: () => (document.getElementById("dlq-rv-name") as HTMLInputElement | null)?.value ?? "" })
+  mountReviewPanel(document.getElementById("panel")!, review)
+  redraw()
+  Object.assign(self, { __md: { review, calls } })
+} else {
 const drafts = await openDraftStore(indexedDbDraftStorage("harness"))
 const controller = createEditorController({ viewer, drafts, identity: () => ({ gameBuildId: "harness-build", mapName: "harness" }) })
 mountEditorPanel(document.getElementById("panel")!, controller)
 redraw()
 Object.assign(self, { __md: { controller, drafts, activate, tools, toWorld, toScreen } })
+}
