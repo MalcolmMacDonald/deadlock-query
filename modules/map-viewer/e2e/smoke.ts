@@ -404,6 +404,29 @@ try {
     for (let i = 0; i < px.length; i += 4) if (px[i]! < 70 && px[i + 1]! < 70 && px[i + 2]! < 70) n++
     return n
   })
+  // Ziplines are lines in their lane colour (Blue #3b7bff, Green #2fd673), not points; each lane has its own layer row.
+  const zipNode = (id: string, path: string, i: number, at: number[]) => ({ id, class: "citadel_zipline_path_node", kind: "zipline", position: at, lane: path === "Z1" ? 2 : 3, properties: { path_uniqueid: path, path_index: i } })
+  await page.evaluate((nodes) => { const v = (globalThis as any).__viewer; v.setEntities(nodes) }, [
+    zipNode("a0", "Z1", 0, [-3000, -1000, 100]), zipNode("a1", "Z1", 1, [3000, -1000, 100]),
+    zipNode("b0", "Z2", 0, [-3000, 1000, 100]), zipNode("b1", "Z2", 1, [3000, 1000, 100])
+  ])
+  await settle()
+  for (const lane of ["blue", "green"]) if ((await page.locator(`[data-testid="viewer-layers"] [data-layer="entities.zipline.${lane}"]`).count()) !== 1) fail(`no layer row for the ${lane} zipline lane`)
+  if ((await page.locator('[data-testid="viewer-layers"] [data-layer="entities.zipline"]').count()) !== 0) fail("zipline nodes inside a path should not be drawn as points")
+  const laneColour = (rgb: [number, number, number]) => page.evaluate((c) => {
+    const cv = document.querySelector("canvas")!
+    const d = document.createElement("canvas"); d.width = cv.width; d.height = cv.height
+    const ctx = d.getContext("2d")!; ctx.drawImage(cv, 0, 0)
+    const px = ctx.getImageData(0, 0, d.width, d.height).data
+    let n = 0
+    for (let i = 0; i < px.length; i += 4) if (Math.abs(px[i]! - c[0]) < 40 && Math.abs(px[i + 1]! - c[1]) < 40 && Math.abs(px[i + 2]! - c[2]) < 40) n++
+    return n
+  }, rgb)
+  const blueLine = await laneColour([0x3b, 0x7b, 0xff]), greenLine = await laneColour([0x2f, 0xd6, 0x73])
+  if (blueLine < 200 || greenLine < 200) fail(`zipline lines not drawn in their lane colours (blue ${blueLine} px, green ${greenLine} px)`)
+  await page.locator('[data-testid="viewer-layers"] [data-layer="entities.zipline.blue"] input[data-role="visible"]').uncheck()
+  await settle()
+  if ((await laneColour([0x3b, 0x7b, 0xff])) > blueLine / 4) fail("hiding the blue zipline layer left its line drawn")
   await page.evaluate(() => (globalThis as any).__viewer.setEntities([])) // entity name plates would skew the dark-pixel count
   await settle()
   // M6: screenshot markers: click one, see its image in the popup, look through it, close it.

@@ -1,7 +1,7 @@
 # map-viewer — state
 
 - **Status:** M6 done (entity layers, screenshot markers and popups); M5 done (`registerTool` is on the `ViewerService` layer); M4 done; real-hardware perf checks pending
-- **Version:** 0.13.0
+- **Version:** 0.14.0
 - **Current milestone:** M7 (SDF labels, performance pass)
 - **Last updated:** 2026-10-07
 
@@ -90,6 +90,7 @@
 - 2026-10-07 — Collision mesh is hidden by default and shown per user toggle rather than removed from the scene: it is already loaded for the BVH fallback and the toggle is free. `ViewerSurface` gained a required `setSurfaceVisible`; the shell needs no change (it already mounts `viewer.layers`).
 
 - 2026-10-07 — Vertex colours: tiles may carry `COLOR_0` (RGBA8 normalised, linear; baked per vertex by map-extractor from the game's materials and textures). `decodeTileGlb` returns them as `colors` (counted in the streaming budget, transferred by the worker pool), the streamer sets a `color` attribute and draws such tiles with `makeColoredTerrainMaterial()` (white, `vertexColors`, same lighting rig); tiles without colours keep the grey material, so old bundles look as before. A tile is coloured only if every mesh in it has `COLOR_0`. `eagerly built` scenes (`buildScene`) pick the material per mesh the same way. `e2e/synthetic.ts` has `colored: true` for tests.
+- 2026-10-07 — Ziplines are lines, in lane colours. `src/ziplines.ts` (`ziplinePaths`) groups `zipline` nodes by `path_uniqueid`, orders them by `path_index` and draws one polyline per path (the real map has 3 paths with nodes, 129 nodes in all; the other 2 `citadel_zipline_path` entities have none); nodes that belong to no path of two or more nodes stay points. Each lane colour has its own layer row (`entities.zipline.yellow|blue|green`, "Yellow lane ziplines (1)"), a path of unknown lane and loose nodes stay in `entities.zipline`. A picked line inspects as the path: the `citadel_zipline_path` fields (`lane_number`, `color_tint`, ...) plus `nodeCount` and every node's id, index, position and name (the raw `pathnodes` spline is left out). Lane of a path: `lane` on its nodes (map-extractor derives it from #139), else the path's `color_tint` by hue (`laneFromTint`; orange Yellow, blue Blue, magenta Green), so the bundle published before that change already draws correctly. `src/lanes.ts` is the lane palette and naming: 1 Yellow `#f2c230`, 2 Blue (middle) `#3b7bff`, 3 Green `#2fd673`; the game's own "purple" lane is Green and nothing here is purple. Entity labels and the inspector name lanes by colour (`Guardian (team 2, Yellow lane)`, `lane 3 (Green)`). Checked on the real dl_midtown entities in Chromium (three lines, Yellow at -x, Blue through the middle, Green at +x). Tests: `test/entities.test.ts`, `test/lanes.test.ts`, e2e smoke (line pixels per lane, hide a lane layer).
 
 ## Open questions
 - (see PLAN.md §9)
