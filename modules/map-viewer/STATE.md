@@ -54,6 +54,8 @@
 
 - 2026-10-07 — M7 (docs): `README.md` lists the camera, keyboard, touch and annotation controls. M7 checklist is complete (labels, theming, touch, keyboard-only use, docs); real-hardware perf checks remain under Next.
 
+- 2026-10-07 — Accessibility: the Layers panel's visibility checkbox, colour and opacity inputs are named after their layer (`aria-label`; `title` alone failed axe `label-title-only`), so the shell's `e2e/a11y.ts` passes again.
+
 ## In progress
 - (nothing)
 
