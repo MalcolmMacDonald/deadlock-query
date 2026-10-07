@@ -198,6 +198,7 @@ export const makeViewerPanel = (data: ViewerData, controller: ViewerController =
     let bakedBvh = data.bakedBvh
     let picker: SurfacePicker | undefined
     let pickerReady = false
+    let pickerFromTiles = false
     const getPicker = (): SurfacePicker | undefined => {
       if (pickerReady) return picker
       pickerReady = true
@@ -206,8 +207,11 @@ export const makeViewerPanel = (data: ViewerData, controller: ViewerController =
       }
       if (!picker && world) {
         world.updateMatrixWorld(true)
+        // The bundle's collision GLB is the stable surface; the streamed render tiles only stand in when there is
+        // none, since a BVH over them goes stale (and costs seconds to rebuild) whenever a tile comes or goes.
         const meshes = surfaceMeshes(world)
-        if (streamer) { streamer.root.updateMatrixWorld(true); meshes.push(...surfaceMeshes(streamer.root)) }
+        pickerFromTiles = meshes.length === 0 && !!streamer
+        if (pickerFromTiles && streamer) { streamer.root.updateMatrixWorld(true); meshes.push(...surfaceMeshes(streamer.root)) }
         picker = SurfacePicker.fromSoup(worldTriangleSoup(meshes))
       }
       canvas.dataset.picker = picker?.source ?? "none"
@@ -261,7 +265,7 @@ export const makeViewerPanel = (data: ViewerData, controller: ViewerController =
         ...(cfg.lod0Range === undefined ? {} : { select: { lod0Range: cfg.lod0Range } }),
         onChange: () => {
           // A BVH built from the meshes goes stale when tiles come and go; the baked one does not.
-          if (picker?.source === "meshes") { picker = undefined; pickerReady = false }
+          if (picker?.source === "meshes" && pickerFromTiles) { picker = undefined; pickerReady = false }
           requestRender()
         },
         onStats: (st) => {
