@@ -172,7 +172,7 @@ export const extract = async (o: ExtractOptions): Promise<ExtractResult> => {
     const fullGltf = join(work, "render-full", "n0.gltf")
     const liteDir = join(dir, "render")
     const manifestTiles = join(work, "lite-tiles.json")
-    const liteKey = `render-lite-${createHash("sha256").update(JSON.stringify({ ...o.lite, log: undefined, materials: o.materials === true, colors: o.gameVpk !== undefined && o.colors !== false, colorRev: 2 })).digest("hex").slice(0, 8)}`
+    const liteKey = `render-lite-${createHash("sha256").update(JSON.stringify({ ...o.lite, log: undefined, materials: o.materials === true, colors: o.gameVpk !== undefined && o.colors !== false, colorRev: 3 })).digest("hex").slice(0, 8)}`
     await stage(o, dir, liteKey, [manifestTiles], async () => {
       if (o.force || !existsSync(fullGltf)) {
         rmSync(join(work, "render-full"), { recursive: true, force: true }); mkdirSync(join(work, "render-full"), { recursive: true })
