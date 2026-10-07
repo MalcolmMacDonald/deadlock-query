@@ -11,7 +11,7 @@ import { keepDockviewAriaValid } from "./dockviewAria.ts"
 import { isRestorable, loadLayout, resetLayout, saveLayout } from "./layout.ts"
 import { LockScreen } from "./LockScreen.tsx"
 import { loginRequired, modules } from "./modules.ts"
-import { availablePresets, DEFAULT_PRESET_ID, PRESETS } from "./presets.ts"
+import { availablePresets, DEFAULT_PRESET_ID, NARROW_WIDTH, PRESETS } from "./presets.ts"
 import { ErrorPanel, toDockviewComponent } from "./panels.tsx"
 import { appBaseLayer, composeModules, type Composition } from "./runtime.ts"
 import { decodeLayoutHash, shareUrl, withoutLayoutParam } from "./share.ts"
@@ -93,7 +93,7 @@ const Shell = ({ composition }: { composition: Composition }) => {
   const applyNamedPreset = useCallback((id: (typeof PRESETS)[number]["id"]) => {
     const api = apiRef.current
     const preset = PRESETS.find((p) => p.id === id)
-    if (api && preset) applyPreset(api, preset.build(panels))
+    if (api && preset) applyPreset(api, preset.build(panels, window.innerWidth < NARROW_WIDTH))
   }, [panels])
 
   const resetToDefault = useCallback(() => {
@@ -188,7 +188,7 @@ const Shell = ({ composition }: { composition: Composition }) => {
       }
     }
     if (!restored) restored = restore(e.api, loadLayout(localStorage))
-    if (!restored) addPreset(e.api, PRESETS.find((p) => p.id === DEFAULT_PRESET_ID)!.build(panels))
+    if (!restored) addPreset(e.api, PRESETS.find((p) => p.id === DEFAULT_PRESET_ID)!.build(panels, window.innerWidth < NARROW_WIDTH))
     e.api.onDidLayoutChange(() => saveLayout(localStorage, e.api.toJSON()))
     ;(window as unknown as { __dockview: unknown }).__dockview = e.api
   }, [panels, restore])

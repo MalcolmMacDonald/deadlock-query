@@ -70,3 +70,10 @@ body { margin: 0; background: var(--bg); color: var(--fg); font-family: system-u
 .about dt { color: var(--muted); }
 .about dd { margin: 0; overflow-wrap: anywhere; }
 .lock { display: flex; justify-content: center; padding-top: 20vh; }
+
+/* Phones: a tighter header (the dock needs the height) and no wrapped title row. */
+@media (max-width: 700px) {
+  .shell-header { gap: 4px; padding: 2px 6px; }
+  .shell-header h1 { flex-basis: 100%; }
+  .shell-header button { padding: 2px 6px; font-size: 0.85em; }
+}
