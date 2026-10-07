@@ -1,8 +1,8 @@
 # map-metadata — state
 
-- **Status:** M0-M6 done (M5 UI included; mounting it dev-only in the shell and the proxy allowlist are other modules'); M7 left
-- **Version:** 0.8.0
-- **Current milestone:** M5 complete
+- **Status:** M0-M7 done in the module. Left outside it: shell mounts (review dev-only, history), infra proxy write endpoints, live worker config (Turnstile site key, allowed origin), real accepted data
+- **Version:** 1.0.0-rc.1
+- **Current milestone:** M7 complete
 - **Last updated:** 2026-10-07
 
 ## Done
@@ -34,6 +34,8 @@
 
 - M5 UI (2026-10-07): `createReviewController` (queue, open submission, per-record decisions, bulk accept-valid/reject-all, commit+merge, request changes, reject; errors land in `state().error`, never thrown; proposed geometry drawn in yellow on `metadata.review.<kind>`) and `mountReviewPanel(root, controller)` (reviewer name remembered, status line, per-record Accept/Reject toggles with validation badges, click a record to fly there). Both exported from `@deadlock-query/map-metadata/editor` with `proxyApi`. Harness `?review` mounts it against a fake GitHub; browser test open -> accept valid -> commit -> merge.
 
+- M7 (2026-10-07): `docs/contributing.md` (draw, checks table, submit, review, publish and rebase). `src/history/history.ts` (worker-safe: `historyRow` turns provenance into an audit-trail sentence list, `historyRows` newest first with status/kind/text filters, `statusCounts`) and `mountHistoryPanel(root, records, onPick)` (`metadata.history`, from the `editor` entry). Bulk accept-valid / reject-all landed with M5. Not frozen as 1.0.0 until the real flow has run once on the live site (`MetadataEditor 1.0.0` is PLAN.md's definition of done).
+
 ## In progress
 - (nothing)
 
@@ -43,6 +45,7 @@
 - Tune the default radii (camp 200, sacrifice 200, orb 100), `surfaceEpsilon` (24) and overlap tolerance (64) on the real dl_midtown data.
 
 ## Blockers / Requests to other modules
+- shell: mount `mountHistoryPanel` as `metadata.history` (records from the same accepted-data fetch that feeds `setAccepted`; `onPick` can fly the camera).
 - shell: mount the review panel as a dev-only module entry (`devOnly: true` in `moduleEntries`): `createReviewController({ api: proxyApi(), viewer, reviewer })` + `mountReviewPanel`; the editor panel mounting in `shell/src/metadata.tsx` is the template.
 - infra (proxy allowlist, `modules/infra/src/proxy.ts`): review needs `PUT /contents/<path>` (commit decided files to the PR branch), `PUT /pulls/<n>/merge` and `PATCH /pulls/<n>` (close) added, with the proxy token allowed Contents and Pull requests write. Without them the review panel can list and show submissions but not accept or reject. Prefer restricting `PUT /contents/` to `data/metadata/**` and `PATCH /pulls` to `state: closed`.
 - Malcolm (live M4): create a Turnstile widget (site key for the page, secret as `TURNSTILE_SECRET`), a KV namespace `RATE`, a repo-scoped `GITHUB_TOKEN` (Contents + Pull requests write), then `bunx wrangler deploy` in `modules/map-metadata/submit-worker/` and set `ALLOWED_ORIGIN`. Until then submissions use the download/issue fallback.
