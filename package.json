@@ -10,6 +10,9 @@
     "check:state": "bun tools/check.ts state",
     "check:deps": "bun tools/check.ts deps",
     "build": "bun tools/build.ts",
+    "dlq-extract": "bun modules/map-extractor/src/cli.ts",
+    "publish-data": "bun tools/publish-data.ts",
+    "check:data": "bun tools/check-data.ts",
     "new-module": "bun tools/new-module.ts"
   },
   "devDependencies": {
