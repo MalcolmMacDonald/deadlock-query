@@ -43,6 +43,10 @@
 
 - 2026-10-07 — History panel: `metadata.history` ("Metadata history", public) shows map-metadata's `mountHistoryPanel` over every record of `metadata.bundle.json` (`loadMetadataSupport` now also returns all records, not just accepted ones); clicking a record flies the camera to its position. Empty until a bundle is published.
 
+- 2026-10-07 — UX round two: the About panel is now "Help & About" in the header: a four-step getting-started list and the keyboard shortcuts (from the `SHORTCUTS` registry, so it cannot drift), plus build info. It is focusable (`tabIndex`) so axe accepts its scrolling. `e2e/a11y.ts` currently fails on main for another reason: the viewer Layers panel has unlabelled row controls (`label-title-only`); that is map-viewer's to fix.
+
+- 2026-10-07 — Narrow screens: below 700 px the default layout (first load and "Reset layout"/presets) is the map on top with the editor below it and Tools/Layers/Inspector as tabs of the editor's group (`compact` flag of the presets; `inactive` keeps the editor in front), and the header is tighter. Checked in Chromium at 390x800 on the real bundle. A layout saved on a wide screen is kept as is.
+
 ## In progress
 - (nothing yet)
 

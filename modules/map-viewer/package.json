@@ -9,6 +9,7 @@
     "typecheck": "tsc -p .",
     "test": "bun test --pass-with-no-tests",
     "verify": "bun run typecheck && bun run test",
+    "perf": "bun e2e/perf.ts",
     "test:e2e": "bun e2e/smoke.ts && bun e2e/streaming.ts"
   },
   "dependencies": {

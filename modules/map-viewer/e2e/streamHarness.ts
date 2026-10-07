@@ -8,6 +8,7 @@ const entities: Entity[] = []
 const controller = new ViewerController()
 ;(globalThis as any).__viewer = controller
 ;(globalThis as any).__fetched = [] as string[]
+;(globalThis as any).__fetchLog = [] as Array<{ id: string; t: number }>
 ;(globalThis as any).__progress = [] as unknown[]
 Effect.runFork(Stream.runForEach(controller.progress, (s) => Effect.sync(() => (globalThis as any).__progress.push(s))))
 const params = new URLSearchParams(location.search)
@@ -16,6 +17,7 @@ makeViewerPanel({
   manifest, entities, tiles: new Map(),
   tileSource: async (t: ManifestTile) => {
     ;(globalThis as any).__fetched.push(t.id)
+    ;(globalThis as any).__fetchLog.push({ id: t.id, t: performance.now() })
     const res = await fetch(`/synthetic/${t.file}`)
     if (!res.ok) throw new Error(`${t.file}: HTTP ${res.status}`)
     return new Uint8Array(await res.arrayBuffer())

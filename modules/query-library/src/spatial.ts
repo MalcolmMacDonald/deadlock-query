@@ -48,8 +48,10 @@ export interface MovementModelLike {
 
 /** The slice of spatial-core's `NavMesh` this library uses (structural). @category Navigation */
 export interface NavMeshLike {
-  findPath(from: readonly [number, number, number], to: readonly [number, number, number], model: MovementModelLike): { readonly points: ReadonlyArray<readonly [number, number, number]>; readonly cost: number } | null
-  distanceField(sources: readonly (readonly [number, number, number])[], model: MovementModelLike): { costAt(p: readonly [number, number, number], maxSnap?: number): number }
+  findPath(from: readonly [number, number, number], to: readonly [number, number, number], model: MovementModelLike, opts?: { radius?: number }): { readonly points: ReadonlyArray<readonly [number, number, number]>; readonly cost: number } | null
+  /** Optional: straight segment stays on the mesh (spatial-core `NavMesh.walkable`). */
+  walkable?(a: readonly [number, number, number], b: readonly [number, number, number]): boolean
+  distanceField(sources: readonly (readonly [number, number, number])[], model: MovementModelLike): { costAt(p: readonly [number, number, number], maxSnap?: number): number; readonly costs?: ArrayLike<number> }
 }
 
 /**

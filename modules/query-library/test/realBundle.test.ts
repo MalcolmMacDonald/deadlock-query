@@ -31,4 +31,17 @@ describe.skipIf(!dir || !existsSync(`${dir}/baked/navmesh.bin`))("real dl_midtow
     expect(performance.now() - t).toBeLessThan(30_000)
     expect(n).toBe(586)
   })
+  const example = async (f: string) => ((await import(`../examples/${f}.ts`)).default as (m: MapContext) => unknown)(map())
+  test("example queries on the real map", async () => {
+    expect(await example("unreachable-camps")).toEqual(["1380394:88987:9", "14781:1797", "14781:2501", "14781:2535", "14781:2541", "14781:2762"])
+    const trip = (await example("guardian-travel-times")) as { id: string; lane: string; seconds: number }[]
+    expect(trip.map((r) => r.lane)).toEqual(["blue", "green", "blue", "yellow", "green", "yellow"])
+    expect(trip[0]).toEqual({ id: "14781:577", lane: "blue", seconds: 24.9 })
+    const nearest = (await example("camp-nearest-orb")) as { camp: string; orb: string | null; seconds: number | null }[]
+    expect(nearest.length).toBe(52)
+    expect(nearest.filter((r) => r.orb === null).length).toBe(4)
+    expect(nearest.find((r) => r.camp === "14781:1755")).toEqual({ camp: "14781:1755", orb: "1380425:99", seconds: 2.1 })
+    expect(await example("camps-in-sight-of-patrons")).toEqual(["14781:1800", "14781:3432", "14781:3445", "14781:3581", "14781:3583"])
+    expect((await example("path-chokepoints") as [string, number][])[0]).toEqual(["0,-1", 8])
+  })
 })

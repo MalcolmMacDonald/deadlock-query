@@ -30,6 +30,7 @@ await withShell(4183, async ({ open }) => {
   if (!/\b[0-9a-f]{7}\b|unknown/.test(sha) || !sha.includes("prod")) throw new Error(`unexpected build line: ${sha}`)
   if (!(await page.getByTestId("about-game-build").textContent())?.trim()) throw new Error("game build id missing")
   if (!(await page.getByTestId("about-api-version").textContent())?.trim()) throw new Error("API version line missing")
+  if (!(await page.getByTestId("about-shortcuts").textContent())?.includes("Ctrl+K")) throw new Error("shortcut list missing Ctrl+K")
   await page.evaluate(() => (globalThis as any).__dockview.getPanel("shell.about").api.close())
   await page.keyboard.press("Control+k")
   await page.getByRole("combobox", { name: "Type a command" }).fill("about")

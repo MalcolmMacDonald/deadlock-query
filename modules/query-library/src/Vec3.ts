@@ -73,6 +73,17 @@ export class Vec3 {
   }
 
   /**
+   * True when no collision geometry blocks the straight segment between the two points, each lifted to eye / target
+   * height (defaults 64 and 32 units). Pure geometry (one ray test); unlike {@link Vec3.visibleFrom} it uses no owner semantics.
+   * @example map.guardians.first()!.position.hasLineOfSightTo(map.healingOrbs.first()!.position)
+   * @category Geometry
+   */
+  hasLineOfSightTo(other: Vec3, opts: { eyeHeight?: number; targetHeight?: number } = {}): boolean {
+    const s = requireSpatial("hasLineOfSightTo()")
+    return !s.raycaster.occluded([this.x, this.y, this.z + (opts.eyeHeight ?? 64)], [other.x, other.y, other.z + (opts.targetHeight ?? 32)])
+  }
+
+  /**
    * Walking travel time to another point in seconds (navmesh, ziplines), `Infinity` if
    * unreachable. Distance fields are cached per start point, so many targets from one start are cheap.
    * @example map.guardians.first()!.position.travelTimeTo(map.healingOrbs.first()!.position)

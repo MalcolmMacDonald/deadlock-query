@@ -195,6 +195,16 @@ export class EntityList extends Seq<MapEntity> {
   }
 
   /**
+   * Entities with an unobstructed straight line (collision geometry only) to any of the given points or entities.
+   * @example map.creepCamps.withLineOfSightTo(map.guardians)
+   * @category Entities
+   */
+  withLineOfSightTo(from: Locatable | Iterable<Locatable>, opts?: { eyeHeight?: number; targetHeight?: number }): EntityList {
+    const pts = (from instanceof Vec3 || from instanceof MapEntity ? [from] : [...from]).map(where)
+    return this.where((e) => pts.some((p) => p.hasLineOfSightTo(e.position, opts)))
+  }
+
+  /**
    * The entity nearest to a point or entity, or `undefined` when empty.
    * @example map.healingOrbs.closest(map.guardians.first()!)
    * @category Entities
