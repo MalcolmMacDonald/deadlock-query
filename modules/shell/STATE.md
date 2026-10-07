@@ -50,6 +50,8 @@
 - 2026-10-07 — Lighthouse run (v12, headless Chromium, `vite preview` of the production build, no published data bundle): **accessibility 100**, best practices 96 (only a console error from the absent `./data` bundle and missing source maps). The >= 90 acceptance is met; the run was done by hand (`CHROME_PATH=... npx lighthouse http://localhost:4173/ --only-categories=accessibility,best-practices`), Lighthouse is not a dependency. Re-run against the deployed dev site once a real bundle is published.
 - 2026-10-07 — Keyboard resizing: Alt+Shift+Arrow Right/Left/Down/Up widen, narrow, heighten and shorten the active panel's group by 40 px (`resizeActiveGroup` in `src/dock.ts`, palette commands "Make active panel group wider" etc., listed in Help & About). `e2e/polish.ts` presses the shortcuts and checks the width changes (the e2e run could not be completed in the cloud container: it already timed out waiting for the Query tab before this change).
 
+- Tag panel mount (2026-10-07): `metadata.editor` now builds a tag source from the map (`ViewerController.highlightedIds` -> `entityForFeature` -> `{ id, position, label }`, `onHighlightChange`) and passes `createTagController` to `mountEditorPanel`, so clicked entities can be tagged from the Metadata panel. Box-select and "tag these rows" are still open (map-viewer / query-builder).
+
 ## In progress
 - (nothing yet)
 

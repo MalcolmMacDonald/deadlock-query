@@ -5,7 +5,7 @@ import { useEffect, useRef } from "react"
 import { LazyPanel } from "./LazyPanel.tsx"
 import { loadQueryBundle } from "./editor.tsx"
 import { loadMetadataSupport } from "./metadataContext.ts"
-import { BUNDLE_MANIFEST_URL } from "./viewer.ts"
+import { BUNDLE_MANIFEST_URL, getViewerController } from "./viewer.ts"
 
 type Viewer = (typeof ViewerService)["Service"]
 let resolveViewer!: (v: Viewer) => void
@@ -18,8 +18,8 @@ const captureViewer = Layer.effectDiscard(Effect.gen(function* () { resolveViewe
 const mountMetadata = (container: HTMLElement): (() => void) => {
   let dispose = () => {}
   let cancelled = false
-  void Promise.all([import("@deadlock-query/map-metadata/editor"), viewerReady, loadQueryBundle()])
-    .then(async ([md, viewer, { manifest }]) => {
+  void Promise.all([import("@deadlock-query/map-metadata/editor"), viewerReady, loadQueryBundle(), getViewerController()])
+    .then(async ([md, viewer, { manifest }, map]) => {
       const drafts = await md.openDraftStore(md.indexedDbDraftStorage(`${manifest.mapName}:${manifest.gameBuildId}`))
       if (cancelled) return
       // Collision checks and accepted records come from the published bundle; without them the editor runs degraded.
@@ -31,8 +31,17 @@ const mountMetadata = (container: HTMLElement): (() => void) => {
       })
       const controller = md.createEditorController({ viewer, drafts, context, identity: () => ({ mapName: manifest.mapName, gameBuildId: manifest.gameBuildId }) })
       if (support) controller.setAccepted(support.accepted)
-      const panel = md.mountEditorPanel(container, controller)
-      dispose = () => { panel.dispose(); controller.dispose() }
+      // Tagging works on what is picked on the map: clicked entities become the tag controller's selection.
+      const source = {
+        selected: () => map.highlightedIds.flatMap((id) => {
+          const e = map.entityForFeature(id)
+          return e ? [{ id: e.id, position: e.position, label: e.class }] : []
+        }),
+        subscribe: (fn: () => void) => map.onHighlightChange(fn),
+      }
+      const tags = md.createTagController({ viewer, drafts, source })
+      const panel = md.mountEditorPanel(container, controller, { tags })
+      dispose = () => { panel.dispose(); tags.dispose(); controller.dispose() }
     })
     .catch((e) => {
       container.textContent = `Metadata editor failed to load: ${String(e)}`
