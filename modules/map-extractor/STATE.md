@@ -206,6 +206,13 @@ Real-map queries showed healing orbs and camps on islands that ziplines should j
 ## Render export that writes no n0.gltf (2026-10-07)
 Malcolm's `publish-map --rebuild` died with ENOENT on `.work/render-full/n0.gltf` at the colour step. The colour-revision bump had invalidated the cached lite stage and the old `render-full` was gone, so the stage re-ran the export; the CLI exited 0 but wrote no `n0.gltf`, and nothing checked until the file was read. `extract` now checks right after the export and fails as `ExportFailed` (stage render) with the tool's own exception line when there is one. **Cause of the empty export is not confirmed** (the same silent exit the `args.render` note describes; disk space is the first thing to check on the laptop: the full export is several GB). Regression test in `extract.test.ts`.
 
+## Real-data check of bundle 25763945 (2026-10-07)
+Checked the published release (extractor 0.5.1, bake 1.1.0) and the raw entity lump on the laptop.
+- **Works:** 6 guardians; lane on 6 guardians, 6 walkers, 12 barracks and all 129 zipline nodes (yellow 46, blue 37, green 46); `floorLevels` and `floorHeightLower` channels present (8,898 multi-level cells); zipline links 105 with 0 dropped (was 3 paths), navmesh `componentsWithLinks` 922 with the largest component holding 92.2 % of polygons once links count.
+- **Not in this bundle yet:** `team` (PR 190) and interior volumes (PR 192) were still unmerged when it was built; `interiorSource` is absent.
+- **Bug found and fixed:** `pathnodes` is a triple-quoted block (`pathnodes  """` ... `"""`) in the real lump, so the single-quote handling never engaged and the lines still became junk keys (`"0.0,"`). The parser now reads `"""` blocks as one flat number list; the 5 zipline paths give 37 / 46 / 46 nodes of 9 numbers each (the 129 nodes), the 2 others 4-number rows (lane markers, not decoded). Lights (`light_barn`, `light_omni2`) still carry comma keys from some other multi-line value; harmless, left alone.
+- `interior_type` is a string (`"0"` / `"1"`) in the lump, not a number; interior entities name their model (`maps/dl_midtown/entities/<name>_<id>.vmdl`) as expected.
+
 ## Navmesh sign-off
 - 2026-10-07: Malcolm looked at the game-nav navmesh OBJ (`lite.qa/navmesh.obj`, build 25761866) and said it looks good. Signed off for the game-nav source; the Recast fallback is not signed off (its input is the clip volumes). Hull choice (`--flow-hull`, default 0) is still unverified.
 

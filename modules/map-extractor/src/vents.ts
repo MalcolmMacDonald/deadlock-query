@@ -28,7 +28,7 @@ export const parseVentValue = (raw: string): VentValue => {
 }
 
 /** A value that opens a quote it does not close on the same line (`pathnodes "`): the rest is on the following lines. */
-const opensQuote = (v: string): boolean => v.startsWith('"') && !(v.length >= 2 && v.endsWith('"'))
+const opensQuote = (v: string): boolean => v.startsWith('"') && !(v.length >= 2 && v.endsWith('"') && v !== '"""')
 
 const NUMBER_LIST = /^[\s,\[\]]*(?:-?\d+(?:\.\d+)?(?:e[+-]?\d+)?[\s,\[\]]*)*$/i
 
@@ -44,7 +44,7 @@ const multiLineValue = (body: string): VentValue =>
 export const parseVents = (text: string): RawEntity[] => {
   const out: RawEntity[] = []
   let cur: RawEntity | undefined
-  let open: { key: string; lines: string[] } | undefined
+  let open: { key: string; lines: string[]; triple: boolean } | undefined
   const close = (): void => {
     if (cur && open) cur.props[open.key] = multiLineValue(open.lines.join(" "))
     open = undefined
@@ -54,8 +54,10 @@ export const parseVents = (text: string): RawEntity[] => {
     const sep = /^=+\s*(\d+)\s*=+$/.exec(t)
     if (open) {
       if (!sep) {
-        const ends = t.endsWith('"')
-        open.lines.push(ends ? t.slice(0, -1) : t)
+        // A `"""` block (the real `pathnodes`) ends at the line carrying the closing `"""`.
+        const q = open.triple ? '"""' : '"'
+        const ends = t.endsWith(q)
+        open.lines.push(ends ? t.slice(0, -q.length) : t)
         if (ends) close()
         continue
       }
@@ -72,7 +74,7 @@ export const parseVents = (text: string): RawEntity[] => {
     const m = /^(\S+)\s+(.*)$/.exec(t)
     if (!m) continue
     const v = m[2]!.trim()
-    if (opensQuote(v)) open = { key: m[1]!, lines: [v.slice(1)] }
+    if (opensQuote(v)) { const triple = v.startsWith('"""'); open = { key: m[1]!, lines: [v.slice(triple ? 3 : 1)], triple } }
     else cur.props[m[1]!] = parseVentValue(m[2]!)
   }
   close()
