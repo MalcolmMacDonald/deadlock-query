@@ -1,15 +1,16 @@
 import { existsSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs"
-import { dirname, join, resolve } from "node:path"
+import { basename, dirname, join, resolve } from "node:path"
 import { spawnSync } from "node:child_process"
 import { parsePointer, sha256Hex } from "./lib/data.ts"
 import { writeZip } from "./lib/zip.ts"
 import { checkBundleReady } from "../modules/infra/src/bundleReady.ts"
 import { assetName, bundleFiles, checkBundleBudget, parseBundleManifest, releaseTag, updatePointer } from "./lib/publish.ts"
 
-const USAGE = `bun tools/publish-data.ts <bundle-dir> [--upload]
+const USAGE = `bun tools/publish-data.ts <bundle-dir> [--upload [--skip-existing]]
   Checks the bundle is tiled and baked and its files match the manifest, zips it (without .work, .stage-* and the raw
   game nav files), writes the sha256 into data/current-build.json, and with --upload adds the zip to the GitHub Release
-  data-<buildId> via gh (created on first use; the asset name carries the hash, so earlier assets are never overwritten).
+  data-<buildId> via gh (created on first use; the asset name carries the hash, so earlier assets are never overwritten;
+  --skip-existing does not upload again when the Release already has an asset of that name).
   Then open a PR ([infra] title prefix) with the pointer change.`
 
 const run = (cmd: string, args: string[], cwd?: string) => {
@@ -45,8 +46,13 @@ if (import.meta.main) {
   if (upload) {
     const exists = spawnSync("gh", ["release", "view", tag], { stdio: "ignore" }).status === 0
     if (!exists) run("gh", ["release", "create", tag, "--title", tag, "--notes", `Derived ${info.tier} map data for game build ${info.buildId}. See docs/takedown.md.`])
-    run("gh", ["release", "upload", tag, zip, "--clobber"])
-    console.log(`uploaded to release ${tag}`)
+    const name = basename(zip)
+    const have = process.argv.includes("--skip-existing") && run("gh", ["release", "view", tag, "--json", "assets", "--jq", ".assets[].name"]).split("\n").includes(name)
+    if (have) console.log(`release ${tag} already has ${name}; not uploading again`)
+    else {
+      run("gh", ["release", "upload", tag, zip, "--clobber"])
+      console.log(`uploaded to release ${tag}`)
+    }
   } else {
     console.log(`next: gh release create ${tag} --title ${tag} --notes "..." && gh release upload ${tag} ${zip} --clobber   (or rerun with --upload)`)
   }
