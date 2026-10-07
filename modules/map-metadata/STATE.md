@@ -1,8 +1,8 @@
 # map-metadata — state
 
-- **Status:** M0-M4 done (live deploy: KV id set, secrets and deploy are Malcolm's); M5 review logic done, review panel UI next
-- **Version:** 0.6.0
-- **Current milestone:** M5 in progress (logic done)
+- **Status:** M0-M4 and M6 done; M5 review panel UI and M7 left (live deploy of the worker is Malcolm's)
+- **Version:** 0.7.0
+- **Current milestone:** M6 complete
 - **Last updated:** 2026-10-07
 
 ## Done
@@ -30,6 +30,8 @@
 
 - M5 logic (2026-10-07): `src/review/`. `ReviewApi` (queue, submission, dataFile, commitFile, merge, close, comment) with `proxyApi(fetch)` over the dev site's `/api/github/*` (CSRF header, no token in the browser; the queue is open PRs whose head branch starts `metadata-submission/` and lives in the same repo). `loadForReview` validates a PR's submission; `bulkDecisions` (`acceptValid` rejects records with errors, `rejectAll`); `applyDecisions` stamps `status`, reviewer, `reviewedAt`, comment and merges into `data/metadata/<build>/<kind>.json` (replace by id, sorted, canonical text); `commitDecisions` commits those files to the PR branch then merges (or closes the PR when nothing was accepted) and refuses undecided records; `requestChanges` and `rejectSubmission` comment/close. 7 tests with a fake API and a mocked proxy.
 
+- M6 (2026-10-07): `bun run metadata:merge -- <build-dir> [--check]` builds `metadata.bundle.json` from the per-kind files (validates the build first, `makeMetadataBundle` ordering + hash, canonical pretty text so the same data gives the same bytes; `--check` exits 1 when the bundle is missing or stale, for CI). `bun run metadata:rebase -- --from <build-dir> --manifest <new manifest> [--out dir] [--dry-run] [--json]` carries accepted/stale records to the new build with `rebaseRecords` (worker-safe, `src/rebase.ts`): each is re-validated against the new map (bounds now; collision once a probe is passed), failures become `stale` with the reason in `provenance.comment`, a stale one that fits again is re-accepted, proposed/rejected are not carried. Exit 1 when anything went stale. 7 tests incl. golden-style round trips.
+
 ## In progress
 - (nothing)
 
@@ -46,6 +48,7 @@
 - infra (root file, not editable from this module): NEXT.md row `screenshot-tool, map-metadata | Phase 3` can become `map-metadata | M1: editor panel (M0 done)`.
 
 ## Decisions log
+- 2026-10-07 — M6: the bundle holds every status (the library filters with `acceptedRecords`); rebase carries only accepted and stale records and never drops one silently; `data/metadata/` does not exist on main yet, so `metadata:merge --check` is not wired into CI until the first accepted data lands (infra can add `bun run metadata:merge -- <dir> --check` per build dir then).
 - 2026-10-07 — M4: worker is dependency-free (fetch + KV interface) so contract tests run under bun; rate limits are soft (KV is not atomic) which is fine for abuse control, the PR review is the real gate; the Turnstile token travels in a header so the submission document stays exactly the contracts `Submission`.
 - 2026-10-07 — M3: submitter name is required, GitHub handle optional and stored without `@`; the issue fallback targets this repo (`issueRepo` option); a draft's status/provenance are overwritten on submit so edits cannot smuggle `accepted`.
 - 2026-10-05 — Module scaffolded (rev 2 of IMPLEMENTATION_PLAN.md).
