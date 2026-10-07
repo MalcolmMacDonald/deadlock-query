@@ -52,7 +52,7 @@ const Ring = Schema.Array(Vec3S).check(Schema.isMinLength(3), Schema.isMaxLength
 export const RegionFlag = Schema.Literals(["walkable", "noGo", "interior", "water"])
 export type RegionFlag = typeof RegionFlag.Type
 
-export const NavLinkKind = Schema.Literals(["zipline", "jumpPad", "climb", "teleport", "custom"])
+export const NavLinkKind = Schema.Literals(["zipline", "jumpPad", "climb", "mantle", "teleport", "custom"])
 export type NavLinkKind = typeof NavLinkKind.Type
 
 const CustomGeometry = Schema.Union([

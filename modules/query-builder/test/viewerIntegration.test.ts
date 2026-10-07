@@ -47,3 +47,28 @@ test("featureFocus aims at a point, the centre of a line, and nothing for no fea
   expect(featureFocus({ type: "segment", points: [[0, 0, 0], [2, 4, 6]] })).toEqual([1, 2, 3])
   expect(featureFocus(undefined)).toBeUndefined()
 })
+
+test("a `color` string column and a `size` number column style the map, one layer per distinct look", () => {
+  const r = makeResult(
+    [{ name: "p", type: "point" }, { name: "color", type: "string" }, { name: "size", type: "number" }],
+    [[[0, 0, 0], "red", 4], [[1, 0, 0], "blue", 4], [[2, 0, 0], "red", 4]],
+    ["a", "b", "c"]
+  )
+  const { layers, featureToRow } = overlayFeatures(r, "q")
+  expect(layers.map((l) => [l.id, l.style, l.features.length])).toEqual([
+    ["q", { color: "red", size: 4 }, 2],
+    ["q@1", { color: "blue", size: 4 }, 1]
+  ])
+  expect(featureToRow.get("q@1:0")).toBe("b")
+  expect(featureToRow.get("q:1")).toBe("c")
+})
+
+test("too many distinct looks are ignored rather than creating dozens of layers", () => {
+  const rows = Array.from({ length: 20 }, (_, i) => [[i, 0, 0], `#${i.toString(16).padStart(6, "0")}`])
+  const r = makeResult([{ name: "p", type: "point" }, { name: "color", type: "string" }], rows, rows.map((_, i) => String(i)))
+  expect(overlayFeatures(r, "q").layers.map((l) => l.id)).toEqual(["q"])
+})
+
+test("a result with no style columns keeps one default-coloured layer", () => {
+  expect(overlayFeatures(result, "q").layers[0]!.style).toEqual({ color: COLUMN_COLORS[0]! })
+})

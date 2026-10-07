@@ -108,7 +108,15 @@ self.onmessage = async (e) => {
   try {
     if (loadError) throw new Error("map bundle failed to load: " + loadError);
     nodes = 0;
-    let value = (0, indirectEval)(m.js);
+    // Library >= 0.5: run under withRun so progress(f) and ctx.progress(f) reach the panel (throttled; the last 100% always goes through).
+    let lastProgress = 0;
+    const onProgress = (fraction, label) => {
+      const now = performance.now();
+      if (fraction < 1 && now - lastProgress < 50) return;
+      lastProgress = now;
+      post({ type: "progress", runId: m.runId, fraction, label });
+    };
+    let value = typeof self.withRun === "function" ? self.withRun({ onProgress }, () => (0, indirectEval)(m.js)) : (0, indirectEval)(m.js);
     if (value && typeof value.then === "function") value = await value;
     let totalRows;
     // Cut raw arrays before normalising (cheap), and the normalised form again (a Seq expands in normalize).
@@ -122,7 +130,9 @@ self.onmessage = async (e) => {
     post({ type: "result", runId: m.runId, value: out, ms: performance.now() - t0, totalRows, provisional });
   } catch (err) {
     clearTimers();
-    post({ type: "error", runId: m.runId, message: describe(err) });
+    // A QueryCancelled (an AbortError carrying a reason) thrown by the query's own withRun is a cancellation, not a failure.
+    const cancelled = err && err.name === "AbortError" && (err.reason === "timeout" || err.reason === "cancelled") ? err.reason : undefined;
+    post({ type: "error", runId: m.runId, message: describe(err), cancelled });
   }
 };
 `

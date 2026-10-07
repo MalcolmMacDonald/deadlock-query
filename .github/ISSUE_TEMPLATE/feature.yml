@@ -1,0 +1,18 @@
+name: Feature
+description: A change scoped to exactly one module (the kanban board creates these)
+labels: []
+body:
+  - type: input
+    id: module
+    attributes:
+      label: Module id
+      description: Must match the `module:<id>` label (exactly one) and a directory in modules/.
+    validations: { required: true }
+  - type: textarea
+    id: description
+    attributes: { label: Description }
+    validations: { required: true }
+  - type: textarea
+    id: acceptance
+    attributes: { label: Acceptance criteria }
+    validations: { required: true }

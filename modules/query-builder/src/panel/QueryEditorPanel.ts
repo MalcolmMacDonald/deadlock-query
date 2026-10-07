@@ -90,6 +90,8 @@ const configureMonacoOnce = () => {
   const ts = monaco.languages.typescript
   ts.typescriptDefaults.setCompilerOptions({ target: ts.ScriptTarget.ES2020, allowNonTsExtensions: true, strict: true })
   ts.typescriptDefaults.setEagerModelSync(true)
+  // Parameter names next to literal arguments (`inLane("yellow")` reads `inLane(lane: "yellow")`): the library's calls are terse.
+  ts.typescriptDefaults.setInlayHintsOptions({ includeInlayParameterNameHints: "literals", includeInlayParameterNameHintsWhenArgumentMatchesName: false })
 }
 
 const defaultStorage = (): KeyValueStorage | undefined => { try { return localStorage } catch { return undefined } }
@@ -132,12 +134,14 @@ export const mountQueryEditor = async (container: HTMLElement, opts: QueryEditor
     }
     const rootEl = doc.createElement("div")
     rootEl.className = "dlq-qb"
-    rootEl.innerHTML = `<header><button id="run" type="button" aria-keyshortcuts="Control+Enter">Run (Ctrl+Enter)</button><button id="cancel" type="button" disabled>Cancel</button><span id="status" role="status" aria-live="polite">idle</span><span style="flex:1"></span><button id="problems-toggle" type="button" data-testid="problems-toggle" aria-expanded="false" aria-controls="qb-problems">No problems</button><button id="shortcuts" type="button" data-testid="shortcuts">Keys</button><button id="share" type="button" data-testid="share" title="Copy a link to this query">Share</button><span id="side-toggles" role="group" aria-label="Sidebar"></span></header><div class="qb-body"><div class="qb-main"><div id="notices" class="notices"></div><div id="editor" class="qb-editor" role="region" aria-label="Query editor"></div><div id="qb-problems" class="problems" data-testid="problems" role="region" aria-label="Problems" hidden></div><div id="results" class="qb-results" role="region" aria-label="Results" tabindex="-1"></div></div></div>`
+    rootEl.innerHTML = `<header><button id="run" type="button" aria-keyshortcuts="Control+Enter">Run (Ctrl+Enter)</button><button id="cancel" type="button" disabled>Cancel</button><button id="pin" type="button" data-testid="pin" disabled title="Keep this result on the map while you run other queries">Pin</button><button id="unpin" type="button" data-testid="unpin" hidden>Unpin all</button><span id="status" role="status" aria-live="polite">idle</span><span style="flex:1"></span><button id="problems-toggle" type="button" data-testid="problems-toggle" aria-expanded="false" aria-controls="qb-problems">No problems</button><button id="shortcuts" type="button" data-testid="shortcuts">Keys</button><button id="share" type="button" data-testid="share" title="Copy a link to this query">Share</button><span id="side-toggles" role="group" aria-label="Sidebar"></span></header><div class="qb-body"><div class="qb-main"><div id="notices" class="notices"></div><div id="editor" class="qb-editor" role="region" aria-label="Query editor"></div><div id="qb-problems" class="problems" data-testid="problems" role="region" aria-label="Problems" hidden></div><div id="results" class="qb-results" role="region" aria-label="Results" tabindex="-1"></div></div></div>`
     container.append(rootEl)
     cleanups.push(() => rootEl.remove())
     const q = <T extends HTMLElement>(sel: string) => rootEl.querySelector<T>(sel)!
     const runBtn = q<HTMLButtonElement>("#run")
     const cancelBtn = q<HTMLButtonElement>("#cancel")
+    const pinBtn = q<HTMLButtonElement>("#pin")
+    const unpinBtn = q<HTMLButtonElement>("#unpin")
     const status = q("#status")
     const out = q("#results")
     out.innerHTML = `<p class="empty" data-testid="results-empty">Press Run (Ctrl+Enter) to run the query. Rows appear here, and as points on the map.</p>`
@@ -154,7 +158,7 @@ export const mountQueryEditor = async (container: HTMLElement, opts: QueryEditor
       model, automaticLayout: true, theme: "vs-dark", minimap: { enabled: false },
       // Tab inserts indentation by default; Ctrl+M switches Tab to move focus, so keyboard users can leave the editor.
       ariaLabel: "Query editor. Press Control+M to make Tab move focus out of the editor.",
-      accessibilitySupport: "auto", renderWhitespace: "none"
+      accessibilitySupport: "auto", renderWhitespace: "none", inlayHints: { enabled: "on" }
     })
     cleanups.push(() => editor.dispose())
 
@@ -393,17 +397,25 @@ export const mountQueryEditor = async (container: HTMLElement, opts: QueryEditor
       { signal: pickFiber.signal }
     )
     cleanups.push(() => pickFiber.abort())
-    // `SelectionBus` has no change stream yet, so external selection changes are polled.
-    const poll = setInterval(() => {
-      void Effect.runPromise(selection.current).then((ids) => applySelection(ids.filter((id) => currentResult?.rowIds.includes(id)), false)).catch(() => {})
-    }, SELECTION_POLL_MS)
-    cleanups.push(() => clearInterval(poll))
+    // External selection changes (the viewer's or another panel's): the bus's `changes` stream when it has one, else polling `current`.
+    const adoptExternal = (ids: ReadonlyArray<string>) => applySelection(ids.filter((id) => currentResult?.rowIds.includes(id)), false)
+    if (selection.changes) {
+      const changesFiber = new AbortController()
+      void Effect.runPromise(Stream.runForEach(selection.changes, (ids) => Effect.sync(() => adoptExternal(ids))).pipe(Effect.ignore), { signal: changesFiber.signal })
+      void Effect.runPromise(selection.current).then(adoptExternal).catch(() => {})
+      cleanups.push(() => changesFiber.abort())
+    } else {
+      const poll = setInterval(() => { void Effect.runPromise(selection.current).then(adoptExternal).catch(() => {}) }, SELECTION_POLL_MS)
+      cleanups.push(() => clearInterval(poll))
+    }
     cleanups.push(() => fire(Effect.all([...[...new Set([layerId, ...resultLayers])].map((id) => viewer.removeOverlay(id)), viewer.highlight([])], { discard: true })))
 
     const run = async () => {
       runBtn.disabled = true
       cancelBtn.disabled = false
       status.textContent = "running…"
+      // progress(f) / ctx.progress(f) from the query (library >= 0.5): shown next to the status.
+      runner.onProgress = (fraction, label) => { status.textContent = `running… ${Math.round(fraction * 100)}%${label ? ` ${label}` : ""}` }
       clearNotices()
       const source = model.getValue()
       lastRunSource = source
@@ -415,6 +427,7 @@ export const mountQueryEditor = async (container: HTMLElement, opts: QueryEditor
         resultLayers = await Effect.runPromise(setResultOverlay(layerId, result, resultLayers).pipe(Effect.provide(servicesLayer))).catch(() => resultLayers)
         selectedRowIds = []
         showResult()
+        pinBtn.disabled = false
         status.textContent = "done"
       } catch (e) {
         const err = doc.createElement("pre")
@@ -423,10 +436,12 @@ export const mountQueryEditor = async (container: HTMLElement, opts: QueryEditor
         err.textContent = e instanceof Error ? e.message : String(e)
         out.replaceChildren(err)
         if (!(e instanceof Error && e.message === "Query cancelled.")) store.record({ source, status: "error", error: err.textContent ?? "" })
-        status.textContent = "error"
+        status.textContent = e instanceof Error && e.message === "Query cancelled." ? "cancelled" : "error"
         currentResult = null
+        pinBtn.disabled = true
         table = null
       } finally {
+        runner.onProgress = undefined
         runBtn.disabled = false
         cancelBtn.disabled = true
         panes.refresh()
@@ -435,6 +450,29 @@ export const mountQueryEditor = async (container: HTMLElement, opts: QueryEditor
     const cancel = () => void Effect.runPromise(Effect.gen(function* () { yield* (yield* QueryEngine).cancel }).pipe(Effect.provide(engineLayer)))
     runBtn.addEventListener("click", () => void run())
     cancelBtn.addEventListener("click", cancel)
+    // Pinned results: copies of the current result's layers under their own ids, so the next run does not replace them.
+    let pinned: string[] = []
+    let pinCount = 0
+    pinBtn.addEventListener("click", () => {
+      if (!currentResult) return
+      const n = ++pinCount
+      const ids: string[] = []
+      for (const l of overlayFeatures(currentResult, layerId).layers) {
+        const id = `${layerId}-pin${n}~${ids.length}`
+        ids.push(id)
+        fire(viewer.setOverlay(id, l.features, l.style))
+      }
+      pinned.push(...ids)
+      unpinBtn.hidden = pinned.length === 0
+      status.textContent = `pinned (${pinned.length} layer${pinned.length === 1 ? "" : "s"})`
+    })
+    unpinBtn.addEventListener("click", () => {
+      fire(Effect.all(pinned.map((id) => viewer.removeOverlay(id)), { discard: true }))
+      pinned = []
+      unpinBtn.hidden = true
+      status.textContent = "unpinned"
+    })
+    cleanups.push(() => fire(Effect.all(pinned.map((id) => viewer.removeOverlay(id)), { discard: true })))
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => void run())
     return { dispose, editor, run, cancel, runner, sidebar, store, shareUrl }
   } catch (e) {

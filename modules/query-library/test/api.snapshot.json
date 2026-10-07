@@ -1,5 +1,5 @@
 {
-  "apiVersion": "0.4.0",
+  "apiVersion": "0.5.0",
   "symbols": [
     "BundleInput interface interface BundleInput",
     "DEFAULT_SETTINGS const DEFAULT_SETTINGS: MapSettings =",
@@ -65,11 +65,14 @@
     "OrderedSeq.thenBy method thenBy(key: (item: T) => number | string): OrderedSeq<T>",
     "OrderedSeq.thenByDescending method thenByDescending(key: (item: T) => number | string): OrderedSeq<T>",
     "OverridableNavMeshLike interface interface OverridableNavMeshLike",
+    "QueryCancelled class class QueryCancelled",
+    "QueryCancelled.reason property readonly reason: \"cancelled\" | \"timeout\"",
     "RawEntity interface interface RawEntity",
     "RayHit interface interface RayHit",
     "RaycasterLike interface interface RaycasterLike",
     "RecordProvenance interface interface RecordProvenance",
     "Region interface interface Region",
+    "RunOptions interface interface RunOptions",
     "SampleApi class class SampleApi",
     "SampleApi.density method density(points: Locatable | Iterable<Locatable>, cellSize: number): Seq<HeatCell>",
     "SampleApi.grid method grid(spacing: number, opts: GridOpts =",
@@ -116,10 +119,13 @@
     "Vec3.z property readonly z: number",
     "VisibleOpts interface interface VisibleOpts",
     "WallHit interface interface WallHit",
+    "ctx const ctx =",
     "meters const meters = (n: number): number => n * UNITS_PER_METER",
+    "progress const progress = (fraction: number, label?: string): void =>",
     "regionOf const regionOf = (at: Locatable, cellSize: number): Region =>",
     "seconds const seconds = (n: number): number => n",
     "units const units = (n: number): number => n",
-    "vec const vec = (x: number, y: number, z: number): Vec3 => new Vec3(x, y, z)"
+    "vec const vec = (x: number, y: number, z: number): Vec3 => new Vec3(x, y, z)",
+    "withRun const withRun = <T>(opts: RunOptions, f: () => T): T =>"
   ]
 }

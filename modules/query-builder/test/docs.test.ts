@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { findByWord, insertionFor, searchDocs } from "../src/docs/catalog.ts"
+import { DOC_ALLOWLIST, findByWord, insertionFor, searchDocs } from "../src/docs/catalog.ts"
 import { GALLERY } from "../src/gallery/queries.ts"
 import { SNIPPETS, expandSnippet } from "../src/docs/snippets.ts"
 import { docIndexFromSource, typecheck } from "./librarySource.ts"
@@ -8,9 +8,16 @@ const index = docIndexFromSource()
 const item = (id: string) => index.byId.get(id)!
 
 test("the index lists every catalog entry and member under a stable id", () => {
-  expect(index.items.length).toBeGreaterThan(80)
+  expect(index.items.length).toBeGreaterThan(40)
+  expect(index.items.length).toBeLessThan(80)
   for (const id of ["MapContext", "seconds", "EntityList.withinTravelTime", "Seq.where", "Vec3.travelTimeTo"]) expect(index.byId.has(id)).toBe(true)
   expect(new Set(index.items.map((i) => i.id)).size).toBe(index.items.length)
+})
+
+test("the docs show only the curated allowlist, without plumbing members", () => {
+  const owners = new Set(index.items.filter((i) => i.owner === undefined).map((i) => i.id))
+  expect([...owners].sort()).toEqual([...DOC_ALLOWLIST].sort())
+  for (const id of ["MapContext.fromBundle", "MapEntity.provenance", "withRun", "RawEntity", "OrderedSeq"]) expect(index.byId.has(id)).toBe(false)
 })
 
 // M4 acceptance: each catalog entry is reachable from the editor hover, which looks entries up by the word under the cursor.

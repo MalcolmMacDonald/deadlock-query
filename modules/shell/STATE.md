@@ -1,8 +1,8 @@
 # shell — state
 
-- **Status:** M5 done except a Lighthouse run (axe audit is clean); M4 done (dev-only modules, lock screen, live DevAuth); M3 done; M2 done except swapping the fixture for the published bundle (viewer + embedded query editor wired to the shared viewer/selection; rows overlay and highlight on the map, map picks select rows)
+- **Status:** M5 done (Lighthouse accessibility 100, axe clean); M4 done (dev-only modules, lock screen, live DevAuth); M3 done; M2 done except swapping the fixture for the published bundle (viewer + embedded query editor wired to the shared viewer/selection; rows overlay and highlight on the map, map picks select rows)
 - **Version:** 0.1.1
-- **Current milestone:** M5 complete (see Next for the Lighthouse number); M2 fixture swap waits on a published bundle
+- **Current milestone:** M5 complete; M2 fixture swap waits on a published bundle
 - **Last updated:** 2026-10-06
 
 ## Done
@@ -47,13 +47,13 @@
 
 - 2026-10-07 — Narrow screens: below 700 px the default layout (first load and "Reset layout"/presets) is the map on top with the editor below it and Tools/Layers/Inspector as tabs of the editor's group (`compact` flag of the presets; `inactive` keeps the editor in front), and the header is tighter. Checked in Chromium at 390x800 on the real bundle. A layout saved on a wide screen is kept as is.
 
+- 2026-10-07 — Lighthouse run (v12, headless Chromium, `vite preview` of the production build, no published data bundle): **accessibility 100**, best practices 96 (only a console error from the absent `./data` bundle and missing source maps). The >= 90 acceptance is met; the run was done by hand (`CHROME_PATH=... npx lighthouse http://localhost:4173/ --only-categories=accessibility,best-practices`), Lighthouse is not a dependency. Re-run against the deployed dev site once a real bundle is published.
 - 2026-10-07 — Keyboard resizing: Alt+Shift+Arrow Right/Left/Down/Up widen, narrow, heighten and shorten the active panel's group by 40 px (`resizeActiveGroup` in `src/dock.ts`, palette commands "Make active panel group wider" etc., listed in Help & About). `e2e/polish.ts` presses the shortcuts and checks the width changes (the e2e run could not be completed in the cloud container: it already timed out waiting for the Query tab before this change).
 
 ## In progress
 - (nothing yet)
 
 ## Next
-- M5 leftover: a real Lighthouse accessibility run (acceptance is >= 90). It is not installed here; the axe-core audit (same engine) is clean on the dock, About, toast and palette in both themes, so the score should be high, but it is unmeasured.
 - M2 (remaining): swap the fixture for the published MapBundle once Malcolm publishes a real one.
 - M3 leftovers: share links are uncompressed (a default layout is a few KB); compress if links get unwieldy. Review preset has nothing to show until map-metadata ships a `metadata.*` panel.
 - Infra follow-up: ship `library.json` without the standalone editor app (it is only published for that file now).

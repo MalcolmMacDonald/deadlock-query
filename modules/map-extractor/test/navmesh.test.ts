@@ -8,7 +8,7 @@ import { NavMesh } from "@deadlock-query/spatial-core"
 import { bakeBundle } from "../src/bake.ts"
 import { inspectBundle } from "../src/inspect.ts"
 import {
-  bakeNavmesh, entityLinks, islandLinks, navmeshObj, nearTest, polygonComponents, snapLinks, stitchTileBorders, toNavMeshData, weldVertices,
+  bakeNavmesh, entityLinks, islandLinks, mantleLinks, navmeshObj, nearTest, polygonComponents, snapLinks, stitchTileBorders, toNavMeshData, weldVertices,
   type PolygonSoup
 } from "../src/navmesh.ts"
 
@@ -195,6 +195,14 @@ test("navmesh bake error paths", async () => {
   const tall = await bakeNavmesh(dir, { agent: { height: 100000 }, qaDir: false })
   expect(tall.ok).toBe(false)
   expect(tall.errors.join(" ")).toMatch(/no polygons|Recast failed/)
+})
+
+test("mantleLinks mirrors one-way drops upward as a separate, optional link kind", () => {
+  const drop = { from: [0, 0, 500], to: [100, 0, 100], kind: "navConnection", bidirectional: false } as const
+  const small = { from: [0, 0, 120], to: [100, 0, 100], kind: "navConnection", bidirectional: false } as const
+  const rope = { from: [0, 0, 500], to: [100, 0, 0], kind: "zipline", bidirectional: true } as const
+  const m = mantleLinks([drop, small, rope])
+  expect(m).toEqual([{ from: [100, 0, 100], to: [0, 0, 500], kind: "mantle", bidirectional: false }])
 })
 
 test("islandLinks joins a small nearby fragment to the main piece and leaves far or high ones alone", () => {
