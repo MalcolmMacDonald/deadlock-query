@@ -41,6 +41,7 @@ describe.skipIf(!dir || !existsSync(`${dir}/baked/navmesh.bin`))("real dl_midtow
     expect(nearest.length).toBe(52)
     expect(nearest.filter((r) => r.orb === null).length).toBe(4)
     expect(nearest.find((r) => r.camp === "14781:1755")).toEqual({ camp: "14781:1755", orb: "1380425:99", seconds: 2.1 })
+    expect(await example("camps-in-sight-of-patrons")).toEqual(["14781:1800", "14781:3432", "14781:3445", "14781:3581", "14781:3583"])
     expect((await example("path-chokepoints") as [string, number][])[0]).toEqual(["0,-1", 8])
   })
 })

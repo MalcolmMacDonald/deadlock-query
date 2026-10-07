@@ -110,3 +110,14 @@ test("distance-field cache is bounded by bytes, not only by entry count", () => 
   expect(calls).toBe(21)
   void m
 })
+
+test("line of sight uses collision only; walkable follows the navmesh; path takes a radius", () => {
+  const a = vec(-3750, -3750, 0), b = vec(3750, 3750, 0)
+  expect(a.hasLineOfSightTo(b)).toBe(true) // open floor: the ray stays above z=0
+  expect(a.hasLineOfSightTo(vec(3750, 3750, -200), { targetHeight: 0 })).toBe(false) // target under the floor
+  expect(map.healingOrbs.withLineOfSightTo(map.guardians).count()).toBe(map.healingOrbs.count())
+  expect(map.nav.walkable(a, b)).toBe(true)
+  expect(map.nav.walkable(a, vec(3750, 90000, 0))).toBe(false)
+  const plain = map.nav.path(a, b)!, wide = map.nav.path(a, b, { radius: 100 })!
+  expect(wide.time).toBe(plain.time)
+})
