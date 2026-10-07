@@ -6,10 +6,10 @@ import type { VisibleOpts } from "./spatial.ts"
 import type { RecordProvenance } from "./metadata.ts"
 
 /**
- * Lane colour. Lane numbers 1-3 map to colours through `MapSettings.laneColors`.
+ * Lane colour: Yellow, Blue (the middle lane) or Green. Lane numbers 1-3 map to colours through `MapSettings.laneColors`.
  * @category Entities
  */
-export type Lane = "yellow" | "blue" | "purple"
+export type Lane = "yellow" | "blue" | "green"
 
 /**
  * Normalised entity kinds exposed to queries.

@@ -11,7 +11,7 @@ import { mergeMetadata, type MetadataInput, type MetadataReport } from "./metada
  * @category Context
  */
 export interface MapSettings {
-  /** Lane number -> colour. Proposed default: 1 yellow, 2 blue, 3 purple. */
+  /** Lane number -> colour. Default: 1 yellow, 2 blue (middle), 3 green (the game data calls it "purple"). */
   readonly laneColors: Readonly<Record<number, Lane>>
   /** A metadata camp or orb within this many Source units of an extractor entity of the same kind is a duplicate and is skipped. Proposed default 150. */
   readonly metadataDedupeRadius: number
@@ -20,7 +20,7 @@ export interface MapSettings {
 }
 
 /** Default {@link MapSettings}. @category Context */
-export const DEFAULT_SETTINGS: MapSettings = { laneColors: { 1: "yellow", 2: "blue", 3: "purple" }, metadataDedupeRadius: 150, regionZTolerance: 250 }
+export const DEFAULT_SETTINGS: MapSettings = { laneColors: { 1: "yellow", 2: "blue", 3: "green" }, metadataDedupeRadius: 150, regionZTolerance: 250 }
 
 /** What `MapContext.fromBundle` needs from a loaded bundle.
  * @category Context */

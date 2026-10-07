@@ -1,5 +1,5 @@
 {
-  "apiVersion": "0.2.0",
+  "apiVersion": "0.3.0",
   "symbols": [
     "BundleInput interface interface BundleInput",
     "DEFAULT_SETTINGS const DEFAULT_SETTINGS: MapSettings =",
@@ -17,7 +17,7 @@
     "EntityList.withinTravelTime method withinTravelTime(time: number, of: Locatable | Iterable<Locatable>): EntityList",
     "GridOpts interface interface GridOpts",
     "HeatCell interface interface HeatCell",
-    "Lane type export type Lane = \"yellow\" | \"blue\" | \"purple\"",
+    "Lane type export type Lane = \"yellow\" | \"blue\" | \"green\"",
     "Locatable type export type Locatable = MapEntity | Vec3",
     "MapContext class class MapContext",
     "MapContext.creepCamps getter get creepCamps(): EntityList",

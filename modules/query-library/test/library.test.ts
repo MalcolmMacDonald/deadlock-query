@@ -33,6 +33,13 @@ describe("entities", () => {
     expect(map.guardians.inLane("yellow").toArray().map((e) => e.id)).toEqual(["guardian-1-2", "guardian-1-3"])
     expect(map.guardians.inLane("blue").onTeam(3).first()!.id).toBe("guardian-2-3")
   })
+  test("lanes are yellow (1), blue (2) and green (3); there is no purple lane", () => {
+    expect(map.guardians.inLane("green").toArray().map((e) => e.laneNumber)).toEqual([3, 3])
+    expect(map.guardians.inLane("green").count()).toBe(map.guardians.inLane(3).count())
+    expect(map.guardians.toArray().map((e) => e.lane)).not.toContain("purple" as never)
+    // @ts-expect-error "purple" is not a lane; the game data's "purple" lane is Green
+    expect(map.guardians.inLane("purple").count()).toBe(0)
+  })
   test("within accepts entity, point and iterable; chains keep entity helpers", () => {
     const g = map.guardians.inLane("yellow").onTeam(2).first()!
     expect(map.healingOrbs.within(3000, g).count()).toBe(1)
