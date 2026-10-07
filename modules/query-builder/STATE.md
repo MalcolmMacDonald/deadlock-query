@@ -145,3 +145,4 @@ Also verified: library-class member completions with TSDoc signature, string-lit
 
 ## Open questions
 - (see PLAN.md §9)
+- 2026-10-07 — Docs pared down: the Docs tab, search and hover links show only `DOC_ALLOWLIST` (`docs/catalog.ts`: MapContext, EntityList, MapEntity, Seq, Vec3, vec, seconds, meters, Lane, NavApi, SampleApi) minus plumbing members (`DOC_HIDDEN_MEMBERS`). New library exports stay out of the docs until added there. Autocomplete and type checking still use the full .d.ts. Gallery queries and snippets are unchanged and still type-checked.

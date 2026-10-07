@@ -135,7 +135,7 @@ test.skipIf(!haveBrowser)("docs panel searches the catalog and inserts at the cu
   await setSource(page, "map.healingOrbs")
   await page.evaluate(() => { const e = (self as any).__qb.editor; e.setPosition(e.getModel().getFullModelRange().getEndPosition()) })
   await page.click("[data-testid=toggle-docs]")
-  expect(await page.$$eval("[data-testid=doc-item]", (r) => r.length)).toBeGreaterThan(80)
+  expect(await page.$$eval("[data-testid=doc-item]", (r) => r.length)).toBeGreaterThan(40)
   await page.fill("[data-testid=docs-search]", "withinTravel")
   await page.waitForFunction(() => document.querySelector("[data-testid=doc-item]")?.textContent === "EntityList.withinTravelTime")
   await page.click("[data-testid=doc-item]")
