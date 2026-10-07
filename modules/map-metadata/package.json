@@ -1,6 +1,6 @@
 {
   "name": "@deadlock-query/map-metadata",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
@@ -11,7 +11,9 @@
     "test": "bun test",
     "metadata:validate": "bun scripts/validate.ts",
     "verify": "bun run typecheck && bun run test",
-    "dev:standalone": "bun harness/build.ts"
+    "dev:standalone": "bun harness/build.ts",
+    "metadata:merge": "bun scripts/merge.ts",
+    "metadata:rebase": "bun scripts/rebase.ts"
   },
   "dependencies": {
     "@deadlock-query/contracts": "workspace:*",
