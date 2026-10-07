@@ -58,6 +58,8 @@
 
 - 2026-10-07 — Inspector: every field value is a flat button that copies the value on click or Enter (title "Copy value", "Copied" for 1.5 s); the whole-selection "Copy JSON" stays. Not unit-tested (the inspector tests run without a DOM) and not yet exercised in a browser.
 
+- Box-select (2026-10-07): Alt + left-drag with the select tool draws a rectangle and picks every point feature inside it (entities, tags, query-result points; not annotations). Shift/Ctrl/Cmd adds to the current picks. `pickInRect` (overlays.ts), `ViewerController.selectFeatures(ids, additive)`; the picks are the same highlight list the inspector and map-metadata tagging read. Plain drags still pan/orbit (Shift-drag still pans). Not yet checked in a real browser on the published bundle.
+
 ## In progress
 - (nothing)
 

@@ -76,6 +76,27 @@ const insidePolygon = (px: number, py: number, pts: ReadonlyArray<readonly [numb
   return inside
 }
 
+/** Ids of every point feature whose screen position lies inside the pixel rectangle (corners in any order), in layer order. */
+export const pickInRect = (
+  layers: Iterable<readonly [string, OverlayLayerData]>,
+  project: Project,
+  a: readonly [number, number],
+  b: readonly [number, number],
+  includeLayer: (layerId: string) => boolean = () => true
+): string[] => {
+  const x0 = Math.min(a[0], b[0]), x1 = Math.max(a[0], b[0]), y0 = Math.min(a[1], b[1]), y1 = Math.max(a[1], b[1])
+  const out: string[] = []
+  for (const [layerId, layer] of layers) {
+    if (!includeLayer(layerId)) continue
+    layer.features.forEach((f, i) => {
+      if (f.type !== "point") return
+      const s = project(f.at)
+      if (s && s[0] >= x0 && s[0] <= x1 && s[1] >= y0 && s[1] <= y1) out.push(featureId(layerId, i))
+    })
+  }
+  return out
+}
+
 /** Nearest feature to a pixel within `radiusPx`, searching layers in the given order (later layers win ties). */
 export const pickFeature = (
   layers: Iterable<readonly [string, OverlayLayerData]>,
