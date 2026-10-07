@@ -12,6 +12,7 @@
     "build": "bun tools/build.ts",
     "dlq-extract": "bun modules/map-extractor/src/cli.ts",
     "publish-data": "bun tools/publish-data.ts",
+    "publish-map": "bun tools/publish-map.ts",
     "check:data": "bun tools/check-data.ts",
     "new-module": "bun tools/new-module.ts"
   },

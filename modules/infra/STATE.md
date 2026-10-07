@@ -57,6 +57,10 @@
 - Root scripts `bun run dlq-extract`, `publish-data`, `check:data` (the docs used `bun run dlq-extract` which did not exist at the root).
 - `docs/dev-site.md` has the full extract, tile, bake, check, publish, PR, deploy sequence for first publish and updates; `runbook.md` and `rollback.md` point to it.
 
+## One-command publish (2026-10-07)
+- `bun run publish-map` (`tools/publish-map.ts`, planning and PR text in `tools/lib/publishMap.ts`, 5 tests): preflight (game build, on `main`, clean tree, `gh` signed in), `extract`/`tile`/`bake` (skipped when the bundle for the installed build already passes `checkBundleReady`; `--rebuild`/`--force` redo them), `inspect`, `pack-lite`, `check:real`, `publish-data --upload --skip-existing` (new flag: no second upload of an asset the Release already has), then branch `data/<id>-<hash>`, a commit of only the pointer, push and a PR assigned with `@me`. Stops on the first failure naming the step. `--dry-run` stops after the zip and restores the pointer. Reruns reuse an already pushed branch or PR, and say so when `main` already points at the asset.
+- Not done: enabling auto-merge on the PR from the script (the sandbox's permission check refused that code in the thread that wrote this; the docs say to enable it by hand or via the merge queue). Not run against the real game or Release: the pure parts are tested, the git/gh orchestration was only exercised for its preflight failures.
+
 ## Next
 - Malcolm: import the ruleset, enable auto-merge, optional `LOCKFILE_BOT_TOKEN`, run the prod rollback dry run (see `docs/runbook.md` one-time setup).
 - Malcolm creates the fine-grained PAT and sets `GITHUB_TOKEN_PROXY` (see `docs/secrets.md`); then curl the live proxy with a session cookie, confirm the token never appears in a response.
