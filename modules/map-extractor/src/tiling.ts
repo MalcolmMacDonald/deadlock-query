@@ -109,6 +109,13 @@ export const tileBundle = async (dir: string, opts: TileOptions = {}): Promise<T
     for (const u of imageUris(source)) staleTextures.add(join(dirname(path), decodeURIComponent(u)))
     if (!opts.keepTextures) source.getRoot().listTextures().forEach((t) => t.dispose())
     source.setLogger(new Logger(Logger.Verbosity.WARN))
+    // The untextured lite tier is flat-shaded by the viewer, so normals, tangents and UVs are dead weight; keeping them
+    // splits every seam and hard edge into separate vertices (triangle soup), which the simplifier cannot collapse.
+    if (!opts.keepTextures) {
+      for (const prim of source.getRoot().listMeshes().flatMap((m) => m.listPrimitives())) {
+        for (const sem of prim.listSemantics()) if (sem === "NORMAL" || sem === "TANGENT" || sem.startsWith("TEXCOORD_")) prim.setAttribute(sem, null)
+      }
+    }
     await source.transform(weld())
     for (let lod = 0; lod < lods; lod++) {
       const doc = cloneDocument(source).setLogger(new Logger(Logger.Verbosity.WARN))
