@@ -20,7 +20,7 @@ import { WALKABLE_FLOW_FILE, WALKABLE_NAV_FILE, loadWalkable, type WalkableStats
  * Recast (`source: "game-nav"`): `world_physics` holds only clip volumes, so Recast over it describes clip lids, not the walkable map.
  */
 
-export const NAVMESH_BAKE_VERSION = "1.1.0"
+export const NAVMESH_BAKE_VERSION = "1.3.0"
 
 /** Source units. Provisional: these are Source-engine defaults, not measured from Deadlock heroes. */
 export interface NavAgent { readonly radius: number; readonly height: number; readonly climb: number; readonly slopeDegrees: number }
@@ -537,6 +537,23 @@ export const islandLinks = (soup: PolygonSoup, labels: Int32Array): NavLink[] =>
   }))
 }
 
+/**
+ * Upward traversals mirrored from the game's one-way drops (`navConnection` flow links). The game's flow map only lists ways
+ * down, so rooftop and ledge platforms (orbs, camps) have no way up in the graph although players jump and mantle onto them.
+ * Each drop of at least `MANTLE_MIN_DROP` and at most `MANTLE_MAX_RISE` units gets a one-way reverse link of kind `mantle`.
+ * It is a separate kind on purpose: a query's `linkSpeeds` sets what climbing costs (give `mantle` a speed well under walking
+ * speed, e.g. half of it) and leaves it out to forbid climbing. Set `MANTLE_LINKS` to false to stop emitting them.
+ */
+export const MANTLE_LINKS = true
+export const MANTLE_MIN_DROP = 48
+export const MANTLE_MAX_RISE = 1600
+export const MANTLE_KIND = "mantle"
+
+export const mantleLinks = (links: ReadonlyArray<NavLink>): NavLink[] =>
+  !MANTLE_LINKS ? [] : links
+    .filter((l) => l.kind === "navConnection" && l.bidirectional !== true && l.from[2] - l.to[2] >= MANTLE_MIN_DROP && l.from[2] - l.to[2] <= MANTLE_MAX_RISE)
+    .map((l) => ({ from: l.to, to: l.from, kind: MANTLE_KIND, bidirectional: false }))
+
 /** Navmesh from the game's own nav faces (+ entity links and the `.navflowmap` connections that polygon adjacency lacks). */
 const bakeGameNavmesh = async (
   dir: string, entities: ReadonlyArray<Entity>, entitiesHash: string, errors: string[], warnings: string[], o: NavmeshOptions
@@ -587,7 +604,8 @@ const bakeGameNavmesh = async (
       warnings.push(`navflowmap unreadable, no flow connections: ${e instanceof Error ? e.message : String(e)}`)
     }
   } else warnings.push(`no ${WALKABLE_FLOW_FILE}: the mesh has no game-provided jump/drop connections`)
-  const linked = [...entityKept, ...flowKept]
+  const mantles = mantleLinks(flowKept)
+  const linked = [...entityKept, ...flowKept, ...mantles]
   const stitches = islandLinks(soup, labelsWithLinks(component, NavMesh.fromPolygons(toNavMeshData(soup), linked), linked))
   if (stitches.length > 0) o.log?.(`navmesh: ${stitches.length} small islands stitched to the nearest larger piece`)
   const links = [...linked, ...stitches]
