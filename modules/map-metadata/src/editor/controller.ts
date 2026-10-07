@@ -3,6 +3,7 @@ import { type MetadataKind, type MetadataRecord, type OverlayFeature, type Vec3,
 import type { ValidationContext } from "../context.ts"
 import type { Issue, ValidationReport } from "../issues.ts"
 import { KIND_IDS, kindDefinition } from "../kinds.ts"
+import { buildSubmission, issueLink, submissionFile, type BuildResult } from "../submit/submission.ts"
 import { validateRecords } from "../validate.ts"
 import { DEFAULT_OPTIONS, type DrawOptions } from "./build.ts"
 import type { DraftStore } from "./drafts.ts"
@@ -16,7 +17,16 @@ export interface EditorControllerOptions {
   readonly drafts: DraftStore
   /** Read at every validation, so a collision probe or existing records that arrive later are picked up (M2). */
   readonly context?: () => ValidationContext
+  /** The loaded build and map; defaults to `context().expect`. Without it a submission cannot be made. */
+  readonly identity?: () => { readonly gameBuildId: string; readonly mapName: string } | undefined
+  /** GitHub repo for the issue fallback (`owner/name`). */
+  readonly issueRepo?: string
 }
+
+export interface SubmitInput { readonly name: string; readonly github?: string; readonly note?: string }
+export type SubmitResult =
+  | { readonly ok: true; readonly fileName: string; readonly text: string; readonly issueUrl: string; readonly issueInlined: boolean; readonly warnings: number }
+  | { readonly ok: false; readonly report: BuildResult["report"] }
 
 export interface EditorState {
   readonly options: DrawOptions
@@ -40,6 +50,8 @@ export interface EditorController {
   readonly edit: (id: string, patch: Readonly<Record<string, unknown>>) => string | undefined
   readonly remove: (id: string) => void
   readonly clearAll: () => void
+  /** Builds and checks a submission from all drafts (fallback transport: download + prefilled issue). Drafts are untouched. */
+  readonly submit: (input: SubmitInput) => SubmitResult
   /** Move the camera to a draft or to the place a validation issue points at. */
   readonly focus: (target: string | Issue) => void
   readonly dispose: () => void
@@ -81,7 +93,7 @@ const SELECTED_LAYER = "metadata.selected"
  * overlays, validates them with the module's validators, and holds the panel's selection and options. The panel and the
  * tests both drive this.
  */
-export const createEditorController = ({ viewer, drafts, context }: EditorControllerOptions): EditorController => {
+export const createEditorController = ({ viewer, drafts, context, identity, issueRepo }: EditorControllerOptions): EditorController => {
   let options = DEFAULT_OPTIONS
   let selectedId: string | undefined
   let accepted: ReadonlyArray<MetadataRecord> = []
@@ -153,6 +165,16 @@ export const createEditorController = ({ viewer, drafts, context }: EditorContro
     },
     remove: (id) => drafts.remove(id),
     clearAll: () => drafts.clear(),
+    submit: (input) => {
+      const ctx = withAccepted(context?.() ?? {})
+      const id = identity?.() ?? (ctx.expect?.gameBuildId !== undefined && ctx.expect.mapName !== undefined ? { gameBuildId: ctx.expect.gameBuildId, mapName: ctx.expect.mapName } : undefined)
+      if (!id) return { ok: false, report: { issues: [{ severity: "error", code: "no-map", message: "The map is not loaded yet, so a submission cannot be made" }], ok: false, degraded: true } }
+      const r = buildSubmission(drafts.list(), { ...id, submitter: { name: input.name, ...(input.github ? { github: input.github } : {}) }, ...(input.note ? { note: input.note } : {}) }, ctx)
+      if (!r.ok) return r
+      const file = submissionFile(r.submission)
+      const link = issueLink(r.submission, issueRepo ? { repo: issueRepo } : {})
+      return { ok: true, fileName: file.name, text: file.text, issueUrl: link.url, issueInlined: link.inlined, warnings: r.report.issues.length }
+    },
     focus: (target) => {
       const at = typeof target === "string" ? (() => { const r = drafts.get(target); return r ? anchor(r) : undefined })() : target.at
       if (at) run(viewer.flyTo(at, FOCUS_DISTANCE))

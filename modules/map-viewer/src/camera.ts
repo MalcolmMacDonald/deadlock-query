@@ -121,6 +121,21 @@ export const rotate = (pose: CameraPose, dYaw: number, dPitch: number, about: "t
 /** Exponential zoom; `factor` > 1 zooms out. */
 export const zoom = (pose: CameraPose, factor: number): CameraPose => normalize({ ...pose, distance: pose.distance * factor })
 
+/** Two touch points in client pixels. */
+export type TouchPair = readonly [{ readonly x: number; readonly y: number }, { readonly x: number; readonly y: number }]
+
+/**
+ * What a two-finger gesture did between two frames: `scale` is the pinch ratio (> 1 = fingers moved apart) and
+ * `dx`/`dy` the movement of the midpoint in pixels. Zero-length pairs report scale 1.
+ */
+export const pinchDelta = (prev: TouchPair, next: TouchPair): { scale: number; dx: number; dy: number } => {
+  const span = (p: TouchPair) => Math.hypot(p[1].x - p[0].x, p[1].y - p[0].y)
+  const mid = (p: TouchPair) => ({ x: (p[0].x + p[1].x) / 2, y: (p[0].y + p[1].y) / 2 })
+  const a = span(prev), b = span(next)
+  const m0 = mid(prev), m1 = mid(next)
+  return { scale: a > 1e-6 && b > 1e-6 ? b / a : 1, dx: m1.x - m0.x, dy: m1.y - m0.y }
+}
+
 /** Keys that move the camera without a pointer (arrows, plus/minus); anything else is not a camera key. */
 export const CAMERA_KEYS: ReadonlyArray<string> = ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "+", "=", "-", "_"]
 

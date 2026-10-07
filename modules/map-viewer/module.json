@@ -1,6 +1,6 @@
 {
   "id": "map-viewer",
-  "version": "0.17.0",
+  "version": "0.19.0",
   "kind": "web",
   "dependsOn": ["contracts", "spatial-core"],
   "devOnly": false,

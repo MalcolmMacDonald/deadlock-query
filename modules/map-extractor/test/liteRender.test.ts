@@ -223,7 +223,7 @@ test("bakes a COLOR_0 per vertex from the material paint: tint, texture sampled 
   ]), [0.2, 0.2, 0.2])
   const out = mkdtempSync(join(tmpdir(), "dlq-out-"))
   const r = buildLiteTiles(src, out, { cell: 1e6, colors: provider })
-  expect(r.colors).toEqual({ primitives: 3, painted: 2, textured: 2, unpainted: ["b_mt_unknown"] })
+  expect(r.colors).toEqual({ primitives: 3, painted: 2, textured: 2, unpainted: ["b_mt_unknown"], whitened: 0, overbright: 0, whiteMeshes: [] })
   expect(r.tiles).toHaveLength(1)
   const [C] = colorsOf(join(out, r.tiles[0]!.file))
   const rgba = (i: number) => [...C!.subarray(i * 4, i * 4 + 4)]
@@ -239,6 +239,31 @@ test("bakes a COLOR_0 per vertex from the material paint: tint, texture sampled 
   // UVs are not written once colours are baked
   const j = readGltfJson(join(out, r.tiles[0]!.file)) as any
   expect(j.meshes[0].primitives.every((p: any) => p.attributes.TEXCOORD_0 === undefined && p.attributes.COLOR_0 !== undefined)).toBe(true)
+})
+
+test("white bakes (a placeholder or an effect card) are painted the fallback grey, overbright ones are scaled with their hue", async () => {
+  await liteReady
+  const { mapProvider, solidMips } = await import("../src/colors.ts")
+  const q = quad(100)
+  const at = (dx: number) => q.pos.map((v, i) => (i % 3 === 0 ? v + dx : v))
+  const src = gltfOf([
+    { name: "a_mt_white", pos: q.pos, idx: new Uint32Array(q.idx), uv: q.uv },
+    { name: "b_mt_hot", pos: at(500), idx: new Uint32Array(q.idx), uv: q.uv },
+    { name: "c_mt_pale", pos: at(1000), idx: new Uint32Array(q.idx), uv: q.uv }
+  ])
+  const provider = mapProvider(new Map([
+    ["white", { tint: [1, 1, 1] as const, texture: solidMips([1, 1, 1]) }],
+    ["hot", { tint: [2, 1, 0.5] as const }],
+    ["pale", { tint: [0.9, 0.9, 0.9] as const }]
+  ]), [0.2, 0.2, 0.2])
+  const out = mkdtempSync(join(tmpdir(), "dlq-out-"))
+  const r = buildLiteTiles(src, out, { cell: 1e6, colors: provider })
+  expect(r.colors).toMatchObject({ whitened: 4, overbright: 4, whiteMeshes: ["a_mt_white (4)"] })
+  const [C] = colorsOf(join(out, r.tiles[0]!.file))
+  const rgba = (i: number) => [...C!.subarray(i * 4, i * 4 + 4)]
+  expect([0, 1, 2, 3].map(rgba)).toEqual(Array(4).fill([51, 51, 51, 255])) // white -> fallback
+  expect([4, 5, 6, 7].map(rgba)).toEqual(Array(4).fill([255, 128, 64, 255])) // (2, 1, 0.5) / 2 keeps the hue
+  expect([8, 9, 10, 11].map(rgba)).toEqual(Array(4).fill([230, 230, 230, 255])) // real light paint stays
 })
 
 test("without a colour provider the tiles carry no COLOR_0, and the default budget keeps every triangle", () => {

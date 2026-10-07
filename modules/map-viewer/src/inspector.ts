@@ -124,7 +124,7 @@ export const unknownItem = (featureId: string): InspectorItem => ({
 })
 
 const MAX_SHOWN_ITEMS = 25
-const PANEL_CSS = "padding:8px;font:12px/1.4 sans-serif;color:#dfe3e8;background:#1b1e24;height:100%;box-sizing:border-box;overflow:auto"
+const PANEL_CSS = "padding:8px;font:12px/1.4 sans-serif;color:var(--fg,#dfe3e8);background:var(--surface,#1b1e24);height:100%;box-sizing:border-box;overflow:auto"
 
 const el = <K extends keyof HTMLElementTagNameMap>(tag: K, css = "", text?: string): HTMLElementTagNameMap[K] => {
   const n = document.createElement(tag)
@@ -164,22 +164,22 @@ export const makeInspectorPanel = (controller: ViewerController): PanelComponent
       count.textContent = ids.length === 0 ? "Nothing selected" : ids.length === 1 ? "1 selected" : `${ids.length} selected`
       copy.disabled = clear.disabled = ids.length === 0
       body.replaceChildren()
-      if (ids.length === 0) body.append(el("div", "color:#9aa3ad", "Click a point on the map to see its metadata. Shift-click adds more."))
+      if (ids.length === 0) body.append(el("div", "color:var(--muted,#9aa3ad)", "Click a point on the map to see its metadata. Shift-click adds more."))
       items.slice(0, MAX_SHOWN_ITEMS).forEach((item, i) => {
-        const box = el("details", "margin:6px 0;border-bottom:1px solid #2c3137;padding-bottom:6px")
+        const box = el("details", "margin:6px 0;border-bottom:1px solid var(--border,#2c3137);padding-bottom:6px")
         box.open = items.length <= 3 || i === 0
         box.dataset.testid = "inspector-item"
         const sum = el("summary", "cursor:pointer;font-weight:600;word-break:break-all", item.title)
-        if (item.subtitle) sum.append(el("span", "font-weight:400;color:#9aa3ad", `  ${item.subtitle}`))
+        if (item.subtitle) sum.append(el("span", "font-weight:400;color:var(--muted,#9aa3ad)", `  ${item.subtitle}`))
         box.append(sum)
         for (const s of item.sections) {
           if (s.fields.length === 0 && s.name === "Properties") continue
-          box.append(el("div", "margin:6px 0 2px;color:#9aa3ad;text-transform:uppercase;font-size:10px;letter-spacing:.05em", `${s.name} (${s.fields.length})`))
+          box.append(el("div", "margin:6px 0 2px;color:var(--muted,#9aa3ad);text-transform:uppercase;font-size:10px;letter-spacing:.05em", `${s.name} (${s.fields.length})`))
           const table = el("table", "width:100%;border-collapse:collapse")
           for (const f of s.fields) {
             const tr = el("tr")
             tr.append(
-              el("td", "vertical-align:top;padding:1px 6px 1px 0;color:#9aa3ad;word-break:break-all;width:40%", f.key),
+              el("td", "vertical-align:top;padding:1px 6px 1px 0;color:var(--muted,#9aa3ad);word-break:break-all;width:40%", f.key),
               el("td", "vertical-align:top;padding:1px 0;word-break:break-all;font-family:monospace", f.value)
             )
             table.append(tr)
@@ -188,7 +188,7 @@ export const makeInspectorPanel = (controller: ViewerController): PanelComponent
         }
         body.append(box)
       })
-      if (items.length > MAX_SHOWN_ITEMS) body.append(el("div", "color:#9aa3ad;padding:6px 0", `… ${items.length - MAX_SHOWN_ITEMS} more selected, not listed`))
+      if (items.length > MAX_SHOWN_ITEMS) body.append(el("div", "color:var(--muted,#9aa3ad);padding:6px 0", `… ${items.length - MAX_SHOWN_ITEMS} more selected, not listed`))
     }
     render(controller.highlightedIds)
     const stop = controller.onHighlightChange(render)

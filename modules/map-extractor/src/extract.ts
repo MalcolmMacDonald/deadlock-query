@@ -12,7 +12,7 @@ import { toEntities, parseVents } from "./vents.ts"
 import { WALKABLE_FLOW_FILE, WALKABLE_NAV_FILE } from "./walkable.ts"
 
 /** Unchanged by the `nav` stage on purpose: adding it must not invalidate the cached multi-GB render stages. */
-export const EXTRACTOR_VERSION = "0.5.0"
+export const EXTRACTOR_VERSION = "0.5.1"
 export type Tier = "full" | "lite"
 
 export interface ExtractOptions {
@@ -172,7 +172,7 @@ export const extract = async (o: ExtractOptions): Promise<ExtractResult> => {
     const fullGltf = join(work, "render-full", "n0.gltf")
     const liteDir = join(dir, "render")
     const manifestTiles = join(work, "lite-tiles.json")
-    const liteKey = `render-lite-${createHash("sha256").update(JSON.stringify({ ...o.lite, log: undefined, materials: o.materials === true, colors: o.gameVpk !== undefined && o.colors !== false })).digest("hex").slice(0, 8)}`
+    const liteKey = `render-lite-${createHash("sha256").update(JSON.stringify({ ...o.lite, log: undefined, materials: o.materials === true, colors: o.gameVpk !== undefined && o.colors !== false, colorRev: 2 })).digest("hex").slice(0, 8)}`
     await stage(o, dir, liteKey, [manifestTiles], async () => {
       if (o.force || !existsSync(fullGltf)) {
         rmSync(join(work, "render-full"), { recursive: true, force: true }); mkdirSync(join(work, "render-full"), { recursive: true })
@@ -190,6 +190,7 @@ export const extract = async (o: ExtractOptions): Promise<ExtractResult> => {
         warnings.push(`colours: ${p.resolved}/${p.stems} materials painted (${p.textured} with a texture, ${p.textures} textures) in ${p.seconds.toFixed(0)} s${p.unresolved.length ? `; unresolved: ${p.unresolved.slice(0, 15).join(", ")}${p.unresolved.length > 15 ? ` and ${p.unresolved.length - 15} more` : ""}` : ""}`)
       }
       const r = buildLiteTiles(fullGltf, liteDir, { ...o.lite, ...(colors ? { colors } : {}), log: o.log })
+      if (r.colors?.whitened) warnings.push(`colours: ${r.colors.whitened} white vertices painted fallback grey (${r.colors.overbright} overbright scaled); most from ${r.colors.whiteMeshes.slice(0, 5).join(", ")}`)
       if (r.colors) warnings.push(`colours: ${r.colors.painted}/${r.colors.primitives} primitives painted from a material${r.colors.unpainted.length ? ` (fallback grey, e.g. ${r.colors.unpainted.slice(0, 5).join(", ")})` : ""}`)
       warnings.push(...r.warnings.map((w) => `lite render: ${w}`))
       writeFileSync(manifestTiles, JSON.stringify({ tiles: r.tiles, keptTriangles: r.keptTriangles, totalTriangles: r.totalTriangles, textureBytes: r.textureBytes }))

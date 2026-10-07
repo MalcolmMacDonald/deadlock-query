@@ -1,8 +1,8 @@
 # map-viewer — state
 
 - **Status:** M6 done (entity layers, screenshot markers and popups); M5 done (`registerTool` is on the `ViewerService` layer); M4 done; real-hardware perf checks pending
-- **Version:** 0.17.0
-- **Current milestone:** M7 (SDF labels, performance pass)
+- **Version:** 0.19.0
+- **Current milestone:** M7 done except real-hardware performance checks
 - **Last updated:** 2026-10-07
 
 ## Done
@@ -48,6 +48,11 @@
 - 2026-10-07 — M7 (keyboard-only camera): with the canvas focused, arrows pan (Map) or turn the view (Orbit about the target, Fly about the eye), `+`/`-` zoom (Map/Orbit), Shift triples the step (`keyboardStep` in `src/camera.ts`, pure and unit-tested). The canvas has `role="application"` and an `aria-label` listing the keys, and a focus ring that shows for keyboard focus only (`:focus-visible`). Remaining M7: touch (pinch/two-finger), theming, docs.
 
 - 2026-10-07 — Tools panel help: the Select hint is one line ("Click to select, Shift-click to add. F frames the selection.") and the full description (handles, edge insert, Delete, Ctrl+A) is its tooltip, so the hint no longer takes a third of the narrow sidebar.
+- 2026-10-07 — M7 (touch): two fingers pinch to zoom and drag to pan in every camera mode (`pinchDelta` in `src/camera.ts`, pure and unit-tested; `controls.ts` tracks touch pointers and ignores the single-finger drag while two are down; `pointercancel` releases). One finger keeps the mode's usual drag. Not covered by e2e (no touch emulation in the smoke tests). Remaining M7: theming, docs.
+
+- 2026-10-07 — M7 (theming): the DOM panels (`viewer.layers`, `viewer.tools`, `viewer.inspector`) take their text, background, muted text and border from the shell's CSS variables (`--fg`, `--surface`, `--muted`, `--border`) with the old dark colours as fallbacks, so they follow the shell's light/dark theme and look unchanged standalone. The 3D canvas, its HUD, tooltip and screenshot popups stay dark in both themes on purpose (map readability; labels have their own halo). Remaining M7: docs.
+
+- 2026-10-07 — M7 (docs): `README.md` lists the camera, keyboard, touch and annotation controls. M7 checklist is complete (labels, theming, touch, keyboard-only use, docs); real-hardware perf checks remain under Next.
 
 ## In progress
 - (nothing)

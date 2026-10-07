@@ -1,0 +1,20 @@
+# Metadata submission endpoint (map-metadata M4). Local: `bunx wrangler dev` here. Deploying needs Malcolm's account.
+name = "deadlock-query-submit"
+main = "src/worker.ts"
+compatibility_date = "2026-10-01"
+
+[vars]
+GITHUB_REPO = "MalcolmMacDonald/deadlock-query"
+BASE_BRANCH = "main"
+PER_IP_PER_HOUR = "5"
+GLOBAL_PER_DAY = "200"
+# ALLOWED_ORIGIN = "https://malcolmmacdonald.github.io"   # set to the site origin(s) that call /submit
+
+# Rate-limit counters: the existing deadlock-query-dev-ratelimit namespace (keys are `ip:<address>` and `global`).
+[[kv_namespaces]]
+binding = "RATE"
+id = "f9b45de3f1844a62b55a62360d1d4eb6"
+
+# Secrets (never in this file): `bunx wrangler secret put TURNSTILE_SECRET` and `... GITHUB_TOKEN`
+# GITHUB_TOKEN: fine-grained token limited to this repo with Contents + Pull requests write; it cannot push to main
+# when the ruleset requires PRs.

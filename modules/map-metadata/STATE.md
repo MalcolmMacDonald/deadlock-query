@@ -1,8 +1,8 @@
 # map-metadata — state
 
-- **Status:** M0, M1 done; M2 partly done (tool activation, accepted overlays); shell mount and collision probe left
-- **Version:** 0.3.0
-- **Current milestone:** M2 in progress
+- **Status:** M0-M4 and M6 done; M5 review panel UI and M7 left (live deploy of the worker is Malcolm's)
+- **Version:** 0.7.0
+- **Current milestone:** M6 complete
 - **Last updated:** 2026-10-07
 
 ## Done
@@ -24,6 +24,14 @@
 
 - M2 part (2026-10-07): kind buttons in the panel start the drawing tool through `ViewerService.activateTool` (falls back to a hint to pick it in the Tools panel when the viewer lacks it); `controller.setAccepted(records)` draws accepted records dimmed (`metadata.accepted.<kind>`) and adds them as `existing` for duplicate/overlap checks.
 
+- M3 (2026-10-07): `src/submit/submission.ts`: `buildSubmission(drafts, meta, ctx)` stamps every draft `proposed` with submitter, submission id and time, checks it with `validateSubmissionRecords` (identity, bounds, accepted records, collision when a probe is given) plus the contracts schema, and returns a `Submission` or just the report. `submissionFile` (canonical, pretty JSON, `metadata-submission-<id>.json`) and `issueLink` (prefilled new-issue URL with label `metadata-submission`; the JSON is inlined when the URL stays under 7000 chars, otherwise the body says to attach the file). `controller.submit({name, github?, note?})` wraps these; the panel's Submit section asks for a name (remembered in localStorage), shows blocking errors, then offers Download and Open GitHub issue. Drafts are kept after submitting.
+
+- M4 (2026-10-07): `submit-worker/` (Cloudflare Worker, `bunx wrangler dev` in that directory). `src/handler.ts` `handleRequest(req, env, deps)`: `POST /submit` with the submission JSON and `X-Turnstile-Token`; order of checks is method, size (256 KB), per-IP (5/h) and global (200/day) KV counters, Turnstile siteverify, JSON + schema + the module's validators (degraded: no collision on the server), safe id (`[A-Za-z0-9._-]`, so no path tricks), proposed-only. Then branch `metadata-submission/<id>`, file `data/submissions/<id>.json` (never `data/metadata/`), PR with label `metadata-submission` (label failure is ignored). Answers 201 `{id,url}`, 400 bad JSON, 403 Turnstile, 404/405, 413, 422 with up to 20 issues, 429 + Retry-After, 502 on GitHub failure. User text in the PR body sits in a code fence it cannot close. CORS only for `ALLOWED_ORIGIN`. `src/submit/client.ts` `postSubmission` for the editor (maps errors to friendly text). 14 contract tests with mocked Turnstile and GitHub (no wrangler needed in CI).
+
+- M5 logic (2026-10-07): `src/review/`. `ReviewApi` (queue, submission, dataFile, commitFile, merge, close, comment) with `proxyApi(fetch)` over the dev site's `/api/github/*` (CSRF header, no token in the browser; the queue is open PRs whose head branch starts `metadata-submission/` and lives in the same repo). `loadForReview` validates a PR's submission; `bulkDecisions` (`acceptValid` rejects records with errors, `rejectAll`); `applyDecisions` stamps `status`, reviewer, `reviewedAt`, comment and merges into `data/metadata/<build>/<kind>.json` (replace by id, sorted, canonical text); `commitDecisions` commits those files to the PR branch then merges (or closes the PR when nothing was accepted) and refuses undecided records; `requestChanges` and `rejectSubmission` comment/close. 7 tests with a fake API and a mocked proxy.
+
+- M6 (2026-10-07): `bun run metadata:merge -- <build-dir> [--check]` builds `metadata.bundle.json` from the per-kind files (validates the build first, `makeMetadataBundle` ordering + hash, canonical pretty text so the same data gives the same bytes; `--check` exits 1 when the bundle is missing or stale, for CI). `bun run metadata:rebase -- --from <build-dir> --manifest <new manifest> [--out dir] [--dry-run] [--json]` carries accepted/stale records to the new build with `rebaseRecords` (worker-safe, `src/rebase.ts`): each is re-validated against the new map (bounds now; collision once a probe is passed), failures become `stale` with the reason in `provenance.comment`, a stale one that fits again is re-accepted, proposed/rejected are not carried. Exit 1 when anything went stale. 7 tests incl. golden-style round trips.
+
 ## In progress
 - (nothing)
 
@@ -33,10 +41,16 @@
 - Tune the default radii (camp 200, sacrifice 200, orb 100), `surfaceEpsilon` (24) and overlap tolerance (64) on the real dl_midtown data.
 
 ## Blockers / Requests to other modules
-- shell: add the `metadata.editor` panel (`mountEditorPanel` + `createEditorController` from `@deadlock-query/map-metadata/editor`, storage `indexedDbDraftStorage(<gameBuildId>)`) to its module list; that is M2's integration work.
+- infra (proxy allowlist, `modules/infra/src/proxy.ts`): review needs `PUT /contents/<path>` (commit decided files to the PR branch), `PUT /pulls/<n>/merge` and `PATCH /pulls/<n>` (close) added, with the proxy token allowed Contents and Pull requests write. Without them the review panel can list and show submissions but not accept or reject. Prefer restricting `PUT /contents/` to `data/metadata/**` and `PATCH /pulls` to `state: closed`.
+- Malcolm (live M4): create a Turnstile widget (site key for the page, secret as `TURNSTILE_SECRET`), a KV namespace `RATE`, a repo-scoped `GITHUB_TOKEN` (Contents + Pull requests write), then `bunx wrangler deploy` in `modules/map-metadata/submit-worker/` and set `ALLOWED_ORIGIN`. Until then submissions use the download/issue fallback.
+- shell/editor: the panel does not call the worker yet because it needs the Turnstile site key and worker URL; once they exist, pass them to the panel and call `postSubmission`.
+- shell: pass `identity: () => ({ gameBuildId, mapName })` (or an `expect` in `context`) to `createEditorController`, otherwise Review & submit says the map is not loaded. (Earlier request, done in #157:) add the `metadata.editor` panel (`mountEditorPanel` + `createEditorController` from `@deadlock-query/map-metadata/editor`, storage `indexedDbDraftStorage(<gameBuildId>)`) to its module list; that is M2's integration work.
 - infra (root file, not editable from this module): NEXT.md row `screenshot-tool, map-metadata | Phase 3` can become `map-metadata | M1: editor panel (M0 done)`.
 
 ## Decisions log
+- 2026-10-07 — M6: the bundle holds every status (the library filters with `acceptedRecords`); rebase carries only accepted and stale records and never drops one silently; `data/metadata/` does not exist on main yet, so `metadata:merge --check` is not wired into CI until the first accepted data lands (infra can add `bun run metadata:merge -- <dir> --check` per build dir then).
+- 2026-10-07 — M4: worker is dependency-free (fetch + KV interface) so contract tests run under bun; rate limits are soft (KV is not atomic) which is fine for abuse control, the PR review is the real gate; the Turnstile token travels in a header so the submission document stays exactly the contracts `Submission`.
+- 2026-10-07 — M3: submitter name is required, GitHub handle optional and stored without `@`; the issue fallback targets this repo (`issueRepo` option); a draft's status/provenance are overwritten on submit so edits cannot smuggle `accepted`.
 - 2026-10-05 — Module scaffolded (rev 2 of IMPLEMENTATION_PLAN.md).
 - 2026-10-06 — Duplicate points are errors, overlapping regions are warnings (a reviewer may legitimately accept an overlap; a duplicate camp is never right). Rejected and stale records never count as neighbours.
 - 2026-10-06 — Validators take collision through a small `CollisionProbe` interface instead of the `MapBundle`, so the same code runs in the editor, the worker (degraded) and tests.

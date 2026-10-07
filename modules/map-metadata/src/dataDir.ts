@@ -56,3 +56,20 @@ export const checkPath = (path: string, ctx: ValidationContext = {}): ReadonlyAr
   if (entries.some((n) => n.endsWith(".json"))) return checkBuildDir(path, ctx)
   return entries.sort().map((n) => join(path, n)).filter((p) => statSync(p).isDirectory()).flatMap((p) => checkBuildDir(p, ctx))
 }
+
+export interface BuildData { readonly gameBuildId: string; readonly mapName: string; readonly records: ReadonlyArray<MetadataRecord> }
+
+/** Records of every `<kind>.json` in a build directory (the bundle file is ignored). Throws when a file does not decode. */
+export const readBuildDir = (dir: string): BuildData => {
+  const records: MetadataRecord[] = []
+  let mapName: string | undefined
+  for (const name of readdirSync(dir).filter((n) => n.endsWith(".json") && kindOfFileName(n)).sort()) {
+    const d = decodeDocument("file", JSON.parse(readFileSync(join(dir, name), "utf8")))
+    if ("issue" in d) throw new Error(`${join(dir, name)}: ${d.issue.message}`)
+    const f = d.doc as MetadataFile
+    mapName ??= f.mapName
+    records.push(...f.records)
+  }
+  if (mapName === undefined) throw new Error(`${dir} has no kind files`)
+  return { gameBuildId: basename(dir), mapName, records }
+}

@@ -25,7 +25,7 @@ export const PANEL_STYLE = `
 .dlq-md li.draft[aria-selected=true]{background:#33415c}
 .dlq-md li.draft .pick{flex:1;text-align:left;background:none;border:0;padding:2px}
 .dlq-md .badge{font-size:11px;padding:0 5px;border-radius:8px}.dlq-md .err{background:#7a2b2b}.dlq-md .warn{background:#6b5a1f}
-.dlq-md form.detail{display:grid;grid-template-columns:auto 1fr;gap:4px 8px;align-items:center;margin-top:6px}
+.dlq-md .detail{display:grid;grid-template-columns:auto 1fr;gap:4px 8px;align-items:center;margin-top:6px}
 .dlq-md .problem{padding:3px 0;border-bottom:1px solid #333}.dlq-md .problem button{background:none;border:0;text-align:left;padding:0;width:100%}
 .dlq-md .empty{opacity:.7;padding:6px 0}.dlq-md .status{min-height:1.4em;color:#f0b0b0}
 `
@@ -74,6 +74,38 @@ export const mountEditorPanel = (root: HTMLElement, c: EditorController): { read
   const body = h("div", { class: "dlq-md", role: "region", "aria-label": "Map metadata editor" })
   root.replaceChildren(style, body)
   let message = ""
+  const remembered = (() => { try { return JSON.parse(localStorage.getItem("dlq-md-submitter") ?? "{}") as { name?: string; github?: string } } catch { return {} } })()
+  const form = { name: remembered.name ?? "", github: remembered.github ?? "", note: "" }
+  let outcome: ReturnType<EditorController["submit"]> | undefined
+
+  const submitSection = (s: EditorState): Node => {
+    const field = (key: "name" | "github" | "note", label: string, max: number) => {
+      const el = h("input", { id: `dlq-md-sub-${key}`, type: "text", maxlength: String(max), value: form[key] })
+      el.addEventListener("input", () => { form[key] = el.value })
+      return [h("label", { for: `dlq-md-sub-${key}` }, label), el]
+    }
+    const go = h("button", { type: "button", disabled: s.records.length === 0 }, "Review & submit")
+    go.addEventListener("click", () => {
+      try { localStorage.setItem("dlq-md-submitter", JSON.stringify({ name: form.name, github: form.github })) } catch { /* private mode */ }
+      outcome = c.submit({ name: form.name, ...(form.github ? { github: form.github } : {}), ...(form.note ? { note: form.note } : {}) })
+      render(c.state())
+    })
+    const result: Node[] = []
+    if (outcome && !outcome.ok) result.push(h("ul", {}, ...outcome.report.issues.filter((i) => i.severity === "error").map((i) => h("li", { class: "problem" }, `Error: ${i.message}`))))
+    if (outcome?.ok) {
+      const o = outcome
+      const dl = h("button", { type: "button" }, `Download ${o.fileName}`)
+      dl.addEventListener("click", () => {
+        const url = URL.createObjectURL(new Blob([o.text], { type: "application/json" }))
+        const a = h("a", { href: url, download: o.fileName }); document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000)
+      })
+      result.push(h("p", { role: "status" }, `Ready: ${s.records.length} feature${s.records.length === 1 ? "" : "s"}${o.warnings > 0 ? `, ${o.warnings} warning${o.warnings === 1 ? "" : "s"}` : ""}. Download the file, then open the issue and ${o.issueInlined ? "paste it (it is already filled in) or attach the file" : "drag the file into it"}.`),
+        h("p", {}, dl, " ", h("a", { href: o.issueUrl, target: "_blank", rel: "noopener noreferrer" }, "Open GitHub issue")))
+    }
+    return h("div", {}, h("h3", {}, "Submit"),
+      h("div", { class: "detail" }, ...field("name", "Your name", 80), ...field("github", "GitHub (optional)", 39), ...field("note", "Note (optional)", 1000)),
+      h("p", {}, go), ...result)
+  }
 
   const render = (s: EditorState) => {
     const active = document.activeElement
@@ -127,12 +159,13 @@ export const mountEditorPanel = (root: HTMLElement, c: EditorController): { read
       h("h3", {}, `Your drafts (${s.records.length})`), list, ...(detail ? [detail] : []),
       h("p", { class: "status", role: "status", "aria-live": "polite" }, message || (s.skipped > 0 ? `${s.skipped} saved draft${s.skipped === 1 ? "" : "s"} could not be read and were skipped.` : "")),
       h("h3", {}, "Checks"), problems,
-      h("p", {}, clear, " ", h("button", { type: "button", disabled: true, title: "Submitting arrives with the next milestone" }, "Review & submit"))
+      h("p", {}, clear),
+      submitSection(s)
     )
     if (keep) document.getElementById(keep)?.focus()
   }
 
   render(c.state())
-  const off = c.subscribe((s) => { message = ""; render(s) })
+  const off = c.subscribe((s) => { message = ""; outcome = undefined; render(s) })
   return { dispose: () => { off(); root.replaceChildren() } }
 }
