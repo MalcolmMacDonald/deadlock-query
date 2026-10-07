@@ -52,6 +52,13 @@ export const takeInitialShare = (): string | undefined => {
   return share
 }
 
+/** Starts downloading Monaco and the TypeScript worker in the background so the editor tab opens quickly. */
+export const prefetchEditor = (): void => {
+  void Promise.all([import("@deadlock-query/query-builder"), import("./monacoWorkers.ts")])
+    .then(([qb, { monacoWorkerUrl }]) => qb.prefetchQueryEditor({ getWorkerUrl: monacoWorkerUrl }))
+    .catch(() => {})
+}
+
 /** Mounts query-builder's embeddable panel (Monaco loads lazily, with the shell's real viewer and selection). */
 const mountEditor = (container: HTMLElement): (() => void) => {
   let dispose = () => {}
