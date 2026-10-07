@@ -17,6 +17,7 @@
 
 ## Blockers / Requests to other modules
 - infra M5 live (token secret) for the real GitHub path.
+- NEXT.md kanban row is stale (outside module scope): should read "M0 done on mocks; M1/M2 next; live path waits for infra M5".
 
 ## Decisions log
 - 2026-10-05 — Module scaffolded (rev 2 of IMPLEMENTATION_PLAN.md).
