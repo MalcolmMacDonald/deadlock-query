@@ -207,7 +207,7 @@ const Shell = ({ composition }: { composition: Composition }) => {
         <button type="button" data-testid="share-layout" onClick={share}>Share layout</button>
         <button type="button" data-testid="open-palette" aria-keyshortcuts="Control+K" onClick={() => setPaletteOpen(true)}>Commands (Ctrl+K)</button>
         <button type="button" data-testid="toggle-theme" aria-pressed={theme === "light"} onClick={() => setTheme(nextTheme)}>{theme === "dark" ? "Light theme" : "Dark theme"}</button>
-        <button type="button" data-testid="open-about" onClick={() => showPanelById(ABOUT_PANEL_ID)}>About</button>
+        <button type="button" data-testid="open-about" onClick={() => showPanelById(ABOUT_PANEL_ID)}>Help &amp; About</button>
       </header>
       <main id="main" ref={mainRef} style={{ flex: 1, minHeight: 0 }}>
         <DockviewReact theme={theme === "dark" ? themeDark : themeLight} components={components} onReady={onReady} />

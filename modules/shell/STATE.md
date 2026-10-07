@@ -43,6 +43,8 @@
 
 - 2026-10-07 — History panel: `metadata.history` ("Metadata history", public) shows map-metadata's `mountHistoryPanel` over every record of `metadata.bundle.json` (`loadMetadataSupport` now also returns all records, not just accepted ones); clicking a record flies the camera to its position. Empty until a bundle is published.
 
+- 2026-10-07 — UX round two: the About panel is now "Help & About" in the header: a four-step getting-started list and the keyboard shortcuts (from the `SHORTCUTS` registry, so it cannot drift), plus build info. It is focusable (`tabIndex`) so axe accepts its scrolling. `e2e/a11y.ts` currently fails on main for another reason: the viewer Layers panel has unlabelled row controls (`label-title-only`); that is map-viewer's to fix.
+
 ## In progress
 - (nothing yet)
 
