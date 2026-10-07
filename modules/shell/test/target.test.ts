@@ -29,6 +29,7 @@ test("login is required only on dev builds that ship a dev-only module", () => {
 test("the metadata review panel ships on dev builds only; the editor is public", () => {
   const panels = (t: "dev" | "prod") => modulesFor(moduleEntries, t).flatMap((m) => m.panels.map((p) => p.id))
   expect(panels("prod")).toContain("metadata.editor")
+  expect(panels("prod")).toContain("metadata.history")
   expect(panels("prod")).not.toContain("metadata.review")
   expect(panels("dev")).toContain("metadata.review")
 })

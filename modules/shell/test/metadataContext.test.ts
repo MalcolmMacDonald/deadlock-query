@@ -30,6 +30,7 @@ test("loadMetadataSupport: bundle records, probe from the baked BVH, degrades wh
   const fetcher = async (u: string) => files[u]?.() ?? new Response("no", { status: 404 })
   const full = (await loadMetadataSupport("http://x/data/manifest.json", fetcher))!
   expect(full.accepted.map((r) => r.id)).toEqual(["a"])
+  expect(full.records.map((r) => r.id)).toEqual(["a", "b"])
   expect(full.collision?.groundZ(0, 0, 500)).toBeCloseTo(100)
 
   delete files["http://x/data/baked/c.bvh"]

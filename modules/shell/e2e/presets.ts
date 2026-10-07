@@ -15,7 +15,7 @@ await withShell(4175, async ({ open }) => {
   await expectPanels(page, EXPLORE, "Explore after reload")
 
   await page.getByTestId("preset-review").click()
-  await expectPanels(page, [...EXPLORE, "metadata.editor"], "Review preset")
+  await expectPanels(page, [...EXPLORE, "metadata.editor", "metadata.history"], "Review preset")
 
   await page.getByTestId("preset-query").click()
   await expectPanels(page, QUERY, "Query preset")
