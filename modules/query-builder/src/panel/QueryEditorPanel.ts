@@ -395,11 +395,17 @@ export const mountQueryEditor = async (container: HTMLElement, opts: QueryEditor
       { signal: pickFiber.signal }
     )
     cleanups.push(() => pickFiber.abort())
-    // `SelectionBus` has no change stream yet, so external selection changes are polled.
-    const poll = setInterval(() => {
-      void Effect.runPromise(selection.current).then((ids) => applySelection(ids.filter((id) => currentResult?.rowIds.includes(id)), false)).catch(() => {})
-    }, SELECTION_POLL_MS)
-    cleanups.push(() => clearInterval(poll))
+    // External selection changes (the viewer's or another panel's): the bus's `changes` stream when it has one, else polling `current`.
+    const adoptExternal = (ids: ReadonlyArray<string>) => applySelection(ids.filter((id) => currentResult?.rowIds.includes(id)), false)
+    if (selection.changes) {
+      const changesFiber = new AbortController()
+      void Effect.runPromise(Stream.runForEach(selection.changes, (ids) => Effect.sync(() => adoptExternal(ids))).pipe(Effect.ignore), { signal: changesFiber.signal })
+      void Effect.runPromise(selection.current).then(adoptExternal).catch(() => {})
+      cleanups.push(() => changesFiber.abort())
+    } else {
+      const poll = setInterval(() => { void Effect.runPromise(selection.current).then(adoptExternal).catch(() => {}) }, SELECTION_POLL_MS)
+      cleanups.push(() => clearInterval(poll))
+    }
     cleanups.push(() => fire(Effect.all([...[...new Set([layerId, ...resultLayers])].map((id) => viewer.removeOverlay(id)), viewer.highlight([])], { discard: true })))
 
     const run = async () => {

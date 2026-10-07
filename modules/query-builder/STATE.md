@@ -106,6 +106,8 @@ Also verified: library-class member completions with TSDoc signature, string-lit
 
 - 2026-10-07 — Library 0.5 run context: `progress`, `ctx`, `withRun` and `QueryCancelled` reach the editor typings and the worker automatically (the prelude/globals follow the library's exports; nothing to add by hand). The worker now runs each query under `withRun({ onProgress })`, so `progress(f, label)` / `ctx.progress(f)` posts throttled `progress` messages (`SandboxRunner.onProgress`) and the panel shows `running… 40% step 2` next to the status. Cancel is still terminate-based (a query runs synchronously, so a flag would not be seen), which also covers library loops. A `QueryCancelled` thrown by the query's own `withRun` comes back as a cancelled / timed-out run: "Query stopped: query exceeded its time budget." instead of a generic error; the Cancel button shows status "cancelled". e2e: progress text appears; a `withRun({ maxMillis })` loop stops cleanly. Not done: a determinate progress bar (the text percentage only), and the library's `shouldCancel` hook is not wired (no SharedArrayBuffer flag; needs cross-origin isolation).
 
+- 2026-10-07 — External selection changes now come from the bus's `changes` stream (contracts #209) with an initial read of `current`; the 250 ms polling remains only as the fallback for a bus without `changes` (that fallback has no test of its own). The standalone host's selection bus now has a `changes` stream, so the existing row↔selection e2e exercises the stream path.
+
 ## In progress
 - (nothing)
 
@@ -114,7 +116,7 @@ Also verified: library-class member completions with TSDoc signature, string-lit
 - Open from M7: real screen-reader pass, inlay hints, overlay styling by column, pinned result layers (see the M7 checklist).
 
 ## Blockers / Requests to other modules
-- contracts (nice to have): `SelectionBus` has no change stream, so the panel polls `current` every 250 ms. A `changes: Stream<ReadonlyArray<string>>` would remove the polling.
+- contracts (done, #209): `SelectionBus.changes`; the panel uses it and only polls without it.
 - shell (nice to have): expose shared theme tokens (colours) so the panel can match the shell instead of hard-coding the editor-dark palette; call `qb.prefetchQueryEditor({ getWorkerUrl })` when idle, and pass `qb.fetchQueryBundle(url)` instead of its own promise so the Map data step shows a progress bar.
 
 ## Decisions log
