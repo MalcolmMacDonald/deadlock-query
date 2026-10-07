@@ -18,6 +18,8 @@ export interface Raycaster {
   raycastAll(origin: Vec3, dir: Vec3, opts?: RayOpts): Hit[]
   /** True when a triangle blocks the segment a→b. */
   occluded(a: Vec3, b: Vec3): boolean
+  /** Batch `occluded`: packed xyz segment starts `a` and ends `b`; writes 1 (blocked) or 0 per segment. */
+  occludedMany(a: Float32Array, b: Float32Array, opts?: Pick<RayOpts, "signal" | "onProgress">): Uint8Array
   closestPoint(p: Vec3, opts?: { maxDist?: number }): ClosestPoint | null
   overlapsSphere(s: SphereShape): boolean
   overlapsCapsule(c: CapsuleShape): boolean
@@ -68,6 +70,21 @@ class BvhRaycaster implements Raycaster {
     const len = d.length()
     if (len === 0) return false
     return this.bvh.raycastFirst(new Ray(v3(a), d.divideScalar(len)), DoubleSide, 0, len) !== null
+  }
+
+  occludedMany(a: Float32Array, b: Float32Array, opts: Pick<RayOpts, "signal" | "onProgress"> = {}): Uint8Array {
+    if (a.length !== b.length) throw new RangeError("occludedMany: a and b must have the same length")
+    const n = a.length / 3, out = new Uint8Array(n)
+    const ray = new Ray(), d = new Vector3()
+    for (let i = 0; i < n; i++) {
+      if (opts.signal?.aborted) throw new DOMException("aborted", "AbortError")
+      ray.origin.fromArray(a, i * 3)
+      d.fromArray(b, i * 3).sub(ray.origin)
+      const len = d.length()
+      if (len > 0) { ray.direction.copy(d).divideScalar(len); out[i] = this.bvh.raycastFirst(ray, DoubleSide, 0, len) ? 1 : 0 }
+      if (opts.onProgress) opts.onProgress(i + 1, n)
+    }
+    return out
   }
 
   closestPoint(p: Vec3, opts: { maxDist?: number } = {}): ClosestPoint | null {

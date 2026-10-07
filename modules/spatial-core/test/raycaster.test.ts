@@ -109,3 +109,10 @@ test("triangle(triIndex) returns the corners of the triangle a query reported", 
   expect(() => rc.triangle(-1)).toThrow(RangeError)
   expect(() => rc.triangle(rc.triangleCount)).toThrow(RangeError)
 })
+
+test("occludedMany matches occluded", () => {
+  const floor = Raycaster.fromGeometry(new Float32Array([-10, -10, 0, 10, -10, 0, 10, 10, 0, -10, 10, 0]), new Uint32Array([0, 1, 2, 0, 2, 3]))
+  const a = new Float32Array([0, 0, 5, 0, 0, 5, 1, 1, 1]), b = new Float32Array([0, 0, -5, 3, 3, 5, 1, 1, 1])
+  expect([...floor.occludedMany(a, b)]).toEqual([1, 0, 0])
+  expect(() => floor.occludedMany(a, new Float32Array(3))).toThrow(RangeError)
+})
