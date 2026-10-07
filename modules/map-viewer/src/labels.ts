@@ -5,6 +5,7 @@ import type { OverlayFeature, Vec3 } from "@deadlock-query/contracts"
 export const MAX_LABELS_PER_LAYER = 500
 const FONT_PX = 13
 const PAD_PX = 4
+const HALO_PX = 3
 const MAX_TEXT = 120
 const CACHE_LIMIT = 256
 
@@ -73,15 +74,21 @@ const render = (text: string, color: string): Rendered | undefined => {
   canvas.width = w
   canvas.height = h
   ctx.font = font
-  ctx.fillStyle = "rgba(16,18,22,0.78)"
-  ctx.beginPath()
-  ctx.roundRect(0, 0, w, h, 4 * ratio)
-  ctx.fill()
-  ctx.fillStyle = color
+  // Outlined text instead of a pill: a dark halo keeps the glyphs readable over any surface without a box that
+  // hides the map. Round joins keep the halo smooth at small sizes.
   ctx.textBaseline = "middle"
+  ctx.lineJoin = "round"
+  ctx.miterLimit = 2
+  ctx.lineWidth = HALO_PX * ratio
+  ctx.strokeStyle = "rgba(10,12,16,0.92)"
+  ctx.strokeText(text, PAD_PX * ratio, h / 2 + ratio * 0.5)
+  ctx.fillStyle = color
   ctx.fillText(text, PAD_PX * ratio, h / 2 + ratio * 0.5)
   const texture = new THREE.CanvasTexture(canvas)
   texture.colorSpace = THREE.SRGBColorSpace
+  texture.generateMipmaps = true
+  texture.minFilter = THREE.LinearMipmapLinearFilter
+  texture.anisotropy = 4
   const made = { texture, width: w / ratio, height: h / ratio }
   cache.set(key, made)
   if (cache.size > CACHE_LIMIT) {

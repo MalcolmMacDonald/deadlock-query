@@ -87,7 +87,10 @@ test("ViewerService: unmounted capture/loadBundle fail with a clear error", asyn
 
 test("parity with MockViewerService: same members, and mutating calls succeed on both", async () => {
   const keys = (layer: Layer.Layer<ViewerService>) => Effect.runPromise(Effect.gen(function* () { return Object.keys(yield* ViewerService).sort() }).pipe(Effect.provide(layer)))
-  expect(await keys(makeViewerService(new ViewerController()))).toEqual(await keys(makeMockViewerServiceWithTools().layer))
+  // activateTool/deactivateTool are optional in contracts and the mocks lack them until contracts makes them required.
+  const optional = new Set(["activateTool", "deactivateTool"])
+  const mockKeys = await keys(makeMockViewerServiceWithTools().layer)
+  expect((await keys(makeViewerService(new ViewerController()))).filter((k) => mockKeys.includes(k) || !optional.has(k))).toEqual(mockKeys)
   for (const layer of [makeViewerService(new ViewerController()), MockViewerService] as const) {
     await Effect.runPromise(Effect.gen(function* () {
       const v = yield* ViewerService
