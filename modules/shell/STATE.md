@@ -33,6 +33,8 @@
 
 - 2026-10-06 — Inspector panel: `viewer.inspector` (map-viewer `makeInspectorPanel`, lists every field of the selected entity / query-result point / annotation / screenshot) is a dockable panel over the shared controller. Query preset docks it under the editor, Explore/Review in its own column right of the map; reopen it from the panel menu if a saved layout predates it, or use Reset layout.
 
+- 2026-10-07 — UX pass (real-bundle walkthrough): the Map panel now shows a "Loading map…" cover until the published bundle loads (it used to flash the mini-map fixture for several seconds, then swap), and the Query preset gives the inspector a fixed 240 px (`INSPECTOR_HEIGHT`, new `initialHeight` on `PresetPanel`) so the editor's results table has room instead of ~3 rows. Saved layouts are untouched; "Reset layout" picks up the new default.
+
 ## In progress
 - (nothing yet)
 

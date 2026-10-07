@@ -15,6 +15,7 @@ test("Inspector: under the editor in Query, its own column right of the map othe
   const query = queryPreset(withInspector)
   expect(query.map((p) => p.id)).toEqual(["viewer.main", "viewer.tools", "viewer.layers", "query.editor", "viewer.inspector", "dummy"])
   expect(query[4]!.position).toEqual({ referencePanel: "query.editor", direction: "below" })
+  expect(query[4]!.initialHeight).toBeGreaterThan(0) // the editor and its results keep most of the column
   const explore = explorePreset(withInspector)
   expect(explore.map((p) => p.id)).toEqual(["viewer.main", "viewer.tools", "viewer.layers", "viewer.inspector"])
   expect(explore[3]!.position).toEqual({ referencePanel: "viewer.main", direction: "right" })
