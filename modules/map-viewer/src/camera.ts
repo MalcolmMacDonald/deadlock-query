@@ -121,6 +121,28 @@ export const rotate = (pose: CameraPose, dYaw: number, dPitch: number, about: "t
 /** Exponential zoom; `factor` > 1 zooms out. */
 export const zoom = (pose: CameraPose, factor: number): CameraPose => normalize({ ...pose, distance: pose.distance * factor })
 
+/** Keys that move the camera without a pointer (arrows, plus/minus); anything else is not a camera key. */
+export const CAMERA_KEYS: ReadonlyArray<string> = ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "+", "=", "-", "_"]
+
+/**
+ * One keyboard step for the camera: arrows pan in Map mode, turn the view in Orbit (about the target) and Fly (about
+ * the eye); `+`/`-` zoom in Map and Orbit. `big` (Shift) triples the step. Returns the pose unchanged for other keys.
+ */
+export const keyboardStep = (pose: CameraPose, mode: CameraMode, key: string, viewportHeight: number, big = false, fovDeg = 50): CameraPose => {
+  const k = big ? 3 : 1
+  const dx = key === "ArrowLeft" ? -1 : key === "ArrowRight" ? 1 : 0
+  const dy = key === "ArrowUp" ? -1 : key === "ArrowDown" ? 1 : 0
+  if (dx !== 0 || dy !== 0) {
+    // Arrow right moves the view right, like dragging the map left.
+    if (mode === "map") return pan(pose, -dx * 60 * k, -dy * 60 * k, viewportHeight, fovDeg)
+    return rotate(pose, -dx * 0.08 * k, -dy * 0.08 * k, mode === "orbit" ? "target" : "eye")
+  }
+  if (mode === "fly") return pose
+  if (key === "+" || key === "=") return zoom(pose, 1 / 1.25 ** k)
+  if (key === "-" || key === "_") return zoom(pose, 1.25 ** k)
+  return pose
+}
+
 /** Fly: move eye along forward/right/up by `amount` world units (each in -1..1), target follows. */
 export const fly = (pose: CameraPose, forward: number, right: number, up: number, units: number): CameraPose => {
   const d = lookDir(pose.yaw, pose.pitch)

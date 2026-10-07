@@ -1,6 +1,6 @@
 import * as THREE from "three"
 import {
-  eyeOf, fly, pan, rotate, switchMode, zoom,
+  CAMERA_KEYS, eyeOf, fly, keyboardStep, pan, rotate, switchMode, zoom,
   type CameraMode, type CameraPose
 } from "./camera.ts"
 import { decodeCamera, encodeCamera } from "./hashState.ts"
@@ -108,6 +108,11 @@ export class ViewerControls {
       else if (k === "2") this.setMode("orbit")
       else if (k === "3") this.setMode("fly")
       // Shortcuts (Ctrl+A select all, Ctrl+S, ...) must not also fly the camera.
+      else if (CAMERA_KEYS.includes(e.key) && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault()
+        this.pose = keyboardStep(this.pose, this.mode, e.key, el.clientHeight, e.shiftKey, FOV_DEG)
+        this.apply()
+      }
       else if (this.mode === "fly" && "wasdqe".includes(k) && k.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
         this.keys.add(k)
         this.startLoop()
