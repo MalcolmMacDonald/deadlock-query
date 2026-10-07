@@ -6,6 +6,7 @@
 - **Last updated:** 2026-10-06
 
 ## Done
+- 2026-10-07 — `plan grid --above-floor <height>`: each camera sits `height` above the baked navmesh floor under its cell (nearest to `--z`, default mid map height; reach = spacing). `loadBundle` now also returns `floorAt` (from `manifest.baked.navmesh`); cells with no floor are dropped with a warning, and no floor anywhere is an error. `gridPlanWithFloor` returns `{ plan, dropped }`; `gridPlan` is unchanged. Test in `test/plan.test.ts` with a fake `floorAt`; not yet run on the real bake.
 - M0 scaffold: workspace package `@deadlock-query/screenshot-tool`, CLI `dlq-shoot` (`bun run dlq-shoot ...`), stable exit codes (0 ok, 1 usage, 2 problem).
 - `GameConsole` Effect service (`src/console.ts`) with `send(command)`; tagged `ConsoleError` (`connect` / `timeout` / `closed` / `rejected`) that always carries a remediation string.
 - `NetConPort` implementation: line-based TCP, one connection per command, reply = data until the stream is quiet (`settleMs`). Tested against a local TCP server (reply, refused, timeout, closed without reply).
@@ -35,7 +36,7 @@
 - M4 line of sight on the real map, needs real data: the real baked BVH holds only clip volumes today (see map-extractor STATE.md "Collision finding"), so lines of sight against it are not trustworthy until walkable collision exists. Try `plan from-annotations ... --bundle data/bundles/dl_midtown` after that and eyeball the shots.
 - **Malcolm-only, M3 acceptance:** kill the game mid-run, restart it with the same launch options and re-run with `--resume`; it should finish the set. Check that the `deadlock` process name used by crash detection matches Task Manager (`doctor` uses the same list).
 - **Malcolm-only, M2 acceptance (20-shot real run):** besides the M0 steps, check and record: the real `getpos` reply (the parser accepts `setpos x y z;setang p y r`, the `_exact` variants and extra lines; if it fails, shots are taken with a warning and no `actual` pose), whether `fov_desired` and `cl_drawhud` exist (setup fails loudly on "Unknown command", fix the list in `sessionSetup`), the screenshot folder and file format (PNG/JPEG only; TGA etc. fail with `image`), the settle time needed after `setpos` (default 500 ms; PLAN's double-capture hash-stability check is not built yet), and whether the game's resolution matches the plan (a mismatch is a warning). Run: `bun run dlq-shoot plan ring --map dl_midtown --build <id> --at x,y,z`, then `shoot plan.json --offline --game-dir <install>`.
-- Deferred from M1, needs real data: `grid` places every camera at one fixed `--z`. The PLAN wants "height above the walkable surface" from the baked sample grid/navmesh; that needs `spatial-core` in `module.json` `dependsOn` and a real bake (floor currently describes clip lids, see map-extractor STATE.md), so it waits for the walkable-collision work.
+- `grid --above-floor <h>` is built (needs a bake with a navmesh); try it on the real bundle: `plan grid --bundle data/bundles/dl_midtown --spacing 800 --above-floor 64` and eyeball the camera heights (`--z` picks the floor when several are stacked, default mid map height).
 
 ## Blockers / Requests to other modules
 - (none; `ScreenshotSet` landed in contracts PR #101)

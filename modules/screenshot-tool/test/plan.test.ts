@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { main } from "../src/cli.ts"
-import { gridPlan, lookAtAngles, MAX_SHOTS, parsePlan, PlanError, ringPlan, serializePlan, shotAngles, validatePlan, yawsOf } from "../src/plan.ts"
+import { gridPlan, gridPlanWithFloor, lookAtAngles, MAX_SHOTS, parsePlan, PlanError, ringPlan, serializePlan, shotAngles, validatePlan, yawsOf } from "../src/plan.ts"
 
 const meta = { map: "dl_midtown", gameBuildId: "123" }
 
@@ -138,4 +138,14 @@ test("cli: --bundle supplies map, build id and bounds from the manifest", async 
   const bad = await run(["plan", "grid", "--bundle", join(dir, "missing"), "--spacing", "1", "--z", "1"])
   expect(bad.code).toBe(2)
   expect(bad.err).toContain("cannot read a bundle manifest")
+})
+
+test("grid --above-floor puts cameras above the floor under each cell and drops cells without one", () => {
+  // Floor slopes with x; no floor at all for x > 700. `nearZ` is ignored here.
+  const floorAt = (x: number, _y: number, _nearZ: number, _reach: number) => (x > 700 ? undefined : x / 10)
+  const r = gridPlanWithFloor(meta, { bounds: [0, 0, 1000, 500], spacing: 500, z: 0, yaws: 1, aboveFloor: { height: 64, reach: 500, floorAt } })
+  // cells at x = 250 and 750: only the first has a floor
+  expect(r.plan.shots.map((s) => s.position)).toEqual([[250, 250, 89]])
+  expect(r.dropped).toBe(1)
+  expect(() => gridPlanWithFloor(meta, { bounds: [0, 0, 1000, 500], spacing: 500, z: 0, aboveFloor: { height: 64, reach: 500, floorAt: () => undefined } })).toThrow(PlanError)
 })

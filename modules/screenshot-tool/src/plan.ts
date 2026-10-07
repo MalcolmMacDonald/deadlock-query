@@ -141,10 +141,17 @@ export interface GridOptions {
   readonly z: number
   readonly yaws?: number
   readonly pitch?: number
+  /**
+   * Put each camera `height` above the walkable floor under its cell (`z` then only picks which floor when
+   * several are stacked: the one nearest `z`). Cells with no floor within `reach` of the cell centre are dropped.
+   */
+  readonly aboveFloor?: { readonly height: number; readonly reach: number; readonly floorAt: (x: number, y: number, nearZ: number, maxDist: number) => number | undefined }
 }
 
+export interface GridResult { readonly plan: ShotPlan; readonly dropped: number }
+
 /** Cell centres of a regular grid over `bounds`, row-major (y then x), `yaws` shots per cell. */
-export const gridPlan = (meta: PlanMeta, o: GridOptions): ShotPlan => {
+export const gridPlanWithFloor = (meta: PlanMeta, o: GridOptions): GridResult => {
   const [minX, minY, maxX, maxY] = o.bounds
   if (!(o.spacing > 0)) throw new PlanError([`spacing must be positive, got ${o.spacing}`])
   if (!(maxX > minX && maxY > minY)) throw new PlanError([`bounds must have max > min on both axes, got ${o.bounds.join(",")}`])
@@ -157,15 +164,26 @@ export const gridPlan = (meta: PlanMeta, o: GridOptions): ShotPlan => {
   const x0 = minX + ((maxX - minX) - (cols - 1) * o.spacing) / 2
   const y0 = minY + ((maxY - minY) - (rows - 1) * o.spacing) / 2
   const shots: ShotSpec[] = []
+  let dropped = 0
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
       const group = `grid-r${String(r).padStart(3, "0")}c${String(c).padStart(3, "0")}`
-      const position: Vec3 = [round(x0 + c * o.spacing), round(y0 + r * o.spacing), round(o.z)]
+      const x = x0 + c * o.spacing, y = y0 + r * o.spacing
+      let z = o.z
+      if (o.aboveFloor) {
+        const floor = o.aboveFloor.floorAt(x, y, o.z, o.aboveFloor.reach)
+        if (floor === undefined) { dropped++; continue }
+        z = floor + o.aboveFloor.height
+      }
+      const position: Vec3 = [round(x), round(y), round(z)]
       for (const yaw of yaws) shots.push({ id: `${group}-${yawTag(yaw)}`, group, position, angles: [pitch, yaw, 0] })
     }
   }
-  return buildPlan(meta, shots)
+  if (shots.length === 0) throw new PlanError(["no grid cell has a walkable floor nearby; check --bounds, --z and the bundle's navmesh"])
+  return { plan: buildPlan(meta, shots), dropped }
 }
+
+export const gridPlan = (meta: PlanMeta, o: GridOptions): ShotPlan => gridPlanWithFloor(meta, o).plan
 
 /** Canonical text form: stable key order, two-space indent, trailing newline. Same plan in, same bytes out. */
 export const serializePlan = (plan: ShotPlan): string =>
