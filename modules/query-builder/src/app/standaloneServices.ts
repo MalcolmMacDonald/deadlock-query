@@ -1,4 +1,4 @@
-import { Effect, Stream } from "effect"
+import { Effect, Queue, Stream } from "effect"
 import type { OverlayFeature, ViewerEvent, Vec3 } from "@deadlock-query/contracts"
 import type { SelectionBusShape, ViewerServiceShape } from "../panel/QueryEditorPanel.ts"
 
@@ -37,9 +37,15 @@ export const makeStandaloneServices = () => {
     captureImage: Effect.succeed(new Uint8Array()),
     registerTool: () => Effect.succeed(() => {})
   }
+  const subs = new Set<(v: ReadonlyArray<string>) => void>()
+  const set = (ids: ReadonlyArray<string>) => { selected = ids; subs.forEach((f) => f(ids)) }
   const selection: SelectionBusShape = {
-    select: (ids) => Effect.sync(() => void (selected = ids)),
-    current: Effect.sync(() => selected)
+    select: (ids) => Effect.sync(() => set(ids)),
+    current: Effect.sync(() => selected),
+    changes: Stream.callback<ReadonlyArray<string>>((q) => Effect.acquireRelease(
+      Effect.sync(() => { const f = (v: ReadonlyArray<string>) => void Queue.offerUnsafe(q, v); subs.add(f); return f }),
+      (f) => Effect.sync(() => void subs.delete(f))
+    ))
   }
-  return { viewer, selection, log, emitPick: (id: string) => events.push({ _tag: "pick", id }), setSelected: (ids: ReadonlyArray<string>) => { selected = ids } }
+  return { viewer, selection, log, emitPick: (id: string) => events.push({ _tag: "pick", id }), setSelected: set }
 }
