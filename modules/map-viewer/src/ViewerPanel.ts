@@ -128,6 +128,8 @@ export const makeViewerPanel = (data: ViewerData, controller: ViewerController =
       declutterLabels(overlays.root, camera, canvas.clientWidth, canvas.clientHeight)
       renderer.render(scene, camera)
       canvas.dataset.frames = String(Number(canvas.dataset.frames ?? "0") + 1)
+      canvas.dataset.renderTriangles = String(renderer.info.render.triangles)
+      canvas.dataset.renderCalls = String(renderer.info.render.calls)
     }
 
     const overlays = new OverlayScene(requestRender)
@@ -274,6 +276,7 @@ export const makeViewerPanel = (data: ViewerData, controller: ViewerController =
           canvas.dataset.tileMissing = String(st.missing)
           canvas.dataset.tileDisplayed = String(st.displayed)
           canvas.dataset.tileEvicted = String(st.evicted)
+          canvas.dataset.tileLoaded = String(st.loaded)
           controller.emitProgress(st)
         }
       })
