@@ -4,7 +4,7 @@ import { MapDataService, tilesAtLod, type Entity, type Manifest, type Vec3 } fro
 import { boundsOf, fitTopDown } from "./projection.ts"
 import { frameBounds, type CameraMode } from "./camera.ts"
 import { FOV_DEG, ViewerControls } from "./controls.ts"
-import { buildScene, glbToThreeMatrix, makeTerrainMaterial, setSurfaceVisible, surfaceMeshes } from "./scene.ts"
+import { buildScene, glbToThreeMatrix, makeColoredTerrainMaterial, makeTerrainMaterial, setSurfaceVisible, surfaceMeshes } from "./scene.ts"
 import { declutterLabels } from "./labels.ts"
 import { OverlayScene, parseFeatureId, pickFeature } from "./overlays.ts"
 import { MAX_CAPTURE_SCALE, ViewerController } from "./viewerService.ts"
@@ -226,6 +226,7 @@ export const makeViewerPanel = (data: ViewerData, controller: ViewerController =
         decoder: cfg.decoder ?? defaultDecoder(cfg.workers),
         glbToThree: glbToThreeMatrix(d.manifest.coordinateSystem.glbToWorld),
         material: makeTerrainMaterial(),
+        colorMaterial: makeColoredTerrainMaterial(),
         ...(cfg.budgetBytes === undefined ? {} : { budgetBytes: cfg.budgetBytes }),
         ...(cfg.maxInFlight === undefined ? {} : { maxInFlight: cfg.maxInFlight }),
         ...(cfg.lod0Range === undefined ? {} : { select: { lod0Range: cfg.lod0Range } }),

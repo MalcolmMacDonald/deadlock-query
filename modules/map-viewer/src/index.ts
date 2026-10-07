@@ -28,7 +28,7 @@ export * from "./tiles.ts"
 export * from "./tileStreamer.ts"
 export * from "./tileDecode.ts"
 export { defaultDecoder, DEFAULT_DECODE_WORKERS } from "./defaultDecoder.ts"
-export { buildScene, glbToThreeMatrix, makeTerrainMaterial, setSurfaceVisible, WORLD_TO_THREE } from "./scene.ts"
+export { buildScene, glbToThreeMatrix, makeColoredTerrainMaterial, makeTerrainMaterial, setSurfaceVisible, WORLD_TO_THREE } from "./scene.ts"
 
 export const makeViewerModule = (data: ViewerData, controller = new ViewerController()): ModuleDefinition => ({
   id: "map-viewer",

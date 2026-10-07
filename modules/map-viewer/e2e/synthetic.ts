@@ -12,9 +12,11 @@ export interface SyntheticOptions {
   readonly cell?: number
   /** Heightfield grid size (vertices per edge) for LOD0, LOD1, ...; each LOD roughly quarters the bytes. */
   readonly grids?: ReadonlyArray<number>
+  /** Give every tile a `COLOR_0` (RGBA8) so the coloured material path is exercised (default false). */
+  readonly colored?: boolean
 }
 
-export const DEFAULT_SYNTHETIC: Required<SyntheticOptions> = { cols: 14, rows: 14, cell: 1000, grids: [260, 130, 65] }
+export const DEFAULT_SYNTHETIC: Required<SyntheticOptions> = { cols: 14, rows: 14, cell: 1000, grids: [260, 130, 65], colored: false }
 
 const height = (x: number, y: number) => 60 * Math.sin(x / 700) * Math.cos(y / 900) + 25 * Math.sin((x + y) / 230)
 
@@ -26,7 +28,7 @@ const pad4 = (u: Uint8Array, byte: number): Uint8Array => {
 }
 
 /** A `n` x `n` vertex heightfield over [x0, x0 + size] x [y0, y0 + size] (world), as a GLB in glTF space (Y up). */
-export const heightfieldGlb = (x0: number, y0: number, size: number, n: number): Uint8Array => {
+export const heightfieldGlb = (x0: number, y0: number, size: number, n: number, colored = false): Uint8Array => {
   const pos = new Float32Array(n * n * 3)
   let mnY = Infinity, mxY = -Infinity
   for (let j = 0; j < n; j++) {
@@ -43,24 +45,33 @@ export const heightfieldGlb = (x0: number, y0: number, size: number, n: number):
     const a = j * n + i, b = a + 1, c = a + n, d = c + 1
     idx[k++] = a; idx[k++] = c; idx[k++] = b; idx[k++] = b; idx[k++] = c; idx[k++] = d
   }
+  // Optional COLOR_0 (RGBA8 normalised): red where the ground is high, blue where it is low, green across x.
+  const col = colored ? new Uint8Array(n * n * 4) : undefined
+  if (col) for (let v = 0; v < n * n; v++) {
+    const t = (pos[v * 3 + 1]! - mnY) / Math.max(1e-6, mxY - mnY)
+    col.set([Math.round(255 * t), Math.round(255 * ((v % n) / (n - 1))), Math.round(255 * (1 - t)), 255], v * 4)
+  }
   const json = {
     asset: { version: "2.0", generator: "deadlock-query/map-viewer synthetic" },
     scene: 0, scenes: [{ nodes: [0] }], nodes: [{ mesh: 0 }],
-    meshes: [{ primitives: [{ attributes: { POSITION: 0 }, indices: 1 }] }],
+    meshes: [{ primitives: [{ attributes: { POSITION: 0, ...(col ? { COLOR_0: 2 } : {}) }, indices: 1 }] }],
     accessors: [
       { bufferView: 0, componentType: 5126, count: n * n, type: "VEC3", min: [x0, mnY, -(y0 + size)], max: [x0 + size, mxY, -y0] },
-      { bufferView: 1, componentType: 5125, count: idx.length, type: "SCALAR" }
+      { bufferView: 1, componentType: 5125, count: idx.length, type: "SCALAR" },
+      ...(col ? [{ bufferView: 2, componentType: 5121, normalized: true, count: n * n, type: "VEC4" }] : [])
     ],
     bufferViews: [
       { buffer: 0, byteOffset: 0, byteLength: pos.byteLength, target: 34962 },
-      { buffer: 0, byteOffset: pos.byteLength, byteLength: idx.byteLength, target: 34963 }
+      { buffer: 0, byteOffset: pos.byteLength, byteLength: idx.byteLength, target: 34963 },
+      ...(col ? [{ buffer: 0, byteOffset: pos.byteLength + idx.byteLength, byteLength: col.byteLength, target: 34962 }] : [])
     ],
-    buffers: [{ byteLength: pos.byteLength + idx.byteLength }]
+    buffers: [{ byteLength: pos.byteLength + idx.byteLength + (col?.byteLength ?? 0) }]
   }
   const jsonBytes = pad4(new TextEncoder().encode(JSON.stringify(json)), 0x20)
-  const bin = new Uint8Array(pos.byteLength + idx.byteLength)
+  const bin = new Uint8Array(pos.byteLength + idx.byteLength + (col?.byteLength ?? 0))
   bin.set(new Uint8Array(pos.buffer), 0)
   bin.set(new Uint8Array(idx.buffer), pos.byteLength)
+  if (col) bin.set(col, pos.byteLength + idx.byteLength)
   const total = 12 + 8 + jsonBytes.length + 8 + bin.length
   const out = new Uint8Array(total)
   const dv = new DataView(out.buffer)
@@ -85,7 +96,7 @@ export interface SyntheticMap {
 
 export const syntheticMap = (opts: SyntheticOptions = {}): SyntheticMap => {
   const o = { ...DEFAULT_SYNTHETIC, ...opts }
-  const bytes = o.grids.map(glbBytesForGrid)
+  const bytes = o.grids.map((n) => heightfieldGlb(0, 0, 1, n, o.colored).byteLength)
   const tiles: Manifest["tiles"][number][] = []
   const spec = new Map<string, { x0: number; y0: number; n: number }>()
   const x0 = -(o.cols * o.cell) / 2, y0 = -(o.rows * o.cell) / 2
@@ -112,7 +123,7 @@ export const syntheticMap = (opts: SyntheticOptions = {}): SyntheticMap => {
     glb: (id) => {
       const s = spec.get(id)
       if (!s) throw new Error(`unknown tile ${id}`)
-      return heightfieldGlb(s.x0, s.y0, o.cell, s.n)
+      return heightfieldGlb(s.x0, s.y0, o.cell, s.n, o.colored)
     },
     totalTileBytes: tiles.reduce((n, t) => n + t.bytes, 0)
   }

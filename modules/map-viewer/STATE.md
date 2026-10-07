@@ -89,5 +89,7 @@
 
 - 2026-10-07 — Collision mesh is hidden by default and shown per user toggle rather than removed from the scene: it is already loaded for the BVH fallback and the toggle is free. `ViewerSurface` gained a required `setSurfaceVisible`; the shell needs no change (it already mounts `viewer.layers`).
 
+- 2026-10-07 — Vertex colours: tiles may carry `COLOR_0` (RGBA8 normalised, linear; baked per vertex by map-extractor from the game's materials and textures). `decodeTileGlb` returns them as `colors` (counted in the streaming budget, transferred by the worker pool), the streamer sets a `color` attribute and draws such tiles with `makeColoredTerrainMaterial()` (white, `vertexColors`, same lighting rig); tiles without colours keep the grey material, so old bundles look as before. A tile is coloured only if every mesh in it has `COLOR_0`. `eagerly built` scenes (`buildScene`) pick the material per mesh the same way. `e2e/synthetic.ts` has `colored: true` for tests.
+
 ## Open questions
 - (see PLAN.md §9)

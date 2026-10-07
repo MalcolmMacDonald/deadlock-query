@@ -1,10 +1,10 @@
 import { expect, test } from "bun:test"
 import * as THREE from "three"
 import {
-  TileStreamer, buildTileIndex, decodeTileGlb, glbToThreeMatrix, inlineDecoder, workerDecoder,
+  TileStreamer, buildTileIndex, decodeTileGlb, decodedBytes, glbToThreeMatrix, inlineDecoder, workerDecoder,
   type DecodedTile, type TileDecoder, type WorkerLike, type WorkerReply, type WorkerRequest
 } from "../src/index.ts"
-import { DEFAULT_SYNTHETIC, syntheticMap } from "../e2e/synthetic.ts"
+import { DEFAULT_SYNTHETIC, heightfieldGlb, syntheticMap } from "../e2e/synthetic.ts"
 
 const MB = 1024 * 1024
 
@@ -159,7 +159,7 @@ const fakeWorker = (mode: "ok" | "die"): WorkerLike => {
       queueMicrotask(async () => {
         if (mode === "die") { w.onerror?.(new Error("worker failed to load")); return }
         const d = await decodeTileGlb(msg.bytes)
-        const reply: WorkerReply = { id: msg.id, ok: true, positions: d.positions, indices: d.indices }
+        const reply: WorkerReply = { id: msg.id, ok: true, positions: d.positions, indices: d.indices, colors: d.colors }
         w.onmessage?.({ data: reply })
       })
     }
@@ -176,4 +176,44 @@ test("worker pool decodes through workers, and falls back to the calling thread 
   expect((await dying.decode(glb)).positions.length).toBe(243) // stays on the fallback
   const unavailable = workerDecoder(() => { throw new Error("no workers here") }, 2)
   expect((await unavailable.decode(glb)).positions.length).toBe(243)
+})
+
+test("vertex colours: decoded as RGBA8 per vertex, counted in the budget, carried by the worker pool, drawn with the colour material", async () => {
+  const plain = await decodeTileGlb(heightfieldGlb(0, 0, 100, 9))
+  expect(plain.colors).toBeUndefined()
+  const glb = heightfieldGlb(0, 0, 100, 9, true)
+  const d = await decodeTileGlb(glb)
+  expect(d.colors).toBeInstanceOf(Uint8Array)
+  expect(d.colors!.length).toBe(9 * 9 * 4)
+  expect([...d.colors!.subarray(0, 4)].every((v) => v >= 0 && v <= 255)).toBe(true)
+  expect(d.colors![3]).toBe(255)
+  // the colour follows the vertex: red grows with height (glTF Y), blue falls
+  const hi = [...Array(81).keys()].reduce((a, b) => (d.positions[b * 3 + 1]! > d.positions[a * 3 + 1]! ? b : a))
+  const lo = [...Array(81).keys()].reduce((a, b) => (d.positions[b * 3 + 1]! < d.positions[a * 3 + 1]! ? b : a))
+  expect(d.colors![hi * 4]).toBeGreaterThan(d.colors![lo * 4]!)
+  expect(d.colors![hi * 4 + 2]).toBeLessThan(d.colors![lo * 4 + 2]!)
+  expect(decodedBytes(d)).toBe(plain.positions.byteLength + d.indices.byteLength + 81 * 4)
+
+  const pool = workerDecoder(() => fakeWorker("ok"), 1)
+  expect((await pool.decode(glb)).colors).toEqual(d.colors)
+
+  const colorMat = new THREE.MeshBasicMaterial({ vertexColors: true }), plainMat = new THREE.MeshBasicMaterial()
+  const mk = (glbBytes: Uint8Array) => {
+    const map = syntheticMap({ cols: 1, rows: 1, grids: [9] })
+    const s = new TileStreamer({
+      cells: buildTileIndex(map.manifest.tiles), fetchTile: async () => glbBytes, decoder: inlineDecoder(),
+      glbToThree: glbToThreeMatrix(map.manifest.coordinateSystem.glbToWorld), material: plainMat, colorMaterial: colorMat, budgetBytes: 64 * MB
+    })
+    s.update(cameraAt(0, 1500, 0))
+    return s
+  }
+  for (const [bytes, material, hasColor] of [[glb, colorMat, true], [heightfieldGlb(0, 0, 100, 9), plainMat, false]] as const) {
+    const s = mk(bytes)
+    await s.idle()
+    const mesh = s.root.children[0] as THREE.Mesh
+    expect(mesh.material).toBe(material)
+    expect(mesh.geometry.getAttribute("color") !== undefined).toBe(hasColor)
+    if (hasColor) { expect(mesh.geometry.getAttribute("color").normalized).toBe(true); expect(mesh.geometry.getAttribute("color").itemSize).toBe(4) }
+    s.dispose()
+  }
 })

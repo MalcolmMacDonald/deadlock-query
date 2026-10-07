@@ -10,7 +10,7 @@ scope.onmessage = async (e) => {
   const { id, bytes } = e.data
   try {
     const d = await decodeTileGlb(bytes)
-    scope.postMessage({ id, ok: true, positions: d.positions, indices: d.indices }, [d.positions.buffer, d.indices.buffer])
+    scope.postMessage({ id, ok: true, positions: d.positions, indices: d.indices, colors: d.colors }, [d.positions.buffer, d.indices.buffer, ...(d.colors ? [d.colors.buffer] : [])])
   } catch (err) {
     scope.postMessage({ id, ok: false, error: String(err) })
   }
