@@ -54,7 +54,7 @@ test.skipIf(!haveBrowser)("slice-1 query runs against the mini-map and renders t
 }).toArray()`)
   await page.click("#run")
   await page.waitForSelector("[data-testid=results-table] tbody tr", { timeout: 20_000 })
-  const rows = await page.$$eval("[data-testid=results-table] tbody tr", (trs) => trs.map((tr) => Array.from((tr as HTMLTableRowElement).cells).map((c) => c.textContent ?? "")))
+  const rows = await page.$$eval("[data-testid=results-table] tbody tr", (trs) => trs.map((tr) => Array.from((tr as HTMLTableRowElement).cells).map((c) => (c as HTMLElement).dataset.entityId ?? c.textContent ?? "")))
   expect(rows.map((r) => [r[0], r[2], r[3]])).toEqual(mini.expectedGuardianOrbDistance.rows.map((r) => [String(r[0]), String(r[2]), String(r[3])]))
   expect(await page.textContent("[data-testid=stats]")).toMatch(new RegExp(`${mini.expectedGuardianOrbDistance.rows.length} rows`))
   expect(errors).toEqual([])
@@ -96,7 +96,9 @@ test.skipIf(!haveBrowser)("results drive the viewer overlay, and row ↔ pick �
   const ids = mini.expectedGuardianOrbDistance.rows.map((_, i) => String(i))
   const overlay = await page.evaluate(() => (self as any).__qb.host.log.overlays.get("query-result")?.map((f: any) => f.label))
   // Labels name the thing (the guardian id in column c1), not the row/column plumbing.
-  const names = await page.$$eval("[data-testid=results-table] tbody tr", (rs) => rs.map((r) => r.querySelector("td")?.textContent))
+  const names = await page.$$eval("[data-testid=results-table] tbody tr", (rs) => rs.map((r) => (r.querySelector("td") as HTMLElement | null)?.dataset.entityId ?? r.querySelector("td")?.textContent))
+  // Entity ids read as "<kind> #<id suffix>" in the table, with the full id as the tooltip.
+  expect(await page.$eval("[data-testid=results-table] tbody tr td", (td) => [td.textContent, td.getAttribute("title")])).toEqual(["guardian #guardian-1-2 · yellow", "guardian-1-2"])
   expect(overlay).toEqual(names)
   // Feature ids are the viewer's own `<layer>:<index>`.
   const featureId = (i: number) => `query-result:${i}`

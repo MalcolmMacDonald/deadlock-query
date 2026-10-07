@@ -100,6 +100,8 @@ Also verified: library-class member completions with TSDoc signature, string-lit
 
 - 2026-10-07 — UX round two: clicking a result row now also flies the map camera to it (first feature: the point, or the centre of a line/area; `featureFocus`, `focusRow`). Map picks do not move the camera. Already present and not redone: sortable/filterable/paged table, CSV/JSON/GeoJSON export and copy, gallery, saved queries, share links, friendly errors, real column names.
 
+- 2026-10-07 — Readable entity cells: a result cell whose text is a known entity id (any column type, looked up in the loaded bundle) shows `<kind> #<id after the colon> · <lane>` (`entityLabel`), e.g. `healingOrb #27 · blue`, with the full id as the tooltip and a dotted underline. Clicking it selects the row, flies the camera to that entity and, when the column is a real entity column (it has a `.position` feature), highlights just that point. The cell value itself (sort, CSV, share) stays the raw id; the filter box still matches the raw id, not the label. Checked on the real dl_midtown bundle in the shell.
+
 ## In progress
 - (nothing)
 

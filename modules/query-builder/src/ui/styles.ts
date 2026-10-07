@@ -51,5 +51,6 @@ export const STYLE = `
 .dlq-qb .card p{margin:0}.dlq-qb .card .needs{color:#999}.dlq-qb .card .actions{display:flex;gap:6px}
 .dlq-qb table{border-collapse:collapse}.dlq-qb th,.dlq-qb td{border:1px solid #333;padding:2px 8px;text-align:left}.dlq-qb th{background:#252526}
 .dlq-qb tbody tr.selected td{background:#264f78}
+.dlq-qb td.entity{cursor:pointer;text-decoration:underline dotted}
 .dlq-qb .error{color:#f48771;white-space:pre-wrap}.dlq-qb .warning{background:#5a4a1a;padding:2px 6px;margin:4px 0}
 `
