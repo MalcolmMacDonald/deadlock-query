@@ -14,6 +14,11 @@ test("root files fail unless infra", () => {
   expect(checkScope(["package.json"])).toHaveLength(1)
   expect(checkScope(["package.json"], { infra: true })).toEqual([])
 })
+test("a data-pointer-only PR passes without the infra label", () => {
+  expect(checkScope(["data/current-build.json"], { branch: "UpdateMap" })).toEqual([])
+  expect(checkScope(["data/current-build.json", "package.json"])).toHaveLength(1)
+  expect(checkScope(["data/current-build.json", "modules/shell/a.ts"])).toHaveLength(1)
+})
 test("claude branch may not touch semantics", () => {
   const f = ["modules/spatial-core/src/semantics/isInterior.ts"]
   expect(checkScope(f, { branch: "claude/x" })).toHaveLength(1)
