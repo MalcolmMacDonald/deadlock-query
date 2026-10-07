@@ -1,8 +1,8 @@
 # map-extractor — state
 
 - **Status:** S2 spike complete — **GO** (render, collision, entities, nav all obtainable)
-- **Version:** 0.7.0 (module); `EXTRACTOR_VERSION` 0.4.0 (lite reduction changed: cached lite stages rebuild, and with `--keep-work` they reuse the cached full export)
-- **Current milestone:** M0-M5 code done and run on real `dl_midtown` data (2026-10-06); **blocked on a walkable collision source** (see "Collision finding"); navmesh sign-off pending
+- **Version:** 0.8.0 (module); `EXTRACTOR_VERSION` 0.4.0 (unchanged on purpose: the new `nav` stage must not invalidate the cached multi-GB render stages)
+- **Current milestone:** M0-M5 code done and run on real `dl_midtown` data (2026-10-06). **Walkable collision solved by reading the game's own `.nav`** (see "Walkable surface from the game's nav"); navmesh visual sign-off pending
 - **Last updated:** 2026-10-06
 
 ## Done
@@ -192,7 +192,7 @@ Disk: the lite bundle is 125 MB published; transient scratch is about 2.8 GB (`.
 - LOD1 keeps about 68 % of LOD0 triangles on the sampled tiles (e.g. 15,728 -> 10,677), not the 25 % `--lod-ratio` asks for: the 2 % error bound stops the simplifier first. Tune before relying on LOD1 for far views.
 - **The 85.1 % is not real walkable floor** (see "Collision finding" below).
 
-### Collision finding: `world_physics` does not hold the map's walkable ground
+### Collision finding: `world_physics` does not hold the map's walkable ground (resolved by option 4, see "Walkable surface from the game's nav" below)
 `floorHeight` of the 109,090 cells with a floor: **61.6 % at z about 1536, 11.1 % at 2048, 8.9 % at 1792, 6.3 % at 2816, 5.7 % at 2560, 5.2 % at 2304 and only 0.2 % near 256** (the arena floor should be near z 0 to 300). The largest navmesh components are flat surfaces at constant heights (z 2560, 1536, 2468), i.e. the tops of `npcclip` / `playerclip` volumes. Excluding the `playerclip` / `npcclip` layers leaves only **5,994 of 89,598 cells (6.7 %)** with any floor and a 169-polygon navmesh. The exporter is not dropping geometry: the PHYS block really holds 12 mesh shapes that decode to about 100 k triangles, mostly clip volumes (S2 hypothesis confirmed). So with the current collision input, `bake`'s floor, `interior`, `wallDistance` and the navmesh describe the clip lids, not the walkable map; the BVH is still fine for coarse rays against clip/solid volumes.
 - The walkable geometry is probably in per-model physics (aggregate `.vmdl_c` files, 1,935 of them) or only in the render meshes. Options to evaluate: (1) export the aggregates' own physics and instance them with the world-node matrices; (2) build the collision soup from the full render export, filtered to opaque materials (30 M triangles, heavy but a one-off); (3) use the game's own `pve_nav_cache.vdata_c` walkable points as seeds and for QA; (4) reverse the `.nav` file. Pick one before M5 sign-off or any query that needs floors.
 
@@ -224,14 +224,46 @@ Speed: the first decimation took 549 s because every fragment of an aggregate re
 
 Not verified visually: the triangle selection is by size and a uniform ratio, so thin or detailed small props may look coarse; check the lite tiles in map-viewer next to the collision GLB, then tune `--full-fraction`, `minTris` and the error bound. The budget (5 M) could be raised: tiles are only 87 MB after compression.
 
+## Walkable surface from the game's nav (2026-10-06, module 0.8.0)
+
+Decision (Malcolm): option 4 of "Collision finding", reverse-engineer `maps/<map>.nav`. **Decoded enough to use it**: the file holds the walkable mesh itself, in the entity/world frame, so no Recast and no per-aggregate physics are needed for the floor.
+
+### What the files are (dl_midtown, builds 25738777 and 25761866, byte-identical `.nav`; no public spec, found by inspection and checked against entities)
+- `dl_midtown.nav` (10.6 MB): `u32 0xFEEDFACE, u32 version (36), u32 0, u32 0x01000001`, then an **empty binary KV3 v5 block** (`KV3\x05`, uncompressed, 129 bytes, ends `00 DD EE FF`) at 0x10, then `u32 vertexCount` (146,016), `f32 xyz * n` (**Source units, Z up, same frame as `entities.json`**: X -9733..9276, Y -10741..10539, Z -765..2755), `u32 faceCount` (103,780), per face `u8 n (3 or 4), u32 vertexIndex * n, u32 0xFFFFFFFF` (62,688 triangles + 41,092 quads). All indices are valid. After the faces: a second empty KV3 block and a per-face record stream (`u32 faceId` from 1, then flags and small lists, 62 to 82 bytes each) that is **not decoded**; nothing geometric is needed from it.
+- **Frame check:** the 6 guardians sit at z 248..256 and the nav is at 242..262 under them; both patrons at z 632 vs nav 647/649; 133 of 168 sampled gameplay entities (spawns, camps, orbs, bosses) lie inside a nav polygon in xy. Typical ground is z 250..400. Several levels exist (z about 387 and about 2499 stacked in places).
+- `dl_midtown.navflowmap` (2.8 MB) is a plain **binary KV3 v5, uncompressed**: `{ version, hulls: [ { hull_index, nodes: [ { i, center, nav_ids, connections: [ { cost, node_index, nav_id } ], flow_map } ] } ] }`, 3 hulls (2,549 / 2,690 / 1,900 nodes). `nav_ids` are **1-based face indices**: 102,638 of 103,780 ids lie within 500 units of their node centre, and the ids partition the faces. A node is a connected group of faces (53 of 2,549 hull-0 nodes span more than one shared-edge component). Which hull is the hero hull is **unverified** (hull 0 is the default, `--flow-hull`).
+- `dl_midtown.navspace` (55 MB) is not needed and is not copied.
+- Source2Viewer-CLI facts: `-f maps/<map>.nav` is a **prefix match** (also `.navspace`, `.navflowmap`), so `-o` becomes a folder with a `maps/` tree; `S2V -i <file.navflowmap> -d` prints the KV3 as text on stdout (not used; `src/kv3.ts` reads the binary directly, ported from VRF's `BinaryKV3`).
+
+### Code
+- `src/navFile.ts` (`parseNavFile`), `src/kv3.ts` (`parseKv3`, v5 uncompressed only; compressed, blob and other versions are rejected with a clear error), `src/navFlow.ts` (`parseFlowMap`, `flowLinks`), `src/walkable.ts` (`cleanNavFaces`: weld the pooled vertices (**40,106 of 146,016 repeat a position**), drop repeated faces (**18,295 faces repeat another face's vertex set**), stitch T-junctions (12,491 edges); `triangulate`; `loadWalkable`).
+- `extract`: new `nav` stage copies `collision/walkable.nav` and `collision/walkable.navflowmap` into the bundle. A map without a `.nav` only warns. **Fresh end-to-end run on the real game (build 25761866): `extract --tier lite`, `tile`, `bake`, `pack-lite` (all ok) and `inspect` (ok) reproduce the numbers below exactly** (128 tile files 92.0 MB after tiling; the lite render export took about 7 min). Fix found on the way: `extract` now recreates an empty `render/` dir before clearing it (it had vanished during the export and crashed the lite stage with ENOENT).
+- `bake`: `floorHeight` is built from the nav faces (`--floor-source auto|game-nav|collision`); `interior` / `wallDistance` still ray-cast the **collision BVH** from that floor. The BVH itself is unchanged. `baked.floorSource` and `baked.walkable` (stats, covered cells, `multiLevelCells`) are raw-only manifest extras.
+- `bake` navmesh: `--nav-source auto|game|recast`. `auto` takes the game nav when the bundle has it: polygons = the cleaned faces (convex tri/quads, adjacency by shared edges), links = entity jump pads/ziplines (as before) + hull-0 `.navflowmap` connections whose endpoints are in different shared-edge components (kind `navConnection`, one way, from the source node's face nearest the destination face to the destination face). Recast is the fallback and unchanged. The record keeps the contracts shape (`tiles` 0, `agent`/`recast` zeros = not applicable) plus raw extras `source`, `walkable`, `componentsWithLinks`, `largestComponentShareWithLinks`.
+- Tests (`test/nav.test.ts`, 13, synthetic `.nav`/KV3 writers in `test/navFixtures.ts`, no game data): KV3 round trip and rejections, `.nav` parse and rejections, weld/dedupe/T-junction/face-to-polygon, flowmap parse and links, bake floor from nav vs collision, cache re-key, navmesh from nav (island joined by a flow link, path around the wall), fallbacks and error paths, extract nav stage (folder/single/none).
+
+### Real-data result (dl_midtown; parse 0.6 s, bake 17 s)
+| | before (clip lids, `world_physics` only) | after (game nav) |
+|---|---|---|
+| grid cells with a floor | **6.7 %** had a non-clip floor (5,994 of 89,598); with the clip layers in, 85.1 % but 61.6 % of those at z about 1536 (lids) | **47.3 %** (46,930 of 99,234 cells of 64; footprint 19,010 x 21,280, now the playable area) |
+| floor height | 61.6 % at z about 1536, 0.2 % near 256 | 47.9 % in z 250..500, 21.3 % in 500..750, 10.8 % in 1000..1250; peak at street level |
+| navmesh | 169 polygons (clip layers off) or 9,185 polygons, 821 components, largest 2.8 % (clip layers on) | **85,485 polygons, 1,739 components, largest 74.9 % by shared edges; 92.2 % (927 components) once the 2,455 `navConnection` + 13 jump pad links count**, 2.8 MB |
+| entity coverage | 13 of 20 zipline/jump pad links dropped | 277 of 375 kinded entities within 400 units of the mesh (all guardians, walkers, patrons, barracks, camps, shops, trooper spawns, capture points; 22 of 36 healing orbs and 47 of 129 zipline nodes hang in the air); 7 of 20 entity links dropped |
+| routes | none meaningful | patron to patron 23,031 units (spawn to spawn 30,382, guardian to guardian 22,816); camps and orbs on other levels need the links (**106 of 115 base/lane/camp entities reachable from patron 0 with links, 81 walking only**) |
+
+- **Multi-level floors:** 8,898 of 46,930 floor cells (19 %) have walkable surfaces on more than one level (z gap above 48). `floorHeight` is one value per cell (spatial-core's topmost surface), so those cells report the upper level; the navmesh keeps all levels. A multi-layer grid (or a walkable-level selector) is a spatial-core / contracts decision.
+- **`interior` is still not meaningful (80.8 % of floor cells) and cannot be fixed from `world_physics`:** its playerclip/npcclip lids sit within 1500 above street level. Without the clip layers it is 3.3 % (0.0 % without foliage too), because real buildings are not in `world_physics` at all. It needs the `citadel_trigger_interior` volumes (22 entities, per-entity models not exported yet) or render geometry. `wallDistance` finds a clip/solid wall within range for 79 % of cells; also provisional (placeholder semantics).
+- Not decoded: per-face records (nav flags, one-way/ledge info), the meaning of the other two hulls, `.navspace`. **Not verified:** that all 85,485 polygons are walkable for the hero hull (the file may be the union over hulls); `navConnection` directions and costs are taken from the flowmap as is (link cost is distance / speed of the kind; the flowmap's own cost is ignored).
+
 ## In progress
-- Collision input for floors/navmesh (see "Collision finding"); decision needed.
+- Visual sign-off of `<bundle>.qa/navmesh.obj` (needs a human), then tune.
 
 ## Next
-1. **Get walkable collision** (see "Collision finding"): without it the grid floor, `interior`, `wallDistance` and the navmesh are not meaningful. Then re-run `bake`, check the floor-height histogram looks like a ground floor, open `<bundle>.qa/navmesh.obj`, tune `--agent-*` / `--nav-exclude-layers`, record the sign-off. Then M6 (caching/resume/`diff`, README, update runbook).
-2. Triangle cut quality (open question d): decimation is in (see above). Look at the lite tiles in map-viewer next to the collision GLB and tune `--tri-budget` (the bundle is only 109 MB, so there is room to raise it a lot), `--full-fraction` and `minTris`. Check `tile` LOD1 ratio at the same time.
-3. Open questions: (a) physics vs render frame **settled, same frame** (see M1 findings); (b) all hulls exported and (c) per-entity volume models (interior/trigger shapes) still open.
-4. Check `dl_hideout` / `new_player_basics` only if the owner wants them (not in Slice 1).
+1. **Navmesh sign-off** (see "Navmesh sign-off" and the game-nav section above): open `<bundle>.qa/navmesh.obj` from `bake` (component 0 = main mesh), check lanes, bases, stairs and ramps, and that rooftops and upper levels are separate components only where the game has them. Decide the hull (`--flow-hull`). Then M6 (caching/resume/`diff`, README, update runbook). To get `walkable.nav` into an existing bundle, re-run `extract` (only the cheap `nav` stage runs; `EXTRACTOR_VERSION` did not change), then `bake --force`.
+2. **`interior`** needs other data: export the `citadel_trigger_interior` models (open question c) or derive it from render geometry; `world_physics` cannot supply it (see the game-nav section).
+3. Triangle cut quality (open question d): decimation is in (see above). Look at the lite tiles in map-viewer next to the collision GLB and tune `--tri-budget` (the bundle is only 109 MB, so there is room to raise it a lot), `--full-fraction` and `minTris`. Check `tile` LOD1 ratio at the same time.
+4. Open questions: (a) physics vs render frame **settled, same frame** (see M1 findings); (b) all hulls exported and (c) per-entity volume models (interior/trigger shapes) still open.
+5. Check `dl_hideout` / `new_player_basics` only if the owner wants them (not in Slice 1).
 
 ## Blockers / Requests to other modules
 - spatial-core: (a) export a `SEMANTICS_VERSION` (bake currently hashes `semantics/*.ts` at run time); (b) `floorHeight` is the topmost surface, so interior cells under a roof are not detected, and row-range/worker-friendly `SampleGrid.build` would let `bake` parallelise.
@@ -240,6 +272,8 @@ Not verified visually: the triangle selection is by size and a uniform ratio, so
 - contracts: `manifest.baked.navmesh` shape is documented under M5; the navmesh binary is spatial-core's `NavMesh.serialize()` layout (contracts has no spec yet). Contracts M3 (baked-data specs) should adopt it.
 - root (optional): add `data/` to `.gitignore`; the extractor already self-ignores its output root.
 - contracts: `Tile` has a single `file`; the render export is `n0.gltf` + 3 `.bin` (>1 GB each). Tile `bytes` currently sums the bins and `sha256` covers the `.gltf` only. Consider `Tile.files[]` or a size-limit/tiling note (M3).
+- contracts (from the game-nav bake, 0.8.0): `BakedNavmesh` requires `agent`, `recast`, `excludedLayers`, `inputTriangles`, `tiles`, which mean nothing for a navmesh taken from the game's own faces (written as zeros / empty). Please make them optional and add `source: "game-nav" | "recast"`, `componentsWithLinks`, `largestComponentShareWithLinks`; `Baked` gains `floorSource` and `walkable` (the extractor already writes them as raw extras); `CollisionRef` could name `walkableNav` / `walkableFlowmap` (now found by the fixed paths `collision/walkable.nav` and `.navflowmap`).
+- spatial-core / query-builder: game-nav links have kind `navConnection` (about 2,455, one way); `MovementModel.linkSpeeds` must list it or those links are unusable (without them 34 of 115 base/lane/camp entities are not reachable from a patron on foot). `floorHeight` is the topmost walkable surface: 19 % of floor cells have a second level, so a multi-layer grid (or a level selector) is wanted. `interior` cannot come from `world_physics` (see the game-nav section).
 
 ## Decisions log
 - 2026-10-05 — Module scaffolded (rev 2 of IMPLEMENTATION_PLAN.md).
@@ -262,6 +296,8 @@ Not verified visually: the triangle selection is by size and a uniform ratio, so
 
 - 2026-10-06 - Lite decimation: per-primitive meshopt simplification with a common ratio for everything outside the largest-primitive full-detail share (default 0.6 of the budget), a per-primitive triangle floor, cached accessor reads and vertex compaction for speed; `EXTRACTOR_VERSION` bumped to 0.4.0 so old lite stages rebuild.
 - 2026-10-06 — Flaky `verify:all` fix: the five tests that run a real bake or navmesh bake (0.5 to 1.3 s alone) get an explicit 60 s timeout. bun's 5 s default failed them in clean-clone runs where `verify:all` ran every module in parallel on a busy machine. Assertions unchanged; the timeout only guards against a hang.
+
+- 2026-10-06 — Walkable surface: use the game's own `.nav` (Malcolm chose reverse engineering). Only the geometry is decoded (vertex pool + faces); the `.navflowmap` is read as binary KV3 (own reader, no text round trip through the CLI); `walkable.nav` / `.navflowmap` live in `collision/` of the bundle at fixed paths; `bake` and the navmesh stage switch to them automatically (`auto`) and keep the old collision/Recast path as the fallback and via flags; the navmesh record keeps the contracts shape (zeros for Recast-only fields) and carries raw extras until contracts adopts them; `EXTRACTOR_VERSION` stays 0.4.0 so the render stages stay cached; `interior` is left on the collision BVH and flagged, not faked.
 
 ## Open questions
 - (see PLAN.md §9, and "Next" item 2 above)

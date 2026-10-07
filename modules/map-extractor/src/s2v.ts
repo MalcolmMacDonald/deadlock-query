@@ -34,6 +34,11 @@ export const args = {
   /** `-o` is a file path when `-f` matches exactly one file. */
   file: (vpk: string, inner: string, out: string, extra: string[] = []) => ["-i", vpk, "-f", inner, "-o", out, "-d", ...extra],
   collision: (vpk: string, map: string, out: string) => args.file(vpk, `maps/${map}/world_physics.vmdl_c`, out, ["--gltf_export_format", "glb"]),
+  /**
+   * `-f maps/<map>.nav` is a prefix match: with `<map>.navspace` and `<map>.navflowmap` beside it the CLI treats `-o` as a folder
+   * and writes `<out>/maps/<map>.nav` (and the other two); a map with only a `.nav` gets `-o` as the file path.
+   */
+  nav: (vpk: string, map: string, out: string) => args.file(vpk, `maps/${map}.nav`, out),
   entities: (vpk: string, map: string, out: string) => args.file(vpk, `maps/${map}/entities/default_ents.vents_c`, out),
   /**
    * `--gltf_export_materials` writes glTF materials plus their textures beside the .gltf. Opt-in: on the real dl_midtown

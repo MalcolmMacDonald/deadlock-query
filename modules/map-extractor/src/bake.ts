@@ -10,11 +10,15 @@ import {
   type ChannelSpec, type SemanticsParams
 } from "@deadlock-query/spatial-core"
 import { mulMat4 } from "./mat4.ts"
+import { WALKABLE_NAV_FILE, loadWalkable, triangulate, type WalkableStats } from "./walkable.ts"
 
 /**
  * M4: bakes derived spatial data next to a bundle's manifest.
  *   baked/collision.bvh      spatial-core `Raycaster.serialize()` over the collision GLB, in Source units
  *   baked/sample-grid.bin    spatial-core `SampleGrid.serialize()`: `floorHeight` + the semantics channels
+ * `floorHeight` comes from the walkable surface (the game's nav faces, `collision/walkable.nav`) when the bundle has one, because
+ * `world_physics` holds only clip volumes: its topmost surface is a clip lid, not the ground. The semantics channels still ray-cast the
+ * collision BVH, starting from that floor.
  * The manifest gets a `baked` record (files, sha256, cell size, semanticsVersion, placeholder flag, cache key).
  */
 
@@ -22,6 +26,8 @@ export const BAKE_VERSION = "1.0.0"
 /** Layers that must not become solid world geometry: the sky box would make every point "interior". */
 export const DEFAULT_EXCLUDE_LAYERS: ReadonlyArray<string> = ["sky", "Citadel_Skyclip"]
 export const DEFAULT_CELL_SIZE = 64
+/** Walkable surfaces closer than this in z count as one level when looking for multi-level cells. */
+const WALKABLE_LEVEL_GAP = 48
 
 /** Channels written to the sample grid. `floorHeight` is built in; the rest call the owner-authored semantics. */
 export const INTERIOR_CHANNEL = "interior"
@@ -33,6 +39,8 @@ export interface BakeOptions {
   /** Collision layers (glTF `InteractAs`) left out of the BVH. A node is dropped when any of its layers is excluded. */
   readonly excludeLayers?: ReadonlyArray<string>
   readonly params?: Partial<SemanticsParams>
+  /** `auto` (default): the walkable nav faces when the bundle has them, else the topmost collision surface. */
+  readonly floorSource?: "auto" | "game-nav" | "collision"
   readonly force?: boolean
   readonly log?: ((m: string) => void) | undefined
 }
@@ -46,6 +54,9 @@ export interface BakedRecord {
   readonly placeholder: boolean
   /** Everything the output depends on; equal key + files present = nothing to do. */
   readonly inputKey: string
+  /** Raw-only extras (not in the contracts schema yet). Absent on older bakes (= collision). */
+  readonly floorSource?: "game-nav" | "collision"
+  readonly walkable?: WalkableStats & { readonly file: string; readonly sha256: string; readonly triangles: number; readonly coveredCells: number; readonly totalCells: number; readonly multiLevelCells: number }
   readonly bvh: BakedFile & { readonly triangles: number; readonly vertices: number; readonly excludedLayers: ReadonlyArray<string>; readonly skippedNodes: number }
   readonly sampleGrid: BakedFile & {
     readonly cellSize: number; readonly nx: number; readonly ny: number
@@ -132,15 +143,15 @@ export const loadCollisionMesh = async (path: string, glbToWorld: Mat4, exclude:
 }
 
 /** Channel generators wiring the owner-authored semantics into the grid (`cell.floorZ` is NaN where nothing is below). */
-export const semanticsChannels = (params: Partial<SemanticsParams>, maxRange: number): Record<string, ChannelSpec> => ({
+export const semanticsChannels = (params: Partial<SemanticsParams>, maxRange: number, collision?: Raycaster): Record<string, ChannelSpec> => ({
   [INTERIOR_CHANNEL]: {
     type: "u8",
-    gen: (c) => (Number.isNaN(c.floorZ) ? 0 : isInterior(c.rc, [c.x, c.y, c.floorZ], params) ? 1 : 0)
+    gen: (c) => (Number.isNaN(c.floorZ) ? 0 : isInterior(collision ?? c.rc, [c.x, c.y, c.floorZ], params) ? 1 : 0)
   },
   [WALL_DISTANCE_CHANNEL]: {
     type: "f32",
     // Saturates at `maxRange` when no wall is in range; NaN where there is no floor to sample from.
-    gen: (c) => (Number.isNaN(c.floorZ) ? NaN : (nearestWall(c.rc, [c.x, c.y, c.floorZ], params)?.distance ?? maxRange))
+    gen: (c) => (Number.isNaN(c.floorZ) ? NaN : (nearestWall(collision ?? c.rc, [c.x, c.y, c.floorZ], params)?.distance ?? maxRange))
   }
 })
 
@@ -163,9 +174,14 @@ export const bakeBundle = async (dir: string, o: BakeOptions = {}): Promise<Bake
   const exclude = [...(o.excludeLayers ?? DEFAULT_EXCLUDE_LAYERS)].sort()
   const params: SemanticsParams = { ...DEFAULT_PARAMS, ...o.params }
   const semVersion = semanticsVersion(params)
+  const walkablePath = join(dir, WALKABLE_NAV_FILE)
+  const floorSource = o.floorSource ?? "auto"
+  if (floorSource === "game-nav" && !existsSync(walkablePath)) return fail(`no walkable nav file at ${WALKABLE_NAV_FILE}: re-run extract on a map that ships a .nav`)
+  const useNav = floorSource !== "collision" && existsSync(walkablePath)
   const key = inputKey({
     bake: BAKE_VERSION, collision: sha256(readFileSync(collisionPath)), glbToWorld: manifest.collision.glbToWorld,
-    exclude, cellSize, semVersion, placeholder: PLACEHOLDER_SEMANTICS
+    exclude, cellSize, semVersion, placeholder: PLACEHOLDER_SEMANTICS,
+    floor: useNav ? sha256(readFileSync(walkablePath)) : "collision"
   })
 
   const prev = manifest.baked as Partial<BakedRecord> | undefined
@@ -185,12 +201,26 @@ export const bakeBundle = async (dir: string, o: BakeOptions = {}): Promise<Bake
   // Snap XY to multiples of the cell size: the BVH bounds carry a tiny epsilon, and world-aligned cells keep grids
   // comparable across game builds and cell sizes.
   const snap = (v: number, f: (n: number) => number) => f(v / cellSize) * cellSize
+  let floorRc = rc
+  let walkable: BakedRecord["walkable"]
+  let walkSoupStats: { stats: WalkableStats; triangles: number } | undefined
+  if (useNav) {
+    o.log?.("bake: loading the walkable nav faces for the floor")
+    try {
+      const w = loadWalkable(walkablePath)
+      const tri = triangulate(w.soup)
+      floorRc = Raycaster.fromGeometry(tri.positions, tri.indices)
+      walkSoupStats = { stats: w.stats, triangles: tri.indices.length / 3 }
+    } catch (e) {
+      return fail(`cannot read ${WALKABLE_NAV_FILE}: ${e instanceof Error ? e.message : String(e)}`)
+    }
+  }
   const bounds: Aabb = {
-    min: [snap(rc.bounds.min[0], Math.floor), snap(rc.bounds.min[1], Math.floor), rc.bounds.min[2]],
-    max: [snap(rc.bounds.max[0], Math.ceil), snap(rc.bounds.max[1], Math.ceil), rc.bounds.max[2]]
+    min: [snap(floorRc.bounds.min[0], Math.floor), snap(floorRc.bounds.min[1], Math.floor), floorRc.bounds.min[2]],
+    max: [snap(floorRc.bounds.max[0], Math.ceil), snap(floorRc.bounds.max[1], Math.ceil), floorRc.bounds.max[2]]
   }
   let lastPct = -1
-  const grid = SampleGrid.build(rc, bounds, cellSize, semanticsChannels(params, params.maxRange), {
+  const grid = SampleGrid.build(floorRc, bounds, cellSize, semanticsChannels(params, params.maxRange, rc), {
     onProgress: (done, total) => {
       const pct = Math.floor((done / total) * 10) * 10
       if (pct !== lastPct) { lastPct = pct; o.log?.(`bake: sample grid ${pct}%`) }
@@ -200,7 +230,18 @@ export const bakeBundle = async (dir: string, o: BakeOptions = {}): Promise<Bake
   const floor = grid.raw("floorHeight") as Float32Array
   const covered = floor.reduce((n, h) => (Number.isNaN(h) ? n : n + 1), 0)
   if (covered === 0) warnings.push("sample grid has no floor hits: collision may be in the wrong frame")
-  else o.log?.(`bake: ${covered}/${floor.length} cells have a floor`)
+  else o.log?.(`bake: ${covered}/${floor.length} cells have a floor (${useNav ? "walkable nav faces" : "topmost collision surface"})`)
+  if (useNav && walkSoupStats) {
+    // The grid holds one height per cell (the topmost walkable surface); count the cells with a second level so that loss is visible.
+    let multi = 0
+    for (let iy = 0; iy < grid.ny; iy++) for (let ix = 0; ix < grid.nx; ix++) {
+      const x = grid.origin[0] + (ix + 0.5) * cellSize, y = grid.origin[1] + (iy + 0.5) * cellSize
+      const hits = floorRc.raycastAll([x, y, bounds.max[2] + 1], [0, 0, -1], { backfaces: true })
+      if (hits.length > 1 && hits[0]!.point[2] - hits[hits.length - 1]!.point[2] > WALKABLE_LEVEL_GAP) multi++
+    }
+    walkable = { ...walkSoupStats.stats, file: WALKABLE_NAV_FILE, sha256: sha256(readFileSync(walkablePath)), triangles: walkSoupStats.triangles, coveredCells: covered, totalCells: floor.length, multiLevelCells: multi }
+    if (multi > 0) warnings.push(`${multi} of ${covered} floor cells have walkable surfaces on more than one level; floorHeight keeps the topmost`)
+  }
   if (PLACEHOLDER_SEMANTICS) warnings.push("semantics are placeholders: interior/wallDistance channels are provisional until the owner finalises spatial-core/semantics")
 
   mkdirSync(join(dir, "baked"), { recursive: true })
@@ -211,6 +252,8 @@ export const bakeBundle = async (dir: string, o: BakeOptions = {}): Promise<Bake
     semanticsVersion: semVersion,
     placeholder: PLACEHOLDER_SEMANTICS,
     inputKey: key,
+    floorSource: useNav ? "game-nav" : "collision",
+    ...(walkable ? { walkable } : {}),
     bvh: {
       file: "baked/collision.bvh", bytes: bvhBytes.length, sha256: sha256(bvhBytes),
       triangles: mesh.indices.length / 3, vertices: mesh.positions.length / 3, excludedLayers: exclude, skippedNodes: mesh.skippedNodes

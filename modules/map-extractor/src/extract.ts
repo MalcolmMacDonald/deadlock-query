@@ -8,7 +8,9 @@ import { invertAffine } from "./mat4.ts"
 import { args, firstExceptionLine, lastRunOutput, run, type S2VRunner } from "./s2v.ts"
 import { buildLiteTiles, liteReady, type LiteOptions } from "./liteRender.ts"
 import { toEntities, parseVents } from "./vents.ts"
+import { WALKABLE_FLOW_FILE, WALKABLE_NAV_FILE } from "./walkable.ts"
 
+/** Unchanged by the `nav` stage on purpose: adding it must not invalidate the cached multi-GB render stages. */
 export const EXTRACTOR_VERSION = "0.4.0"
 export type Tier = "full" | "lite"
 
@@ -56,6 +58,14 @@ const stage = async (o: ExtractOptions, dir: string, name: string, outputs: stri
 const findPhysicsGlb = (dir: string): string | undefined => {
   const f = readdirSync(dir).filter((n) => n.endsWith("_physics.glb")).sort((a, b) => statSync(join(dir, b)).size - statSync(join(dir, a)).size)[0]
   return f && join(dir, f)
+}
+
+/** A file the CLI exported: `out` itself when it is a file, else `name` anywhere below the folder `out`. */
+const findExported = (out: string, name: string): string | undefined => {
+  if (!existsSync(out)) return undefined
+  if (statSync(out).isFile()) return basename(out) === name || name.endsWith(".nav") ? out : undefined
+  return readdirSync(out, { recursive: true, withFileTypes: true }).find((e) => e.isFile() && e.name === name)
+    ?.parentPath.concat("/", name)
 }
 
 const unionAabb = (a: Aabb | undefined, b: Aabb | undefined): Aabb | undefined =>
@@ -109,6 +119,25 @@ export const extract = async (o: ExtractOptions): Promise<ExtractResult> => {
     copyFileSync(found, physOut)
   })
 
+  // The game's own nav faces are the walkable surface (world_physics holds only clip volumes); bake reads them from the bundle.
+  const navOut = join(dir, WALKABLE_NAV_FILE), flowOut = join(dir, WALKABLE_FLOW_FILE)
+  try {
+    await stage(o, dir, "nav", [navOut], async () => {
+      const tmp = join(work, "nav")
+      rmSync(tmp, { recursive: true, force: true }); mkdirSync(tmp, { recursive: true })
+      await run(o.runner, "nav", args.nav(o.vpk, o.map, join(tmp, `${o.map}.nav`)))
+      const nav = findExported(join(tmp, `${o.map}.nav`), `${o.map}.nav`)
+      if (nav) copyFileSync(nav, navOut)
+      rmSync(flowOut, { force: true })
+      const flow = findExported(join(tmp, `${o.map}.nav`), `${o.map}.navflowmap`)
+      if (flow && flow !== nav) copyFileSync(flow, flowOut)
+      rmSync(tmp, { recursive: true, force: true })
+    })
+  } catch (e) {
+    if (!(e instanceof ExportFailed)) throw e
+    warnings.push(`nav: no walkable nav file exported (${e.stderr}); bake will fall back to the collision surface`)
+  }
+
   const tiles: Manifest["tiles"][number][] = []
   let renderInfo: GltfInfo | undefined
   let renderMatrix: Mat4 = IDENTITY_MAT4
@@ -142,6 +171,7 @@ export const extract = async (o: ExtractOptions): Promise<ExtractResult> => {
         rmSync(join(work, "render-full"), { recursive: true, force: true }); mkdirSync(join(work, "render-full"), { recursive: true })
         await run(o.runner, "render", args.render(o.vpk, o.map, fullGltf, o.materials))
       }
+      mkdirSync(liteDir, { recursive: true }) // an empty dir can vanish during the multi-minute export
       for (const f of readdirSync(liteDir)) rmSync(join(liteDir, f), { recursive: true, force: true })
       await liteReady
       const r = buildLiteTiles(fullGltf, liteDir, { ...o.lite, log: o.log })

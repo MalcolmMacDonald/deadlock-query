@@ -7,12 +7,17 @@ import { NavMesh, type NavLink } from "@deadlock-query/spatial-core"
 import { init } from "recast-navigation"
 import { generateTiledNavMesh } from "recast-navigation/generators"
 import { loadCollisionMesh } from "./bake.ts"
+import { flowLinks, parseFlowMap } from "./navFlow.ts"
+import { WALKABLE_FLOW_FILE, WALKABLE_NAV_FILE, loadWalkable, type WalkableStats } from "./walkable.ts"
 
 /**
  * M5: Recast navmesh baked from the collision GLB, written as spatial-core's `NavMesh.serialize()` format.
  *   baked/navmesh.bin   convex polygons in Source units (Z up) + off-mesh links from entities
  *   <qa dir>/navmesh.obj  one OBJ group per connected component, for eyeballing in Blender / MeshLab
  * The manifest's `baked.navmesh` records the file, counts, agent/Recast parameters and a cache key.
+ *
+ * When the bundle carries the game's own nav file (`collision/walkable.nav`, see `navFile.ts`) the mesh is taken from it instead of
+ * Recast (`source: "game-nav"`): `world_physics` holds only clip volumes, so Recast over it describes clip lids, not the walkable map.
  */
 
 export const NAVMESH_BAKE_VERSION = "1.0.0"
@@ -37,6 +42,10 @@ export interface NavmeshOptions {
   readonly maxLinkSnap?: number
   /** Directory for the OBJ QA export; `false` skips it. Default: `<bundle>.qa` next to the bundle. */
   readonly qaDir?: string | false
+  /** `auto` (default): the game nav file when the bundle has one, else Recast over the collision GLB. */
+  readonly source?: "auto" | "game" | "recast"
+  /** Game nav only: which `.navflowmap` hull supplies the off-mesh connections (default 0, unverified to be the hero hull). */
+  readonly flowHull?: number
   readonly force?: boolean
   readonly log?: ((m: string) => void) | undefined
 }
@@ -60,6 +69,12 @@ export interface NavmeshRecord {
   readonly recast: { readonly cellSize: number; readonly cellHeight: number; readonly tileSize: number }
   readonly excludedLayers: ReadonlyArray<string>
   readonly inputTriangles: number
+  /** Raw-only extras (not in the contracts schema yet): where the polygons came from. Absent on older bakes (= Recast). */
+  readonly source?: "game-nav" | "recast"
+  readonly walkable?: WalkableStats & { readonly file: string; readonly sha256: string; readonly flowFile?: string; readonly flowHull?: number }
+  /** Components / largest share once off-mesh links count as connections. */
+  readonly componentsWithLinks?: number
+  readonly largestComponentShareWithLinks?: number
 }
 
 export interface NavmeshReport {
@@ -370,6 +385,11 @@ export const bakeNavmesh = async (dir: string, o: NavmeshOptions = {}): Promise<
     warnings.push(`entities unreadable, no off-mesh links: ${e instanceof Error ? e.message : String(e)}`)
   }
 
+  const source = o.source ?? "auto"
+  const hasGameNav = existsSync(join(dir, WALKABLE_NAV_FILE))
+  if (source === "game" && !hasGameNav) return fail(`no game nav file at ${WALKABLE_NAV_FILE}: re-run extract on a map that ships a .nav`)
+  if (hasGameNav && source !== "recast") return bakeGameNavmesh(dir, entities, entitiesHash, errors, warnings, o)
+
   const key = inputKey({
     v: NAVMESH_BAKE_VERSION, collision: sha256(readFileSync(collisionPath)), glbToWorld: manifest.collision.glbToWorld,
     exclude, agent, cs, ch, tileSize, maxLinkSnap, entities: entitiesHash
@@ -427,6 +447,110 @@ export const bakeNavmesh = async (dir: string, o: NavmeshOptions = {}): Promise<
     components: sizes.length, largestComponentShare,
     links: { count: kept.length, dropped, byKind },
     agent, recast: { cellSize: cs, cellHeight: ch, tileSize }, excludedLayers: exclude, inputTriangles: mesh.indices.length / 3
+  }
+  const baked = (rawManifest["baked"] ?? {}) as Record<string, unknown>
+  rawManifest["baked"] = { ...baked, navmesh }
+  writeFileSync(join(dir, "manifest.json"), JSON.stringify(rawManifest, null, 2) + "\n")
+  return { ok: true, cached: false, errors, warnings, navmesh, ...(qaFile ? { qaFile } : {}) }
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Game nav source
+// ---------------------------------------------------------------------------------------------------------------------
+
+/** Connected components counting `links` as connections between the polygons nearest their endpoints (union-find over the base components). */
+const componentsWithLinks = (soup: PolygonSoup, base: Int32Array, nm: NavMesh, links: ReadonlyArray<NavLink>): number[] => {
+  const parent = Int32Array.from({ length: base.length }, (_, i) => i)
+  const find = (i: number): number => { while (parent[i] !== i) { parent[i] = parent[parent[i]!]!; i = parent[i]! } return i }
+  const union = (a: number, b: number) => { const ra = find(a), rb = find(b); if (ra !== rb) parent[ra] = rb }
+  // Polygons of one shared-edge component are already joined: link each polygon to the first polygon of its component.
+  const first = new Map<number, number>()
+  base.forEach((c, p) => { const f = first.get(c); if (f === undefined) first.set(c, p); else union(f, p) })
+  for (const l of links) {
+    const a = nm.nearestPoint(l.from)?.poly, b = nm.nearestPoint(l.to)?.poly
+    if (a !== undefined && b !== undefined) union(a, b)
+  }
+  const sizes = new Map<number, number>()
+  for (let p = 0; p < soup.polys.length; p++) { const r = find(p); sizes.set(r, (sizes.get(r) ?? 0) + 1) }
+  return [...sizes.values()].sort((a, b) => b - a)
+}
+
+/** Navmesh from the game's own nav faces (+ entity links and the `.navflowmap` connections that polygon adjacency lacks). */
+const bakeGameNavmesh = async (
+  dir: string, entities: ReadonlyArray<Entity>, entitiesHash: string, errors: string[], warnings: string[], o: NavmeshOptions
+): Promise<NavmeshReport> => {
+  const fail = (e: string): NavmeshReport => ({ ok: false, cached: false, errors: [...errors, e], warnings })
+  const navFile = join(dir, WALKABLE_NAV_FILE), flowFile = join(dir, WALKABLE_FLOW_FILE)
+  const hasFlow = existsSync(flowFile)
+  const maxLinkSnap = o.maxLinkSnap ?? 256
+  const flowHull = o.flowHull ?? 0
+  const navHash = sha256(readFileSync(navFile)), flowHash = hasFlow ? sha256(readFileSync(flowFile)) : "none"
+  const key = inputKey({ v: NAVMESH_BAKE_VERSION, source: "game-nav", nav: navHash, flow: flowHash, flowHull, maxLinkSnap, entities: entitiesHash })
+  const rawManifest = JSON.parse(readFileSync(join(dir, "manifest.json"), "utf8")) as Record<string, unknown>
+  const prev = (rawManifest["baked"] as { navmesh?: NavmeshRecord } | undefined)?.navmesh
+  const navPath = join(dir, "baked", "navmesh.bin")
+  const qaDir = o.qaDir === false ? undefined : (o.qaDir ?? `${dir.replace(/[\/]+$/, "")}.qa`)
+  if (!o.force && prev?.inputKey === key && existsSync(navPath)) {
+    o.log?.("navmesh: cached")
+    return { ok: true, cached: true, errors, warnings, navmesh: prev }
+  }
+
+  o.log?.("navmesh: reading the game nav file")
+  let walkable: ReturnType<typeof loadWalkable>
+  try {
+    walkable = loadWalkable(navFile)
+  } catch (e) {
+    return fail(`cannot read ${WALKABLE_NAV_FILE}: ${e instanceof Error ? e.message : String(e)}`)
+  }
+  const { soup, stats } = walkable
+  if (soup.polys.length === 0) return fail("the game nav file has no usable polygons")
+  const { component, sizes } = polygonComponents(soup)
+  const largestComponentShare = sizes[0]! / soup.polys.length
+  o.log?.(`navmesh: ${stats.faces} faces -> ${soup.polys.length} polygons (${stats.duplicateFaces} repeated faces dropped, ${stats.stitchedEdges} T-junction edges stitched), ${sizes.length} components (largest ${(largestComponentShare * 100).toFixed(1)}%)`)
+
+  const entityCandidates = entityLinks(entities)
+  const { kept: entityKept, dropped } = snapLinks(entityCandidates, soup.vertices, maxLinkSnap)
+  if (dropped > 0) warnings.push(`${dropped} entity off-mesh links dropped: an endpoint is more than ${maxLinkSnap} units from the navmesh`)
+  let flowKept: NavLink[] = []
+  if (hasFlow) {
+    try {
+      const hull = parseFlowMap(new Uint8Array(readFileSync(flowFile))).find((h) => h.hullIndex === flowHull)
+      if (!hull) warnings.push(`navflowmap has no hull ${flowHull}: no flow connections`)
+      else {
+        const r = flowLinks(hull, { component, faceToPolygon: walkable.faceToPolygon, soup })
+        flowKept = r.links
+        o.log?.(`navmesh: hull ${flowHull}: ${r.links.length} cross-component connections as links (${r.skipped.sameComponent} within a component, ${r.skipped.unresolved} unresolved)`)
+      }
+    } catch (e) {
+      warnings.push(`navflowmap unreadable, no flow connections: ${e instanceof Error ? e.message : String(e)}`)
+    }
+  } else warnings.push(`no ${WALKABLE_FLOW_FILE}: the mesh has no game-provided jump/drop connections`)
+  const links = [...entityKept, ...flowKept]
+  const byKind: Record<string, number> = {}
+  for (const l of links) byKind[l.kind] = (byKind[l.kind] ?? 0) + 1
+
+  const nm = NavMesh.fromPolygons(toNavMeshData(soup), links)
+  const bytes = new Uint8Array(nm.serialize())
+  const joined = componentsWithLinks(soup, component, nm, links)
+  mkdirSync(join(dir, "baked"), { recursive: true })
+  writeFileSync(navPath, bytes)
+  let qaFile: string | undefined
+  if (qaDir) {
+    mkdirSync(qaDir, { recursive: true })
+    qaFile = join(qaDir, "navmesh.obj")
+    writeFileSync(qaFile, navmeshObj(soup, component))
+  }
+  const navmesh: NavmeshRecord = {
+    bakeVersion: NAVMESH_BAKE_VERSION, inputKey: key, file: "baked/navmesh.bin", bytes: bytes.length, sha256: sha256(bytes),
+    polygons: soup.polys.length, vertices: soup.vertices.length / 3, tiles: 0, stitchedEdges: stats.stitchedEdges,
+    components: sizes.length, largestComponentShare,
+    links: { count: links.length, dropped, byKind },
+    // Not applicable to the game's own mesh (zeros, not guesses); `source` says why. A contracts follow-up should make these optional.
+    agent: { radius: 0, height: 0, climb: 0, slopeDegrees: 0 }, recast: { cellSize: 0, cellHeight: 0, tileSize: 0 },
+    excludedLayers: [], inputTriangles: soup.polys.reduce((n, p) => n + p.length - 2, 0),
+    source: "game-nav",
+    walkable: { ...stats, file: WALKABLE_NAV_FILE, sha256: navHash, ...(hasFlow ? { flowFile: WALKABLE_FLOW_FILE, flowHull } : {}) },
+    componentsWithLinks: joined.length, largestComponentShareWithLinks: joined[0]! / soup.polys.length
   }
   const baked = (rawManifest["baked"] ?? {}) as Record<string, unknown>
   rawManifest["baked"] = { ...baked, navmesh }

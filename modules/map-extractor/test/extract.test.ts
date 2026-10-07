@@ -81,6 +81,7 @@ const fakeRunner = (calls: string[][]): S2VRunner => async (a) => {
   if (inner.endsWith(".vents_c")) writeFileSync(out, VENTS)
   else if (inner.endsWith("world_physics.vmdl_c")) { writeFileSync(`${out}.glb`, new Uint8Array(0)); writeFileSync(`${out}_physics.glb`, m.collisionGlb) }
   else if (inner.endsWith(".vwnod_c")) writeFileSync(out, JSON.stringify({ asset: { version: "2.0" }, nodes: [], meshes: [], accessors: [] }))
+  else if (inner.endsWith(".nav")) writeFileSync(out, "nav") // single match: -o is the file path (parsed only by bake; see nav.test.ts)
   return { code: 0, stdout: "", stderr: "" }
 }
 
@@ -89,7 +90,7 @@ test("extract (lite) writes a valid bundle and caches stages", async () => {
   const calls: string[][] = []
   const opts = { vpk: "m.vpk", map: "dl_midtown", buildId: "1", s2vVersion: "20.0", tier: "lite" as const, outRoot: root, runner: fakeRunner(calls) }
   const r = await extract(opts)
-  expect(calls.length).toBe(3) // entities, collision, full render export (reduced to lite tiles)
+  expect(calls.length).toBe(4) // entities, collision, nav, full render export (reduced to lite tiles)
   const manifest = JSON.parse(readFileSync(join(r.dir, "manifest.json"), "utf8"))
   expect(manifest.collision.file).toBe("collision/physics.glb")
   expect(manifest.tiles).toEqual([])
@@ -98,9 +99,9 @@ test("extract (lite) writes a valid bundle and caches stages", async () => {
   expect(rep.errors).toEqual([])
   expect(rep.info["entities"]).toBe(4)
   await extract(opts)
-  expect(calls.length).toBe(3) // entities, collision, full render export (reduced to lite tiles) // cached
+  expect(calls.length).toBe(4) // cached
   await extract({ ...opts, force: true })
-  expect(calls.length).toBe(6)
+  expect(calls.length).toBe(8)
 })
 
 test("failed CLI run surfaces ExportFailed with the first error line", async () => {
