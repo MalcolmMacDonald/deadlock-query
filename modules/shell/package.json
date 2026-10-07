@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@deadlock-query/contracts": "workspace:*",
+    "@deadlock-query/map-metadata": "workspace:*",
     "@deadlock-query/map-viewer": "workspace:*",
     "@deadlock-query/query-builder": "workspace:*",
     "dockview": "^4.2.0",

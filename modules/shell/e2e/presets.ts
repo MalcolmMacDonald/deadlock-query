@@ -4,7 +4,8 @@ import { EXPLORE, expectPanels, QUERY, withShell } from "./util.ts"
 await withShell(4175, async ({ open }) => {
   const page = await open()
   await expectPanels(page, QUERY, "default preset")
-  if (await page.getByTestId("preset-review").count()) throw new Error("Review preset offered without a metadata panel")
+  // The metadata editor is a Review panel: it must not leak into the default layout.
+  if (!(await page.getByTestId("preset-review").count())) throw new Error("Review preset missing although the metadata editor is registered")
 
   await page.getByTestId("preset-explore").click()
   await expectPanels(page, EXPLORE, "Explore preset")
@@ -12,6 +13,9 @@ await withShell(4175, async ({ open }) => {
   // The chosen layout persists across a reload.
   await page.reload()
   await expectPanels(page, EXPLORE, "Explore after reload")
+
+  await page.getByTestId("preset-review").click()
+  await expectPanels(page, [...EXPLORE, "metadata.editor"], "Review preset")
 
   await page.getByTestId("preset-query").click()
   await expectPanels(page, QUERY, "Query preset")

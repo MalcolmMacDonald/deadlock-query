@@ -2,7 +2,7 @@
   "id": "shell",
   "version": "0.1.1",
   "kind": "web-host",
-  "dependsOn": ["contracts", "map-viewer", "query-builder"],
+  "dependsOn": ["contracts", "map-viewer", "query-builder", "map-metadata"],
   "devOnly": false,
   "firstPhase": "1",
   "paths": ["modules/shell/**"]

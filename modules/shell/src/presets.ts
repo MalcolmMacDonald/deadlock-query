@@ -81,10 +81,10 @@ const buildPreset = (panels: ReadonlyArray<PanelDefinition>, opts: PresetOptions
         initialWidth: INSPECTOR_WIDTH,
       })
   }
-  // Anything else (dummy/demo modules) is split below the viewer so it stays visible; `shell.*` panels (About) open on demand.
+  // Anything else (dummy/demo modules) is split below the viewer so it stays visible; `shell.*` (About) and `metadata.*` (Review preset) panels open on demand.
   if (opts.rest)
     for (const p of panels)
-      if (!placed.has(p) && !p.id.startsWith("shell.")) out.push({ id: p.id, title: p.title, ...(viewer ? { position: { referencePanel: viewer.id, direction: "below" as const } } : {}) })
+      if (!placed.has(p) && !p.id.startsWith("shell.") && !p.id.startsWith("metadata.")) out.push({ id: p.id, title: p.title, ...(viewer ? { position: { referencePanel: viewer.id, direction: "below" as const } } : {}) })
   return out
 }
 
