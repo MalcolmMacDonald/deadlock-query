@@ -83,7 +83,7 @@ export const makeFriendly = (index: DocIndex): Friendly => {
     m = /Argument of type '([^']*)' is not assignable to parameter of type '([^']*)'/.exec(message)
     if (m) {
       const param = m[2]!
-      if (/\bLane\b/.test(param)) return 'Lanes are "yellow", "blue" or "purple" (or 1, 2, 3).'
+      if (/\bLane\b/.test(param)) return 'Lanes are "yellow", "blue" or "green" (or 1, 2, 3).'
       if (/\bLocatable\b|\bVec3\b/.test(param)) return "Expected a position: an entity (e.g. a guardian), `vec(x, y, z)` or a `.position`."
     }
     return undefined
