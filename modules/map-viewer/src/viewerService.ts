@@ -6,7 +6,7 @@ import { entityLayers } from "./entities.ts"
 import {
   parseScreenshotSet, screenshotLayers, shotIndexForFeature, shotPose, viewAxes, SHOT_LAYER, SHOT_VIEW_LAYER, type ScreenshotSource
 } from "./screenshots.ts"
-import { eyeOf, poseFromEye, type CameraPose } from "./camera.ts"
+import { eyeOf, frameSelection, poseFromEye, type CameraPose } from "./camera.ts"
 import {
   AnnotationStore, annotationIdForFeature, annotationLayers, featureIdForAnnotation, isHidden, isLocked, type Annotation
 } from "./annotations.ts"
@@ -16,7 +16,7 @@ import { LayerStore, type LayerAppearance } from "./layers.ts"
 import { SurfaceStore, type SurfaceKind } from "./surfaces.ts"
 import { ToolMachine, type ExternalTool } from "./tools.ts"
 import type { StreamStats } from "./tileStreamer.ts"
-import { DEFAULT_COLOR, normalizeFeatures, parseFeatureId } from "./overlays.ts"
+import { DEFAULT_COLOR, normalizeFeatures, parseFeatureId, ringOf } from "./overlays.ts"
 import { annotationItem, entityItem, featureItem, shotItem, unknownItem, type InspectorItem } from "./inspector.ts"
 import {
   autosaveKey, indexedDbStorage, parseDocument, serializeDocument, toDocument, type AnnotationStorage, type MapIdentity, type ParsedDocument
@@ -497,6 +497,29 @@ export class ViewerController {
     const layer = parsed && this.overlays.get(parsed.layerId)
     const feature = layer && parsed ? normalizeFeatures(layer[0])[parsed.index] : undefined
     return feature && parsed && layer ? featureItem(featureId, feature, parsed.layerId, parsed.index, layer[1] ?? {}) : unknownItem(featureId)
+  }
+
+  /** World positions of everything selected: every vertex of each highlighted feature (picked or selected on the map, or set through `highlight`). */
+  selectionPoints(): ReadonlyArray<Vec3> {
+    const out: Vec3[] = []
+    for (const id of this.highlighted) {
+      const parsed = parseFeatureId(id)
+      const layer = parsed && this.overlays.get(parsed.layerId)
+      const feature = layer && parsed ? normalizeFeatures(layer[0])[parsed.index] : undefined
+      if (feature) out.push(...ringOf(feature))
+    }
+    return out
+  }
+
+  /**
+   * Moves the camera to frame the selection (the F key): a lone point or entity gets a close-up, several features
+   * (or a long line) get their bounding box. Keeps the viewing direction. Returns false when nothing is selected.
+   */
+  focusSelection(): boolean {
+    const pose = frameSelection(this.getPose(), this.selectionPoints())
+    if (!pose) return false
+    this.setPose(pose)
+    return true
   }
 
   /** Drops the picks and the annotation selection. */

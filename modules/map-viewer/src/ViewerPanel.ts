@@ -363,8 +363,10 @@ export const makeViewerPanel = (data: ViewerData, controller: ViewerController =
         controller.selectFeature(id, e.shiftKey || e.ctrlKey || e.metaKey)
       } else if (!(e.shiftKey || e.ctrlKey || e.metaKey)) controller.clearSelection()
     }
+    const typing = (t: EventTarget | null) => t instanceof HTMLElement && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))
     const onKey = (e: KeyboardEvent) => {
       const mod = e.ctrlKey || e.metaKey
+      if (e.key.toLowerCase() === "f" && !mod && !e.altKey && !typing(e.target)) { if (controller.focusSelection()) e.preventDefault(); return }
       if (e.key === "Escape") {
         if (vertexDrag) { vertexDrag = undefined; controller.cancelVertexEdit(); showSnap(undefined) }
         else controller.tools.cancel()

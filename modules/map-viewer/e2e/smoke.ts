@@ -516,6 +516,23 @@ try {
   await surfaceBox("render").check()
   await settle()
   if ((await surfacesAttr()) !== "render") fail(`render toggle did not apply: ${await surfacesAttr()}`)
+  // F frames the selection: select a point far from the camera target, press F, the camera centres on it.
+  await page.evaluate(() => {
+    const v = (globalThis as any).__viewer
+    v.setOverlay("focus", [{ type: "point", at: [1234, -567, 89] }], { color: "#00ffff" })
+    v.setPose({ target: [-3000, 2000, 0], yaw: 1, pitch: -0.7, distance: 20_000 })
+    v.selectFeature("focus:0")
+  })
+  await canvas.focus()
+  await page.keyboard.press("f")
+  await settle()
+  const focused = await page.evaluate(() => (globalThis as any).__viewer.getPose())
+  if (Math.hypot(focused.target[0] - 1234, focused.target[1] + 567, focused.target[2] - 89) > 1 || focused.distance >= 20_000) fail(`F did not focus the selected point: ${JSON.stringify(focused)}`)
+  await page.evaluate(() => { const v = (globalThis as any).__viewer; v.clearSelection(); v.setPose({ target: [-3000, 2000, 0], yaw: 1, pitch: -0.7, distance: 20_000 }) })
+  await page.keyboard.press("f")
+  await settle()
+  if ((await page.evaluate(() => (globalThis as any).__viewer.getPose().distance)) !== 20_000) fail("F with nothing selected moved the camera")
+  await page.evaluate(() => (globalThis as any).__viewer.removeOverlay("focus"))
   if (errors.length) fail(errors.join("; "))
   console.log("map-viewer e2e smoke: ok")
 } finally {
