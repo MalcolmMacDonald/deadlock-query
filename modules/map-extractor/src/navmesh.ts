@@ -492,6 +492,51 @@ const componentsWithLinks = (soup: PolygonSoup, base: Int32Array, nm: NavMesh, l
   return [...sizes.values()].sort((a, b) => b - a)
 }
 
+/** Islands of at most this many polygons (after links) are candidates for stitching to the main mesh. */
+export const ISLAND_MAX_POLYS = 400
+/** An island is joined to the nearest larger piece within this 3D distance (Source units) and at most `ISLAND_MAX_DZ` apart in height. */
+export const ISLAND_SNAP = 200
+export const ISLAND_MAX_DZ = 96
+
+/**
+ * Small fragments of the game nav that touch nothing (gaps at thresholds, doorways, props) get one bidirectional `navConnection`
+ * link to the nearest polygon of a larger piece, when that is close in 3D and at about the same height. Fragments with nothing
+ * near enough (rooftop platforms, high ledges) are left alone: they need a real traversal link (zipline, rope, jump), not a guess.
+ */
+export const islandLinks = (soup: PolygonSoup, labels: Int32Array): NavLink[] => {
+  const n = soup.polys.length
+  const c = new Float64Array(n * 3)
+  soup.polys.forEach((poly, i) => {
+    for (const v of poly) for (let k = 0; k < 3; k++) c[i * 3 + k]! += soup.vertices[v * 3 + k]! / poly.length
+  })
+  const sizes = new Map<number, number>()
+  for (let p = 0; p < n; p++) sizes.set(labels[p]!, (sizes.get(labels[p]!) ?? 0) + 1)
+  const cell = ISLAND_SNAP
+  const grid = new Map<string, number[]>()
+  const key = (x: number, y: number) => `${Math.floor(x / cell)},${Math.floor(y / cell)}`
+  for (let p = 0; p < n; p++) {
+    if (sizes.get(labels[p]!)! <= ISLAND_MAX_POLYS) continue
+    const k = key(c[p * 3]!, c[p * 3 + 1]!)
+    ;(grid.get(k) ?? grid.set(k, []).get(k)!).push(p)
+  }
+  const best = new Map<number, { d: number; a: number; b: number }>()
+  for (let p = 0; p < n; p++) {
+    const lab = labels[p]!
+    if (sizes.get(lab)! > ISLAND_MAX_POLYS) continue
+    const x = c[p * 3]!, y = c[p * 3 + 1]!, z = c[p * 3 + 2]!
+    for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) {
+      for (const q of grid.get(`${Math.floor(x / cell) + dx},${Math.floor(y / cell) + dy}`) ?? []) {
+        if (Math.abs(c[q * 3 + 2]! - z) > ISLAND_MAX_DZ) continue
+        const d = Math.hypot(c[q * 3]! - x, c[q * 3 + 1]! - y, c[q * 3 + 2]! - z)
+        if (d <= ISLAND_SNAP && d < (best.get(lab)?.d ?? Infinity)) best.set(lab, { d, a: p, b: q })
+      }
+    }
+  }
+  return [...best.values()].map(({ a, b }) => ({
+    from: [c[a * 3]!, c[a * 3 + 1]!, c[a * 3 + 2]!] as const, to: [c[b * 3]!, c[b * 3 + 1]!, c[b * 3 + 2]!] as const, kind: "navConnection", bidirectional: true
+  }))
+}
+
 /**
  * Upward traversals mirrored from the game's one-way drops (`navConnection` flow links). The game's flow map only lists ways
  * down, so rooftop and ledge platforms (orbs, camps) have no way up in the graph although players jump and mantle onto them.
