@@ -11,6 +11,8 @@ import type { MovementModelLike, NavInput } from "./spatial.ts"
 export const seconds = (n: number): number => n
 
 type Field = { costAt(p: readonly [number, number, number], maxSnap?: number): number }
+/** Floating pickups on the real map hover up to ~855 units above the mesh, so the default must cover them (200 left every orb unreachable). */
+const DEFAULT_MAX_SNAP = 900
 const MAX_FIELDS = 256
 const fields = new Map<string, Field>()
 let fieldsFor: NavInput | undefined
@@ -37,7 +39,7 @@ export const linkSpeedsOf = (nav: Pick<NavInput, "heroSpeed" | "linkSpeeds">): R
 const timeModel = (nav: NavInput): MovementModelLike => ({ speed: nav.heroSpeed ?? 7 * UNITS_PER_METER, linkSpeeds: linkSpeedsOf(nav) })
 /** Unit speeds everywhere: cost is path length in Source units. */
 const distanceModel = (nav: NavInput): MovementModelLike => ({ speed: 1, linkSpeeds: Object.fromEntries(Object.keys(timeModel(nav).linkSpeeds ?? {}).map((k) => [k, 1])) })
-const snap = (nav: NavInput): number => nav.maxSnap ?? 200
+const snap = (nav: NavInput): number => nav.maxSnap ?? DEFAULT_MAX_SNAP
 
 /** Distance fields are memoised per (model, source set); cleared when a new nav backend is active. */
 const fieldFor = (nav: NavInput, mode: "time" | "distance", sources: ReadonlyArray<Vec3>): Field => {
