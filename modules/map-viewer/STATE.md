@@ -54,6 +54,10 @@
 
 - 2026-10-07 — M7 (docs): `README.md` lists the camera, keyboard, touch and annotation controls. M7 checklist is complete (labels, theming, touch, keyboard-only use, docs); real-hardware perf checks remain under Next.
 
+- 2026-10-07 — Accessibility: the Layers panel's visibility checkbox, colour and opacity inputs are named after their layer (`aria-label`; `title` alone failed axe `label-title-only`), so the shell's `e2e/a11y.ts` passes again.
+
+- 2026-10-07 — Inspector: every field value is a flat button that copies the value on click or Enter (title "Copy value", "Copied" for 1.5 s); the whole-selection "Copy JSON" stays. Not unit-tested (the inspector tests run without a DOM) and not yet exercised in a browser.
+
 ## In progress
 - (nothing)
 

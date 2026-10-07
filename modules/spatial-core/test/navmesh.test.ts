@@ -166,3 +166,22 @@ test("smoothed paths are never longer than midpoint paths and stay on the mesh",
   }
   expect(bends).toBeGreaterThan(10)
 })
+
+test("radius keeps funnel corners off portal ends; walkable follows the mesh", () => {
+  // L-shaped: three squares east, then two squares north from the last one.
+  const vertices = new Float32Array([0,0,0, 10,0,0, 20,0,0, 30,0,0, 0,10,0, 10,10,0, 20,10,0, 30,10,0, 20,20,0, 30,20,0, 20,30,0, 30,30,0])
+  const quads = [[0,1,5,4],[1,2,6,5],[2,3,7,6],[6,7,9,8],[8,9,11,10]]
+  const nm = NavMesh.fromPolygons({ vertices, offsets: new Uint32Array([0,4,8,12,16,20]), indices: new Uint32Array(quads.flat()) })
+  const plain = nm.findPath([2, 2, 0], [28, 28, 0], walk)!
+  const wide = nm.findPath([2, 2, 0], [28, 28, 0], walk, { radius: 2 })!
+  expect(wide.cost).toBe(plain.cost)
+  expect(wide.polys).toEqual(plain.polys)
+  // The plain path bends at the inner corner vertex (20,10); the wide one keeps 2 units away from it.
+  const corner = (pts: readonly (readonly number[])[]) => Math.min(...pts.map((q) => Math.hypot(q[0]! - 20, q[1]! - 10)))
+  expect(corner(plain.points)).toBeLessThan(1e-3)
+  expect(corner(wide.points)).toBeGreaterThan(1.5)
+  expect(nm.findPath([2, 2, 0], [28, 28, 0], walk, { radius: 100 })!.polys).toEqual(plain.polys)
+  expect(nm.walkable([2, 5, 0], [28, 5, 0])).toBe(true)
+  expect(nm.walkable([2, 5, 0], [2, 28, 0], { tol: 1 })).toBe(false)
+  expect(nm.walkable([25, 2, 0], [25, 28, 0])).toBe(true)
+})

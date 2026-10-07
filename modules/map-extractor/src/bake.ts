@@ -23,12 +23,24 @@ import { WALKABLE_NAV_FILE, loadWalkable, triangulate, type WalkableStats } from
  * The manifest gets a `baked` record (files, sha256, cell size, semanticsVersion, placeholder flag, cache key).
  */
 
-export const BAKE_VERSION = "1.0.0"
+export const BAKE_VERSION = "1.1.0"
 /** Layers that must not become solid world geometry: the sky box would make every point "interior". */
 export const DEFAULT_EXCLUDE_LAYERS: ReadonlyArray<string> = ["sky", "Citadel_Skyclip"]
 export const DEFAULT_CELL_SIZE = 64
 /** Walkable surfaces closer than this in z count as one level when looking for multi-level cells. */
 const WALKABLE_LEVEL_GAP = 48
+
+/** Extra channels (nav-sourced floors only): the walkable levels of a cell beyond the topmost one `floorHeight` holds. */
+export const FLOOR_LEVELS_CHANNEL = "floorLevels"
+export const FLOOR_LOWER_CHANNEL = "floorHeightLower"
+
+/** Distinct walkable levels at (x, y), top first: surfaces closer than `gap` to the previous level are merged into it. */
+export const walkableLevels = (rc: Raycaster, x: number, y: number, top: number, gap: number): number[] => {
+  const zs = rc.raycastAll([x, y, top], [0, 0, -1], { backfaces: true }).map((h) => h.point[2]).sort((a, b) => b - a)
+  const levels: number[] = []
+  for (const z of zs) if (levels.length === 0 || levels[levels.length - 1]! - z > gap) levels.push(z)
+  return levels
+}
 
 /** Channels written to the sample grid. `floorHeight` is built in; the rest call the owner-authored semantics. */
 /** Height above the floor point at which an interior volume is probed (the floor itself may sit on a volume's bottom face). */
@@ -227,12 +239,17 @@ export const bakeBundle = async (dir: string, o: BakeOptions = {}): Promise<Bake
     max: [snap(floorRc.bounds.max[0], Math.ceil), snap(floorRc.bounds.max[1], Math.ceil), floorRc.bounds.max[2]]
   }
   let lastPct = -1
+  const levelChannels: Record<string, ChannelSpec> = useNav ? {
+    [FLOOR_LEVELS_CHANNEL]: { type: "u8", gen: (c) => Math.min(255, walkableLevels(floorRc, c.x, c.y, bounds.max[2] + 1, WALKABLE_LEVEL_GAP).length) },
+    // The level just under the topmost one (NaN where the cell has a single level), so a query can reach floors under bridges and roofs.
+    [FLOOR_LOWER_CHANNEL]: { type: "f32", gen: (c) => walkableLevels(floorRc, c.x, c.y, bounds.max[2] + 1, WALKABLE_LEVEL_GAP)[1] ?? NaN }
+  } : {}
   // `interior` comes from the map's interior volumes when the bundle has them; otherwise the (provisional) collision semantics.
   const volumes = loadInteriorVolumes(join(dir, INTERIOR_VOLUMES_FILE))
   const volumeChannels: Record<string, ChannelSpec> = volumes
     ? { [INTERIOR_CHANNEL]: { type: "u8", gen: (c) => (Number.isNaN(c.floorZ) ? 0 : volumes.contains(c.x, c.y, c.floorZ + INTERIOR_PROBE_HEIGHT) ? 1 : 0) } }
     : {}
-  const grid = SampleGrid.build(floorRc, bounds, cellSize, { ...semanticsChannels(params, params.maxRange, rc), ...volumeChannels }, {
+  const grid = SampleGrid.build(floorRc, bounds, cellSize, { ...semanticsChannels(params, params.maxRange, rc), ...levelChannels, ...volumeChannels }, {
     onProgress: (done, total) => {
       const pct = Math.floor((done / total) * 10) * 10
       if (pct !== lastPct) { lastPct = pct; o.log?.(`bake: sample grid ${pct}%`) }
@@ -244,15 +261,12 @@ export const bakeBundle = async (dir: string, o: BakeOptions = {}): Promise<Bake
   if (covered === 0) warnings.push("sample grid has no floor hits: collision may be in the wrong frame")
   else o.log?.(`bake: ${covered}/${floor.length} cells have a floor (${useNav ? "walkable nav faces" : "topmost collision surface"})`)
   if (useNav && walkSoupStats) {
-    // The grid holds one height per cell (the topmost walkable surface); count the cells with a second level so that loss is visible.
+    // `floorHeight` is the topmost walkable surface; the other levels live in `floorLevels` / `floorHeightLower`.
+    const levels = grid.raw(FLOOR_LEVELS_CHANNEL) as Uint8Array
     let multi = 0
-    for (let iy = 0; iy < grid.ny; iy++) for (let ix = 0; ix < grid.nx; ix++) {
-      const x = grid.origin[0] + (ix + 0.5) * cellSize, y = grid.origin[1] + (iy + 0.5) * cellSize
-      const hits = floorRc.raycastAll([x, y, bounds.max[2] + 1], [0, 0, -1], { backfaces: true })
-      if (hits.length > 1 && hits[0]!.point[2] - hits[hits.length - 1]!.point[2] > WALKABLE_LEVEL_GAP) multi++
-    }
+    for (const n of levels) if (n > 1) multi++
     walkable = { ...walkSoupStats.stats, file: WALKABLE_NAV_FILE, sha256: sha256(readFileSync(walkablePath)), triangles: walkSoupStats.triangles, coveredCells: covered, totalCells: floor.length, multiLevelCells: multi }
-    if (multi > 0) warnings.push(`${multi} of ${covered} floor cells have walkable surfaces on more than one level; floorHeight keeps the topmost`)
+    if (multi > 0) warnings.push(`${multi} of ${covered} floor cells have walkable surfaces on more than one level; floorHeight keeps the topmost, floorHeightLower holds the next level down`)
   }
   if (PLACEHOLDER_SEMANTICS) warnings.push("semantics are placeholders: interior/wallDistance channels are provisional until the owner finalises spatial-core/semantics")
 

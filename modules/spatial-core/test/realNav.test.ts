@@ -22,6 +22,18 @@ describe("real-navmesh excerpt (patron surroundings)", () => {
     expect(nm.findPath(patron, lane, model)!.cost).toBeCloseTo(2212.67, 1)
     expect(nm.findPath(spawn, lane, model)!.cost).toBeCloseTo(6325.71, 1)
   })
+  test("agent radius lengthens the smoothed path but not the route or cost", () => {
+    const plain = nm.findPath(patron, spawn, model)!
+    let last = len(plain.points)
+    for (const radius of [16, 32, 64]) {
+      const p = nm.findPath(patron, spawn, model, { radius })!
+      expect(p.polys).toEqual(plain.polys)
+      expect(p.cost).toBe(plain.cost)
+      expect(len(p.points)).toBeGreaterThan(last)
+      last = len(p.points)
+    }
+    expect(last).toBeCloseTo(5181, -1)
+  })
   test("distanceField agrees with findPath and the smoothed path is no longer than cost", () => {
     const f = nm.distanceField([patron], model)
     for (const t of [spawn, lane]) {

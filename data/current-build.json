@@ -1,10 +1,10 @@
 {
-  "buildId": "25761866",
-  "tag": "data-25761866",
+  "buildId": "25763945",
+  "tag": "data-25763945",
   "assets": [
     {
-      "name": "dl_midtown-25761866-lite-5a0a9f3d00b4.zip",
-      "sha256": "5a0a9f3d00b44bc24fb116a2c042239dd020228ebdcee51d25e9c91fb9f71d04",
+      "name": "dl_midtown-25763945-lite-cf1402ff7f5c.zip",
+      "sha256": "cf1402ff7f5cd1b7c42d0f06eadbaa9576cbd2b7029bc401b804f7581b3c967c",
       "dest": "data/dl_midtown"
     }
   ]

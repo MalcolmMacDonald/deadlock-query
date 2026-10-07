@@ -91,3 +91,33 @@ describe("travel time/distance on a hand-computed grid navmesh", () => {
     expect(() => vec(0, 0, 0).travelTimeTo(vec(1, 1, 0))).toThrow(/navmesh/)
   })
 })
+
+test("distance-field cache is bounded by bytes, not only by entry count", () => {
+  // 20 fields of 2M polygons (16 MB each) cannot all stay cached; the newest ones must.
+  let calls = 0
+  const costs = new Float64Array(2_000_000)
+  const mesh: NavMeshLike = {
+    findPath: () => null,
+    distanceField: () => { calls++; return { costAt: () => 1, costs } }
+  }
+  const m = MapContext.fromBundle({ ...mini, spatial: { raycaster: floor as RaycasterLike, nav: { mesh } } })
+  const a = Array.from({ length: 20 }, (_, i) => vec(i * 10, 0, 0))
+  for (const p of a) p.travelTimeTo(vec(0, 0, 0))
+  expect(calls).toBe(20)
+  a[19]!.travelTimeTo(vec(5, 5, 0)) // newest is still cached
+  expect(calls).toBe(20)
+  a[0]!.travelTimeTo(vec(5, 5, 0)) // oldest was evicted by the byte budget
+  expect(calls).toBe(21)
+  void m
+})
+
+test("line of sight uses collision only; walkable follows the navmesh; path takes a radius", () => {
+  const a = vec(-3750, -3750, 0), b = vec(3750, 3750, 0)
+  expect(a.hasLineOfSightTo(b)).toBe(true) // open floor: the ray stays above z=0
+  expect(a.hasLineOfSightTo(vec(3750, 3750, -200), { targetHeight: 0 })).toBe(false) // target under the floor
+  expect(map.healingOrbs.withLineOfSightTo(map.guardians).count()).toBe(map.healingOrbs.count())
+  expect(map.nav.walkable(a, b)).toBe(true)
+  expect(map.nav.walkable(a, vec(3750, 90000, 0))).toBe(false)
+  const plain = map.nav.path(a, b)!, wide = map.nav.path(a, b, { radius: 100 })!
+  expect(wide.time).toBe(plain.time)
+})
