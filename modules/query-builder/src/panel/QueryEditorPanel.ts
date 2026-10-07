@@ -90,6 +90,8 @@ const configureMonacoOnce = () => {
   const ts = monaco.languages.typescript
   ts.typescriptDefaults.setCompilerOptions({ target: ts.ScriptTarget.ES2020, allowNonTsExtensions: true, strict: true })
   ts.typescriptDefaults.setEagerModelSync(true)
+  // Parameter names next to literal arguments (`inLane("yellow")` reads `inLane(lane: "yellow")`): the library's calls are terse.
+  ts.typescriptDefaults.setInlayHintsOptions({ includeInlayParameterNameHints: "literals", includeInlayParameterNameHintsWhenArgumentMatchesName: false })
 }
 
 const defaultStorage = (): KeyValueStorage | undefined => { try { return localStorage } catch { return undefined } }
@@ -154,7 +156,7 @@ export const mountQueryEditor = async (container: HTMLElement, opts: QueryEditor
       model, automaticLayout: true, theme: "vs-dark", minimap: { enabled: false },
       // Tab inserts indentation by default; Ctrl+M switches Tab to move focus, so keyboard users can leave the editor.
       ariaLabel: "Query editor. Press Control+M to make Tab move focus out of the editor.",
-      accessibilitySupport: "auto", renderWhitespace: "none"
+      accessibilitySupport: "auto", renderWhitespace: "none", inlayHints: { enabled: "on" }
     })
     cleanups.push(() => editor.dispose())
 

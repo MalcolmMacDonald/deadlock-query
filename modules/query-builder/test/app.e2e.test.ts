@@ -548,3 +548,14 @@ test.skipIf(!haveBrowser)("every control has an accessible name, ids are unique,
   expect(errors).toEqual([])
   await page.close()
 }, 60_000)
+
+test.skipIf(!haveBrowser)("parameter-name inlay hints appear next to literal arguments", async () => {
+  const { page, errors } = await open()
+  await setSource(page, 'map.guardians.inLane("yellow").toArray()')
+  // Monaco renders a hint as an inline decoration whose text is the parameter name; its position is the editor model's.
+  await page.waitForFunction(() => /lane\s*:/.test(document.querySelector(".monaco-editor .view-lines")?.textContent ?? "") || document.querySelector(".monaco-editor [class*='inlayHint'], .monaco-editor .dyn-rule") !== null, undefined, { timeout: 30_000 })
+  const text = await page.$eval(".monaco-editor .view-lines", (el) => el.textContent ?? "")
+  expect(text.replace(/ /g, " ")).toMatch(/lane:\s*"yellow"/)
+  expect(errors).toEqual([])
+  await page.close()
+}, 60_000)
