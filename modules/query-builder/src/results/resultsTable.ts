@@ -4,6 +4,10 @@ import { DEFAULT_PAGE_SIZE, PAGE_SIZES, cellText, makeTableModel, type SortDir, 
 export interface ResultsTableOptions {
   readonly onRowSelect?: (rowId: string) => void | Promise<void>
   readonly selectedRows?: ReadonlySet<string>
+  /** Readable text for a cell holding an entity id (undefined for anything else): shown instead of the raw id, which becomes the tooltip. */
+  readonly describeEntity?: (id: string) => string | undefined
+  /** An entity cell was clicked (after its row was selected): `column` is the column name, `entityId` the cell's id. */
+  readonly onEntityClick?: (rowId: string, column: string, entityId: string) => void
 }
 
 export interface ResultsTable {
@@ -146,11 +150,17 @@ export const createResultsTable = (doc: Document, result: QueryResult, opts: Res
         const td = tr.insertCell()
         td.setAttribute("role", "gridcell")
         const text = cellText(cell)
-        td.textContent = text
+        const label = typeof cell === "string" ? opts.describeEntity?.(cell) : undefined
+        td.textContent = label ?? text
+        if (label !== undefined) { td.dataset.entityId = text; td.title = text; td.classList.add("entity") }
         if (numeric[ci]) td.className = "num"
-        if (text.length > 40) td.title = text
+        if (label === undefined && text.length > 40) td.title = text
       })
-      tr.addEventListener("click", () => select(tr))
+      tr.addEventListener("click", (e) => {
+        select(tr)
+        const td = (e.target as Element | null)?.closest<HTMLTableCellElement>("td[data-entity-id]")
+        if (td && opts.onEntityClick) opts.onEntityClick(rowId, result.columns[td.cellIndex]!.name, td.dataset.entityId!)
+      })
     })
     const filtered = v.matching !== v.total
     info.textContent = v.matching === 0 ? "No rows match." : `Rows ${v.from}–${v.to} of ${v.matching}${filtered ? ` (filtered from ${v.total})` : ""}`

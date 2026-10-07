@@ -5,6 +5,12 @@ import {
 import { decodedBytes, type TileDecoder } from "./tileDecode.ts"
 
 export const DEFAULT_TILE_BUDGET_BYTES = 512 * 1024 * 1024
+/**
+ * Decoded bytes of tiles shown at once (what the GPU draws per frame, about 24 B per triangle: ~12 M triangles).
+ * Smaller than the resident budget, which also caches tiles that are off screen. Measured on the real dl_midtown
+ * bundle: without it a low view over big cells drew up to 15 M triangles per frame.
+ */
+export const DEFAULT_DRAW_BUDGET_BYTES = 288 * 1024 * 1024
 export const DEFAULT_MAX_IN_FLIGHT = 4
 /** Decoded size over file size, assumed until a tile has been measured (meshopt-compressed tiles inflate a lot). */
 const INITIAL_INFLATION = 4
@@ -41,6 +47,8 @@ export interface StreamerOptions {
   /** Material for tiles that carry vertex colours (default: `material`). */
   readonly colorMaterial?: THREE.Material
   readonly budgetBytes?: number
+  /** Cap on decoded bytes shown at once (default `DEFAULT_DRAW_BUDGET_BYTES`, never above `budgetBytes`). */
+  readonly drawBudgetBytes?: number
   readonly maxInFlight?: number
   readonly select?: SelectOptions
   /** Something changed that needs a redraw (a tile appeared or disappeared). */
@@ -70,6 +78,7 @@ export class TileStreamer {
   /** Parent of every tile mesh; add it to the scene. */
   readonly root = new THREE.Group()
   private readonly budget: number
+  private readonly drawBudget: number
   private readonly maxInFlight: number
   private readonly resident = new Map<string, Resident>()
   private readonly inFlight = new Set<string>()
@@ -91,6 +100,7 @@ export class TileStreamer {
 
   constructor(private readonly o: StreamerOptions) {
     this.budget = o.budgetBytes ?? DEFAULT_TILE_BUDGET_BYTES
+    this.drawBudget = Math.min(this.budget, o.drawBudgetBytes ?? DEFAULT_DRAW_BUDGET_BYTES)
     this.maxInFlight = o.maxInFlight ?? DEFAULT_MAX_IN_FLIGHT
     this.root.matrixAutoUpdate = false
     this.root.matrix.copy(o.glbToThree)
@@ -111,7 +121,7 @@ export class TileStreamer {
     if (moved) this.frame++
     const visible = selectVisible(this.o.cells, camera, this.o.select)
     this.visibleCount = visible.length
-    this.wanted = planResidency(visible, this.budget, this.cost)
+    this.wanted = planResidency(visible, this.drawBudget, this.cost)
     this.show()
     this.pump()
     this.publish()

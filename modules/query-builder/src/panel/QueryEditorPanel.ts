@@ -6,6 +6,7 @@ import { Effect, Layer, Stream } from "effect"
 import { QueryEngine, SelectionBus, ViewerService, type QueryResult } from "@deadlock-query/contracts"
 import { runQuery } from "../app/engine.ts"
 import { monacoCompiler } from "../app/monacoCompiler.ts"
+import { entityLabel } from "../results/entityLabel.ts"
 import { createResultsTable, type ResultsTable } from "../results/resultsTable.ts"
 import { featureFocus, overlayFeatures, setResultOverlay } from "../app/viewerIntegration.ts"
 import { buildDocIndex, insertionFor, type DocIndex, type DocItem } from "../docs/catalog.ts"
@@ -122,6 +123,7 @@ export const mountQueryEditor = async (container: HTMLElement, opts: QueryEditor
     const [lib, bundle] = await Promise.all([opts.library, opts.bundle])
 
     const doc = container.ownerDocument
+    const entityIndex = new Map<string, unknown>()
     if (!doc.getElementById(STYLE_ID)) {
       const style = doc.createElement("style")
       style.id = STYLE_ID
@@ -159,6 +161,7 @@ export const mountQueryEditor = async (container: HTMLElement, opts: QueryEditor
     const runner = new SandboxRunner(doc, toPrelude(lib.js))
     cleanups.push(() => runner.dispose())
     await runner.load(bundle)
+    for (const e of bundle.entities) { const id = (e as { id?: unknown }).id; if (typeof id === "string") entityIndex.set(id, e) }
     const compilerModelUri = monaco.Uri.parse("file:///engine/query.ts")
     cleanups.push(() => monaco.editor.getModel(compilerModelUri)?.dispose())
     const engineLayer = makeQueryEngine({ compiler: monacoCompiler(monaco), runner, ...(docIndex ? { friendly: makeFriendly(docIndex) } : {}) })
@@ -350,7 +353,9 @@ export const mountQueryEditor = async (container: HTMLElement, opts: QueryEditor
         }),
         (table = createResultsTable(doc, result, {
           selectedRows: new Set(selectedRowIds),
-          onRowSelect: (rowId: string) => { applySelection([rowId], true); focusRow(rowId) }
+          onRowSelect: (rowId: string) => { applySelection([rowId], true); focusRow(rowId) },
+          describeEntity: (id) => entityLabel(entityIndex.get(id), id),
+          onEntityClick: (rowId, column, entityId) => focusEntity(rowId, column, entityId)
         })).el
       )
     }
@@ -369,6 +374,14 @@ export const mountQueryEditor = async (container: HTMLElement, opts: QueryEditor
       if (featureId === undefined || sep < 0) return
       const layer = features.layers.find((l) => l.id === featureId.slice(0, sep))
       const at = featureFocus(layer?.features[Number(featureId.slice(sep + 1))])
+      if (at) fire(viewer.flyTo(at))
+    }
+    /** A clicked entity cell (e.g. `nearestHealingOrb`): fly to that entity, and highlight its point in this row when the column is an entity column (so it has a `.position` feature). */
+    const focusEntity = (rowId: string, column: string, entityId: string) => {
+      const layer = features.layers.find((l) => l.column === `${column}.position`)
+      const featureId = layer ? features.rowToFeatures.get(rowId)?.find((f) => f.startsWith(`${layer.id}:`)) : undefined
+      if (featureId) fire(viewer.highlight([featureId]))
+      const at = (entityIndex.get(entityId) as { position?: readonly [number, number, number] } | undefined)?.position
       if (at) fire(viewer.flyTo(at))
     }
     const pickFiber = new AbortController()

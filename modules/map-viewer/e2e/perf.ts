@@ -8,6 +8,7 @@
 import { chromium } from "playwright-core"
 import { join } from "node:path"
 import { Raycaster } from "@deadlock-query/spatial-core"
+import type { Manifest } from "@deadlock-query/contracts"
 import { syntheticMap, DEFAULT_SYNTHETIC } from "./synthetic.ts"
 
 const MB = 1024 * 1024
@@ -15,7 +16,12 @@ const grid = Number(process.env.PERF_GRID ?? 345)
 const colored = process.env.PERF_COLORED !== "0"
 const budget = Number(process.env.PERF_BUDGET_MB ?? 512) * MB
 const grids = [grid, Math.round(grid / 2), Math.round(grid / 4)]
-const map = syntheticMap({ grids, colored })
+// PERF_BUNDLE=<dir of an unzipped real bundle (manifest.json, render/tiles, baked/...)> measures real data instead.
+const bundleDir = process.env.PERF_BUNDLE
+const real: Manifest | undefined = bundleDir ? ((await Bun.file(join(bundleDir, "manifest.json")).json()) as Manifest) : undefined
+const map = real
+  ? { manifest: real, totalTileBytes: real.tiles.reduce((n, t) => n + t.bytes, 0), glb: (_id: string) => new Uint8Array() }
+  : syntheticMap({ grids, colored })
 const triOf = (n: number) => 2 * (n - 1) * (n - 1)
 const cells = DEFAULT_SYNTHETIC.cols * DEFAULT_SYNTHETIC.rows
 
@@ -37,6 +43,10 @@ const server = Bun.serve({
     if (pathname === "/tileWorker.js") return js(worker)
     if (pathname === "/synthetic/manifest.json") return Response.json(map.manifest)
     if (pathname === "/synthetic/entities.json") return Response.json({ schemaVersion: "1.0.0", entities: [] })
+    if (bundleDir && pathname.startsWith("/synthetic/")) {
+      const f = Bun.file(join(bundleDir, decodeURIComponent(pathname.slice("/synthetic/".length))))
+      return new Response(f)
+    }
     const id = byFile.get(pathname.replace("/synthetic/", ""))
     if (id) return new Response(map.glb(id) as unknown as BodyInit)
     return new Response("nope", { status: 404 })
@@ -49,8 +59,9 @@ const browser = await chromium.launch({
   args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist", "--enable-precise-memory-info"]
 })
 try {
-  const tileBytes = (lod: number) => map.manifest.tiles.find((t) => t.id.endsWith(lod === 0 ? "c0_0" : `c0_0#lod${lod}`))!.bytes
-  report.map = {
+  const tileBytes = (lod: number) => map.manifest.tiles.find((t: { id: string }) => t.id.endsWith(lod === 0 ? "c0_0" : `c0_0#lod${lod}`))?.bytes ?? 0
+  if (real) report.map = { real: true, bundle: bundleDir, tileFiles: map.manifest.tiles.length, totalMB: +(map.totalTileBytes / MB).toFixed(1), budgetMB: budget / MB }
+  else report.map = {
     cells, lods: grids.length, colored,
     trianglesLod0: cells * triOf(grids[0]!), tileFiles: map.manifest.tiles.length,
     totalMB: +(map.totalTileBytes / MB).toFixed(1), lod0TileMB: +(tileBytes(0) / MB).toFixed(2), lod1TileMB: +(tileBytes(1) / MB).toFixed(2), lod2TileMB: +(tileBytes(2) / MB).toFixed(2),
@@ -85,7 +96,8 @@ try {
   const flushPlan = () => page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))))
 
   // Streaming order: after a jump, are the first tiles fetched the ones nearest the camera?
-  const half = (DEFAULT_SYNTHETIC.cols * DEFAULT_SYNTHETIC.cell) / 2
+  const half = real ? Math.min(real.bounds.max[0] - real.bounds.min[0], real.bounds.max[1] - real.bounds.min[1]) / 2 : (DEFAULT_SYNTHETIC.cols * DEFAULT_SYNTHETIC.cell) / 2
+  const mid = real ? [(real.bounds.min[0] + real.bounds.max[0]) / 2, (real.bounds.min[1] + real.bounds.max[1]) / 2] as const : [0, 0] as const
   await fly(0, 0, 18000); await flushPlan(); await settle()
   const n0 = (await page.evaluate(() => (globalThis as any).__fetchLog.length)) as number
   const tJump = await sinceNav()
@@ -94,7 +106,7 @@ try {
   const jumpLog = (await page.evaluate((n) => (globalThis as any).__fetchLog.slice(n) as Array<{ id: string; t: number }>, n0))
   const cx = half - 2500, cy = half - 2500
   const dist = (id: string) => {
-    const t = map.manifest.tiles.find((x) => x.id === id)!
+    const t = map.manifest.tiles.find((x: { id: string }) => x.id === id)!
     const mx = (t.bounds.min[0] + t.bounds.max[0]) / 2, my = (t.bounds.min[1] + t.bounds.max[1]) / 2
     return Math.hypot(mx - cx, my - cy)
   }
