@@ -1,0 +1,22 @@
+{
+  "name": "@deadlock-query/kanban",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": {
+    "typecheck": "tsc -p .",
+    "test": "bun test",
+    "verify": "bun run typecheck && bun run test",
+    "dev:standalone": "bun harness/build.ts"
+  },
+  "dependencies": {
+    "@deadlock-query/contracts": "workspace:*",
+    "effect": "4.0.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1"
+  }
+}
