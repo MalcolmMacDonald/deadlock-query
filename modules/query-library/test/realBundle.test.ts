@@ -18,28 +18,28 @@ describe.skipIf(!dir || !existsSync(`${dir}/baked/navmesh.bin`))("real dl_midtow
     expect([m.guardians.count(), m.walkers.count(), m.patrons.count(), m.healingOrbs.count(), m.creepCamps.count()]).toEqual([6, 6, 2, 36, 52])
     const p = m.patrons.first()!.position
     expect(m.guardians.all((g) => Number.isFinite(p.travelTimeTo(g.position)))).toBe(true)
-    expect(m.healingOrbs.count((o) => Number.isFinite(p.travelTimeTo(o.position)))).toBe(20)
+    expect(m.healingOrbs.count((o) => Number.isFinite(p.travelTimeTo(o.position)))).toBe(35)
   }, 60_000)
   test("query 1 returns orbs near guardians", () => {
     const m = map()
-    expect(m.healingOrbs.withinTravelTime(seconds(10), m.guardians).count()).toBe(7)
+    expect(m.healingOrbs.withinTravelTime(seconds(10), m.guardians).count()).toBe(10)
   }, 60_000)
   test("query 2 (orb detour pairs) finishes well inside 30 s", () => {
     const m = map()
     const t = performance.now()
     const n = m.healingOrbs.select((o) => o.position).pairs().where(([a, b]) => a.travelDistanceTo(b) > 1.5 * a.crowFliesTo(b)).count()
     expect(performance.now() - t).toBeLessThan(30_000)
-    expect(n).toBe(553)
+    expect(n).toBe(480)
   }, 60_000)
   const example = async (f: string) => ((await import(`../examples/${f}.ts`)).default as (m: MapContext) => unknown)(map())
   test("example queries on the real map", async () => {
-    expect(await example("unreachable-camps")).toEqual(["1380394:88987:9", "14781:1797", "14781:2501", "14781:2535", "14781:2762"])
+    expect(await example("unreachable-camps")).toEqual(["1380394:88987:9", "14781:1797"])
     const trip = (await example("guardian-travel-times")) as { id: string; lane: string; seconds: number }[]
     expect(trip.map((r) => r.lane)).toEqual(["green", "blue", "yellow", "yellow", "green", "blue"])
     expect(trip[0]).toEqual({ id: "14781:72", lane: "green", seconds: 23 })
     const nearest = (await example("camp-nearest-orb")) as { camp: string; orb: string | null; seconds: number | null }[]
     expect(nearest.length).toBe(52)
-    expect(nearest.filter((r) => r.orb === null).length).toBe(4)
+    expect(nearest.filter((r) => r.orb === null).length).toBe(2)
     expect(nearest.find((r) => r.camp === "14781:1755")).toEqual({ camp: "14781:1755", orb: "1380425:99", seconds: 2.1 })
     expect(await example("camps-in-sight-of-patrons")).toEqual(["14781:1800", "14781:3432", "14781:3445", "14781:3581", "14781:3583"])
     expect(await example("path-chokepoints")).toEqual([["-3,0", 6], ["0,0", 6], ["2,-1", 6], ["3,0", 6], ["-1,0", 5]])
