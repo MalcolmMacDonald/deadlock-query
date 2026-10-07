@@ -9,7 +9,14 @@ export interface PresetPanel {
   readonly position?: { readonly referencePanel: string; readonly direction: Direction }
   readonly initialWidth?: number
   readonly initialHeight?: number
+  /** Added to its group without taking focus (so the first panel of a tab group stays in front). */
+  readonly inactive?: boolean
 }
+
+/** Below this window width the default layout stacks the map over a tabbed editor group instead of three columns. */
+export const NARROW_WIDTH = 700
+/** Initial height in px of the editor group under the map in the compact layout. */
+export const COMPACT_EDITOR_HEIGHT = 380
 
 /** Initial width in px of the editor column in the default "Query" layout. */
 export const EDITOR_WIDTH = 520
@@ -27,6 +34,8 @@ interface PresetOptions {
   readonly extra?: ReadonlyArray<PanelDefinition>
   /** Split every other registered panel below the map (demo/dummy modules) instead of leaving it closed. */
   readonly rest: boolean
+  /** Narrow screens: the map on top, everything else as tabs of one group below it. */
+  readonly compact?: boolean
 }
 
 const buildPreset = (panels: ReadonlyArray<PanelDefinition>, opts: PresetOptions): ReadonlyArray<PresetPanel> => {
@@ -40,6 +49,15 @@ const buildPreset = (panels: ReadonlyArray<PanelDefinition>, opts: PresetOptions
   const placed = new Set<PanelDefinition>([viewer, editor, tools, layers, inspector, ...extra].filter((p): p is PanelDefinition => p !== undefined))
   const out: PresetPanel[] = []
   if (viewer) out.push({ id: viewer.id, title: viewer.title })
+  if (opts.compact) {
+    // The editor (or, without one, the first sidebar panel) opens the group below the map; the rest join it as inactive tabs.
+    const [first, ...rest] = [editor, tools, layers, inspector, ...extra].filter((p): p is PanelDefinition => p !== undefined)
+    if (first) {
+      out.push({ id: first.id, title: first.title, ...(viewer ? { position: { referencePanel: viewer.id, direction: "below" as const } } : {}), initialHeight: COMPACT_EDITOR_HEIGHT })
+      for (const p of rest) out.push({ id: p.id, title: p.title, position: { referencePanel: first.id, direction: "within" }, inactive: true })
+    }
+    return out
+  }
   if (tools)
     out.push({
       id: tools.id,
@@ -92,21 +110,21 @@ const buildPreset = (panels: ReadonlyArray<PanelDefinition>, opts: PresetOptions
  * The default "Query" preset: tools (with layers below) docked left of the map viewer, query editor + results docked right.
  * Built only from the registered `panels`, so the layout never references a missing panel.
  */
-export const queryPreset = (panels: ReadonlyArray<PanelDefinition>): ReadonlyArray<PresetPanel> => buildPreset(panels, { editor: true, rest: true })
+export const queryPreset = (panels: ReadonlyArray<PanelDefinition>, compact = false): ReadonlyArray<PresetPanel> => buildPreset(panels, { editor: true, rest: !compact, compact })
 
 /** "Explore": the map with its tools and layers, no editor. */
-export const explorePreset = (panels: ReadonlyArray<PanelDefinition>): ReadonlyArray<PresetPanel> => buildPreset(panels, { editor: false, rest: false })
+export const explorePreset = (panels: ReadonlyArray<PanelDefinition>, compact = false): ReadonlyArray<PresetPanel> => buildPreset(panels, { editor: false, rest: false, compact })
 
 const isReviewPanel = (p: PanelDefinition) => p.id.startsWith("metadata.")
 
 /** "Review": the map with its tools and layers plus the metadata review panels (`metadata.*`) docked right. */
-export const reviewPreset = (panels: ReadonlyArray<PanelDefinition>): ReadonlyArray<PresetPanel> =>
-  buildPreset(panels, { editor: false, extra: panels.filter(isReviewPanel), rest: false })
+export const reviewPreset = (panels: ReadonlyArray<PanelDefinition>, compact = false): ReadonlyArray<PresetPanel> =>
+  buildPreset(panels, { editor: false, extra: panels.filter(isReviewPanel), rest: false, compact })
 
 export interface Preset {
   readonly id: "query" | "explore" | "review"
   readonly title: string
-  readonly build: (panels: ReadonlyArray<PanelDefinition>) => ReadonlyArray<PresetPanel>
+  readonly build: (panels: ReadonlyArray<PanelDefinition>, compact?: boolean) => ReadonlyArray<PresetPanel>
   /** False when the registered panels cannot make this preset meaningful (e.g. Review before map-metadata ships). */
   readonly available: (panels: ReadonlyArray<PanelDefinition>) => boolean
 }
