@@ -364,6 +364,13 @@ export class ViewerController {
     this.setSelection(additive ? this.selectedIds : [])
   }
 
+  /** Picks several features at once (box-select): replaces the picks, or adds to them when `additive`. Annotations are left alone. */
+  selectFeatures(featureIds: ReadonlyArray<string>, additive = false) {
+    const base = additive ? this.picked : []
+    this.picked = [...base, ...featureIds.filter((id) => !base.includes(id))]
+    this.setSelection(additive ? this.selectedIds : [])
+  }
+
   /** Selects every annotation that can be selected (not locked, not hidden). */
   selectAll() {
     this.setSelection(this.annotations.annotations.filter((a) => this.selectable(a)).map((a) => a.id))
