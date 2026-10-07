@@ -177,6 +177,13 @@ export const extract = async (o: ExtractOptions): Promise<ExtractResult> => {
       if (o.force || !existsSync(fullGltf)) {
         rmSync(join(work, "render-full"), { recursive: true, force: true }); mkdirSync(join(work, "render-full"), { recursive: true })
         await run(o.runner, "render", args.render(o.vpk, o.map, fullGltf, o.materials))
+        // The CLI can exit 0 without writing n0.gltf (disk full, or the hang/early exit noted in `args.render`): say so here, not as a
+        // bare ENOENT from the first read of the file further down.
+        if (!existsSync(fullGltf)) {
+          const last = lastRunOutput.get("render")
+          const cause = last && firstExceptionLine(last)
+          throw new ExportFailed({ stage: "render", stderr: `expected output missing: n0.gltf${cause ? `; tool reported: ${cause} (check free disk space)` : ""}` })
+        }
       }
       mkdirSync(liteDir, { recursive: true }) // an empty dir can vanish during the multi-minute export
       for (const f of readdirSync(liteDir)) rmSync(join(liteDir, f), { recursive: true, force: true })

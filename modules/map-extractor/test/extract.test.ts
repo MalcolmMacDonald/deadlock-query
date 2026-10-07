@@ -156,3 +156,17 @@ test("extract (full) requests glTF materials and counts textures in the tile", a
   expect(r.manifest.tiles[0]!.materials).toEqual(["wall"])
   expect(r.manifest.tiles[0]!.bytes).toBeGreaterThan(statSync(join(r.dir, "render/n0.gltf")).size)
 })
+
+test("lite: a render export that exits 0 without n0.gltf fails as ExportFailed, not a bare ENOENT", async () => {
+  const root = mkdtempSync(join(tmpdir(), "dlq-"))
+  const base = fakeRunner([])
+  const runner: S2VRunner = async (a) => {
+    if (a.some((x) => x.endsWith(".vwnod_c"))) return { code: 0, stdout: "", stderr: "System.IO.IOException: There is not enough space on the disk.\n   at X()" }
+    return base(a)
+  }
+  const err = await extract({ vpk: "m.vpk", map: "dl_midtown", buildId: "1", s2vVersion: "20.0", tier: "lite", outRoot: root, runner }).catch((e) => e)
+  expect(err._tag).toBe("ExportFailed")
+  expect(err.stage).toBe("render")
+  expect(err.stderr).toContain("n0.gltf")
+  expect(err.stderr).toContain("not enough space")
+})
