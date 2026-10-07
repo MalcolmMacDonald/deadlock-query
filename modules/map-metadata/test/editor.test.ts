@@ -180,3 +180,15 @@ test("accepted records are drawn dimmed and new drafts are checked against them"
   controller.setAccepted([])
   expect(overlays.has("metadata.accepted.creepCamp")).toBe(false)
 })
+
+test("submit needs the map identity and a name, then yields a file and an issue link", async () => {
+  const { drafts, viewer, tool } = await setup()
+  const t = tool("metadata.creepCamp"); t.activate!(ctxFor().ctx); draw(t, [0, 0, 0])
+  const noMap = createEditorController({ viewer: { ...viewer, registerTool: () => Effect.succeed(() => {}) }, drafts })
+  expect(noMap.submit({ name: "Ada" })).toMatchObject({ ok: false })
+  const c = createEditorController({ viewer: { ...viewer, registerTool: () => Effect.succeed(() => {}) }, drafts, identity: () => ({ gameBuildId: "b", mapName: "m" }) })
+  expect(c.submit({ name: "" }).ok).toBe(false)
+  const r = c.submit({ name: "Ada", note: "hi" })
+  expect(r.ok).toBe(true)
+  if (r.ok) { expect(r.fileName).toStartWith("metadata-submission-"); expect(r.issueUrl).toContain("metadata-submission"); expect(drafts.list()).toHaveLength(1) }
+})

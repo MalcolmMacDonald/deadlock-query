@@ -1,8 +1,8 @@
 # map-metadata — state
 
-- **Status:** M0, M1 done; M2 partly done (tool activation, accepted overlays); shell mount and collision probe left
-- **Version:** 0.3.0
-- **Current milestone:** M2 in progress
+- **Status:** M0-M3 done (M2's module side done; shell wires `context`/`setAccepted`); M4 `submit-worker` next
+- **Version:** 0.4.0
+- **Current milestone:** M3 complete
 - **Last updated:** 2026-10-07
 
 ## Done
@@ -24,6 +24,8 @@
 
 - M2 part (2026-10-07): kind buttons in the panel start the drawing tool through `ViewerService.activateTool` (falls back to a hint to pick it in the Tools panel when the viewer lacks it); `controller.setAccepted(records)` draws accepted records dimmed (`metadata.accepted.<kind>`) and adds them as `existing` for duplicate/overlap checks.
 
+- M3 (2026-10-07): `src/submit/submission.ts`: `buildSubmission(drafts, meta, ctx)` stamps every draft `proposed` with submitter, submission id and time, checks it with `validateSubmissionRecords` (identity, bounds, accepted records, collision when a probe is given) plus the contracts schema, and returns a `Submission` or just the report. `submissionFile` (canonical, pretty JSON, `metadata-submission-<id>.json`) and `issueLink` (prefilled new-issue URL with label `metadata-submission`; the JSON is inlined when the URL stays under 7000 chars, otherwise the body says to attach the file). `controller.submit({name, github?, note?})` wraps these; the panel's Submit section asks for a name (remembered in localStorage), shows blocking errors, then offers Download and Open GitHub issue. Drafts are kept after submitting.
+
 ## In progress
 - (nothing)
 
@@ -33,10 +35,11 @@
 - Tune the default radii (camp 200, sacrifice 200, orb 100), `surfaceEpsilon` (24) and overlap tolerance (64) on the real dl_midtown data.
 
 ## Blockers / Requests to other modules
-- shell: add the `metadata.editor` panel (`mountEditorPanel` + `createEditorController` from `@deadlock-query/map-metadata/editor`, storage `indexedDbDraftStorage(<gameBuildId>)`) to its module list; that is M2's integration work.
+- shell: pass `identity: () => ({ gameBuildId, mapName })` (or an `expect` in `context`) to `createEditorController`, otherwise Review & submit says the map is not loaded. (Earlier request, done in #157:) add the `metadata.editor` panel (`mountEditorPanel` + `createEditorController` from `@deadlock-query/map-metadata/editor`, storage `indexedDbDraftStorage(<gameBuildId>)`) to its module list; that is M2's integration work.
 - infra (root file, not editable from this module): NEXT.md row `screenshot-tool, map-metadata | Phase 3` can become `map-metadata | M1: editor panel (M0 done)`.
 
 ## Decisions log
+- 2026-10-07 — M3: submitter name is required, GitHub handle optional and stored without `@`; the issue fallback targets this repo (`issueRepo` option); a draft's status/provenance are overwritten on submit so edits cannot smuggle `accepted`.
 - 2026-10-05 — Module scaffolded (rev 2 of IMPLEMENTATION_PLAN.md).
 - 2026-10-06 — Duplicate points are errors, overlapping regions are warnings (a reviewer may legitimately accept an overlap; a duplicate camp is never right). Rejected and stale records never count as neighbours.
 - 2026-10-06 — Validators take collision through a small `CollisionProbe` interface instead of the `MapBundle`, so the same code runs in the editor, the worker (degraded) and tests.

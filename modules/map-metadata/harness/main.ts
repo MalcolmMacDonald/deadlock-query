@@ -76,7 +76,7 @@ window.addEventListener("keydown", (e) => {
 window.addEventListener("resize", redraw)
 
 const drafts = await openDraftStore(indexedDbDraftStorage("harness"))
-const controller = createEditorController({ viewer, drafts })
+const controller = createEditorController({ viewer, drafts, identity: () => ({ gameBuildId: "harness-build", mapName: "harness" }) })
 mountEditorPanel(document.getElementById("panel")!, controller)
 redraw()
 Object.assign(self, { __md: { controller, drafts, activate, tools, toWorld, toScreen } })
