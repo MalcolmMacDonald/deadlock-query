@@ -155,9 +155,7 @@ const mockViewerService: (typeof ViewerService)["Service"] = {
   setOverlay: () => Effect.void,
   removeOverlay: () => Effect.void,
   highlight: () => Effect.void,
-  registerTool: () => Effect.succeed(() => {}),
-  activateTool: () => Effect.void,
-  deactivateTool: () => Effect.void
+  registerTool: () => Effect.succeed(() => {})
 }
 
 export const MockViewerService = Layer.succeed(ViewerService)(mockViewerService)
@@ -168,18 +166,15 @@ export const MockViewerService = Layer.succeed(ViewerService)(mockViewerService)
  */
 export const makeMockViewerServiceWithTools = () => {
   const tools = new Map<string, ExternalTool>()
-  let active: string | undefined
   const layer = Layer.succeed(ViewerService)({
     ...mockViewerService,
     registerTool: (tool: ExternalTool) => Effect.sync(() => {
       if (tools.has(tool.id)) throw new Error(`tool "${tool.id}" is already registered`)
       tools.set(tool.id, tool)
       return () => { if (tools.get(tool.id) === tool) tools.delete(tool.id) }
-    }),
-    activateTool: (id: string) => Effect.sync(() => { active = id }),
-    deactivateTool: () => Effect.sync(() => { active = undefined })
+    })
   })
-  return { layer, registeredTools: (): ReadonlyArray<ExternalTool> => [...tools.values()], activeTool: (): string | undefined => active }
+  return { layer, registeredTools: (): ReadonlyArray<ExternalTool> => [...tools.values()] }
 }
 
 export const MockDevAuth = Layer.succeed(DevAuth)({
