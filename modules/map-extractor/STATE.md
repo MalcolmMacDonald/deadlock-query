@@ -196,6 +196,9 @@ UX pass on the published bundle (build 25761866, extractor 0.5.0, 414 tiles, 424
 - **Dark bake fix (2026-10-07):** `buildMips` now leaves fully transparent texels (alpha 0, usually black padding) out of the colour average at every level (unless a whole block is transparent), the mip cache key and the lite colour revision (`colorRev` 3) changed so old caches rebuild. Needs a re-extract + republish to show; not yet checked on real data.
 - Also found: LOD1 is 32.6 % and LOD2 30 % of LOD0 triangles on the published bundle (targets 25 % and 6 %): the tiles are triangle soup (about 1.7 vertices per triangle), so the simplifier barely collapses them. Follow-up.
 
+## Zipline links (2026-10-07)
+Real-map queries showed healing orbs and camps on islands that ziplines should join. Before, each zipline path produced one link, first node to last, dropped if either end was over 256 units from the navmesh: 3 of 5 paths survived. Now `entityLinks` takes a `canBoard` test (`nearTest`, 640 units: 47 of 129 real nodes hang more than 256 up) and chains the boardable nodes of each path in `path_index` order, so a path whose middle is in the air still links its ground stops, and every ground stop in between is a link end too. Links keep kind `zipline` (bidirectional unless the first node has `one_way`); no contracts change. `bake` needs a re-run and a republish (`componentsWithLinks` in the baked record shows the effect). For query-library: the existing `linkSpeeds` entry for `zipline` applies per segment, as before.
+
 ## Navmesh sign-off
 - 2026-10-07: Malcolm looked at the game-nav navmesh OBJ (`lite.qa/navmesh.obj`, build 25761866) and said it looks good. Signed off for the game-nav source; the Recast fallback is not signed off (its input is the clip volumes). Hull choice (`--flow-hull`, default 0) is still unverified.
 

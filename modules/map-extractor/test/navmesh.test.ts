@@ -8,7 +8,7 @@ import { NavMesh } from "@deadlock-query/spatial-core"
 import { bakeBundle } from "../src/bake.ts"
 import { inspectBundle } from "../src/inspect.ts"
 import {
-  bakeNavmesh, entityLinks, navmeshObj, polygonComponents, snapLinks, stitchTileBorders, toNavMeshData, weldVertices,
+  bakeNavmesh, entityLinks, navmeshObj, nearTest, polygonComponents, snapLinks, stitchTileBorders, toNavMeshData, weldVertices,
   type PolygonSoup
 } from "../src/navmesh.ts"
 
@@ -94,12 +94,21 @@ test("entityLinks resolves zipline and jump pad targets and ignores dangling one
   ])
   expect(links).toEqual([
     { from: [0, 100, 0], to: [0, 900, 300], kind: "jumpPad", bidirectional: false },
-    { from: [0, 0, 500], to: [1000, 0, 500], kind: "zipline", bidirectional: true }
+    { from: [0, 0, 500], to: [500, 0, 600], kind: "zipline", bidirectional: true },
+    { from: [500, 0, 600], to: [1000, 0, 500], kind: "zipline", bidirectional: true }
   ])
   const v = Float64Array.from([0, 0, 480, 1000, 0, 480, 0, 100, 0])
   const s = snapLinks(links, v, 100)
-  expect(s.kept.length).toBe(1) // the jump pad's landing is 900 units from any vertex
-  expect(s.dropped).toBe(1)
+  expect(s.kept.length).toBe(0) // the middle node is 120 up: each segment loses an end, and the jump pad's landing is 900 units away
+  expect(s.dropped).toBe(3)
+})
+
+test("entityLinks chains only the zipline stops that can be boarded", () => {
+  const z = (id: string, i: number, p: [number, number, number]): Entity => ({ id, class: "x", kind: "zipline", position: p, properties: { path_uniqueid: "p", path_index: i } })
+  const v = Float64Array.from([0, 0, 480, 1000, 0, 480])
+  const links = entityLinks([z("a", 0, [0, 0, 500]), z("b", 1, [500, 0, 3000]), z("c", 2, [1000, 0, 500])], nearTest(v, 100))
+  expect(links).toEqual([{ from: [0, 0, 500], to: [1000, 0, 500], kind: "zipline", bidirectional: true }])
+  expect(snapLinks(links, v, 100).kept.length).toBe(1)
 })
 
 // ---- Recast on the contracts mini-map -------------------------------------------------------------------------------
