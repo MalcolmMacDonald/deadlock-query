@@ -5,7 +5,7 @@
 | `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` | GitHub Actions secrets | `deploy.yml` dev job | Cloudflare dashboard → My Profile → API Tokens → "Edit Cloudflare Pages" template |
 | `DEV_PASSWORD_HASH` | Cloudflare Pages env (encrypted) | `functions/auth/*` | `bun tools/hash-password.ts` (added in infra M4); paste the output |
 | `SESSION_HMAC_KEY` | Cloudflare Pages env | session cookie signing | `openssl rand -hex 32` |
-| `GITHUB_TOKEN_PROXY` | Cloudflare Pages env | `/api/github/*` proxy | Fine-grained PAT on this repo: Issues, Pull requests, Contents (read), Actions (write), Metadata |
+| `GITHUB_TOKEN_PROXY` | Cloudflare Pages env | `/api/github/*` proxy | Fine-grained PAT on this repo: Issues, Pull requests (write), Contents (write), Actions (write), Metadata |
 | `LOCKFILE_BOT_TOKEN` (optional) | GitHub Actions secrets | `lockfile.yml` (pushes the regenerated `bun.lock` to conflicting PR branches; needs a real token so CI re-runs) | Fine-grained PAT on this repo: Contents and Pull requests read/write |
 | `CLAUDE_CODE_OAUTH_TOKEN` (or `ANTHROPIC_API_KEY`) | GitHub Actions secrets | kanban's `claude.yml` | `claude setup-token` locally, or Anthropic Console |
 | `TURNSTILE_SECRET` | Cloudflare Worker env | map-metadata submissions (Phase 3) | Cloudflare → Turnstile |

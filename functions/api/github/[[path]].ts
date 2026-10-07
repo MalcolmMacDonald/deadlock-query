@@ -1,4 +1,4 @@
-import { decide, sanitizeResponse, upstreamHeaders } from "../../../modules/infra/src/proxy.ts"
+import { checkBody, decide, sanitizeResponse, upstreamHeaders } from "../../../modules/infra/src/proxy.ts"
 
 interface Env { GITHUB_TOKEN_PROXY?: string }
 
@@ -8,10 +8,15 @@ export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
   if (!d.ok) return Response.json({ error: d.reason }, { status: d.status })
   if (!env.GITHUB_TOKEN_PROXY) return Response.json({ error: "proxy token not configured" }, { status: 503 })
   const hasBody = request.method !== "GET"
+  const body = hasBody ? await request.text() : undefined
+  if (body !== undefined) {
+    const bad = checkBody(request.method, new URL(request.url).pathname.slice("/api/github".length), body)
+    if (bad) return Response.json({ error: bad }, { status: 403 })
+  }
   const res = await fetch(d.upstream, {
     method: request.method,
     headers: upstreamHeaders(env.GITHUB_TOKEN_PROXY, hasBody),
-    body: hasBody ? await request.text() : undefined,
+    body,
   })
   return sanitizeResponse(res)
 }
