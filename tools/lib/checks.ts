@@ -54,6 +54,16 @@ const walk = (dir: string): string[] =>
 
 const IMPORT_RE = /(?:from|import)\s*\(?\s*["']([^"']+)["']/g
 
+/** True when module `id`'s package.json `exports` publishes `subpath` (e.g. `./editor`): a declared entry point, not a deep import. */
+const exportsSubpath = (root: string, id: string, subpath: string): boolean => {
+  try {
+    const pkg = JSON.parse(readFileSync(join(root, "modules", id, "package.json"), "utf8"))
+    return typeof pkg.exports === "object" && pkg.exports !== null && subpath in pkg.exports
+  } catch {
+    return false
+  }
+}
+
 /** Modules may import only `contracts` and their module.json `dependsOn`. */
 export const checkDeps = (root: string): string[] => {
   const errors: string[] = []
@@ -68,7 +78,7 @@ export const checkDeps = (root: string): string[] => {
         const pkg = /^@deadlock-query\/([^/]+)(\/.*)?$/.exec(spec)
         if (pkg) {
           if (!allowed.has(pkg[1]!)) errors.push(`${file}: ${id} may not import ${pkg[1]}`)
-          else if (pkg[2] && pkg[1] !== id) errors.push(`${file}: deep import ${spec} (use package entry)`)
+          else if (pkg[2] && pkg[1] !== id && !exportsSubpath(root, pkg[1]!, `.${pkg[2]}`)) errors.push(`${file}: deep import ${spec} (use package entry)`)
         } else if (/modules\/[^/]+\/src/.test(spec) || /^(\.\.\/)+[^/.][^/]*\/src/.test(spec)) {
           errors.push(`${file}: cross-module relative import ${spec}`)
         }
