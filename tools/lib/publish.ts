@@ -13,11 +13,18 @@ export const parseBundleManifest = (raw: unknown): BundleInfo => {
   return { buildId: m.gameBuildId, mapName: m.mapName, tier: m.tier }
 }
 
-export const assetName = (b: BundleInfo) => `${b.mapName}-${b.buildId}-${b.tier}.zip`
+/**
+ * Asset names carry the first 12 hex chars of the zip's sha256, so re-publishing a changed bundle for the same game build
+ * adds a new asset to the Release instead of overwriting the one the current pointer (and any rollback) still names.
+ */
+export const assetName = (b: BundleInfo, sha256: string) => `${b.mapName}-${b.buildId}-${b.tier}-${sha256.slice(0, 12)}.zip`
 export const releaseTag = (b: BundleInfo) => `data-${b.buildId}`
 
-/** Scratch (`.work`) and stage-stamp files are not part of a published bundle. */
-export const isPublishable = (rel: string) => !rel.split("/").some((p) => p === ".work" || p.startsWith(".stage-"))
+/** Raw copies of the game's nav files: only `bake` reads them, nothing at runtime does, and D8 hosts derived data only. */
+const RAW_GAME_FILES = new Set(["collision/walkable.nav", "collision/walkable.navflowmap"])
+
+/** Scratch (`.work`), stage-stamp files and raw game nav files are not part of a published bundle. */
+export const isPublishable = (rel: string) => !RAW_GAME_FILES.has(rel) && !rel.split("/").some((p) => p === ".work" || p.startsWith(".stage-"))
 
 /** Publishable files of a bundle dir (relative, forward-slash paths). */
 export const bundleFiles = (dir: string, rel = ""): string[] =>
@@ -40,7 +47,7 @@ export const checkBundleBudget = (dir: string, files: string[]): string[] => {
 
 /** New pointer for a published asset: same tag adds/replaces the asset with the same dest, a new tag replaces the pointer. */
 export const updatePointer = (prev: DataPointer | undefined, b: BundleInfo, sha256: string): DataPointer => {
-  const asset = { name: assetName(b), sha256, dest: `data/${b.mapName}` }
+  const asset = { name: assetName(b, sha256), sha256, dest: `data/${b.mapName}` }
   const keep = prev && prev.tag === releaseTag(b) ? prev.assets.filter((a) => a.dest !== asset.dest) : []
   return { buildId: b.buildId, tag: releaseTag(b), assets: [...keep, asset] }
 }

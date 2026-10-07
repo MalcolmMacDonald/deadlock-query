@@ -15,7 +15,7 @@ Without the dashboard: revert the merge on `main`; the dev job redeploys in a fe
 PR previews (`pr-<n>`) are disposable; close the PR or push a fix.
 
 ## Map data
-`data/current-build.json` pins a Release tag and hashes. To go back to the previous bundle, revert the PR that changed the pointer (or edit it back to the previous `buildId`, `tag`, hash), merge, and the next dev deploy (and the next promote for prod) uses it. This works only while the old `data-<buildId>` Release still exists, which is why Releases are kept. `bun tools/check-data.ts` proves a pointer is deployable before you merge.
+`data/current-build.json` pins a Release tag and hashes. To go back to the previous bundle, revert the PR that changed the pointer (or edit it back to the previous `buildId`, `tag`, hash), merge, and the next dev deploy (and the next promote for prod) uses it. This works only while the old asset still exists in its `data-<buildId>` Release, which is why Releases and their assets are kept (`publish-data` names assets by hash, so re-publishing never replaces one). `bun tools/check-data.ts` proves a pointer is deployable before you merge.
 If the new bundle was never merged, nothing to roll back: close the PR (and delete its Release if unwanted).
 Content that must disappear entirely is a [takedown](takedown.md), not a rollback.
 

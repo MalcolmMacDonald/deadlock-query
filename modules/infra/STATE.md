@@ -50,6 +50,13 @@
 
 - `tools/build.ts` passes `VITE_TARGET=<target>` to the shell build (the request in shell STATE.md M4), so `--target dev` ships dev-only modules and the lock screen and `--target prod` omits them. No dev-only module exists yet, so deployed output is unchanged today.
 
+## Publish flow hardening (2026-10-07)
+- Found while writing the publish/update runbook: re-publishing a changed bundle for the same game build used the fixed asset name `<map>-<build>-<tier>.zip` and `gh release upload --clobber`, so the Release asset changed before the pointer PR merged (every dev deploy and preview in between failed with `sha256 mismatch`) and a pointer revert could not roll back (old hash, overwritten asset). Asset names now end in the first 12 hex chars of the zip's sha256 (`assetName(info, sha256)`), so each publish adds an asset and never replaces one.
+- `publish-data` now runs `checkBundleReady` (`src/bundleReady.ts`, 4 tests) before zipping: the contracts `checkTiles` + `checkFiles` (every file the manifest names exists with the recorded size and sha256) plus "has baked data with a navmesh" and "tiles have LODs". An `extract` rerun rewrites the manifest (no LODs, no `baked`, stale tile hashes), which this catches before upload.
+- The raw game files `collision/walkable.nav` and `walkable.navflowmap` are left out of the published zip (only `bake` reads them; D8 hosts derived data only).
+- Root scripts `bun run dlq-extract`, `publish-data`, `check:data` (the docs used `bun run dlq-extract` which did not exist at the root).
+- `docs/dev-site.md` has the full extract, tile, bake, check, publish, PR, deploy sequence for first publish and updates; `runbook.md` and `rollback.md` point to it.
+
 ## Next
 - Malcolm: import the ruleset, enable auto-merge, optional `LOCKFILE_BOT_TOKEN`, run the prod rollback dry run (see `docs/runbook.md` one-time setup).
 - Malcolm creates the fine-grained PAT and sets `GITHUB_TOKEN_PROXY` (see `docs/secrets.md`); then curl the live proxy with a session cookie, confirm the token never appears in a response.
@@ -69,6 +76,8 @@
 - 2026-10-05 — Decisions accepted: Cloudflare for dev (D9), hosting lite tier publicly (D8), branch `main`; add CODEOWNERS for semantics/ and takedown runbook.
 
 - 2026-10-05 — No per-IP login rate limit: only a 1 s failure delay (see M4 notes).
+
+- 2026-10-07 — Content-addressed asset names inside one `data-<buildId>` Release (not a new tag per publish): `checkPointer` keeps `tag == data-<buildId>` and a takedown still deletes one Release.
 
 ## Open questions
 - (see PLAN.md §9)
