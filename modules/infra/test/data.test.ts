@@ -2,7 +2,7 @@ import { expect, test } from "bun:test"
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { spawnSync } from "node:child_process"
+import { writeZip } from "../../../tools/lib/zip.ts"
 import { checkPointer, fetchData, parsePointer, sha256Hex } from "../../../tools/lib/data.ts"
 
 const good = { buildId: "1", tag: "data-1", assets: [{ name: "a.zip", sha256: "a".repeat(64), dest: "data/x" }] }
@@ -21,7 +21,7 @@ test("parsePointer rejects bad shapes and unsafe paths", () => {
 test("fetchData verifies hash and extracts", async () => {
   const d = mkdtempSync(join(tmpdir(), "dlq-"))
   writeFileSync(join(d, "hello.txt"), "hi")
-  spawnSync("zip", ["-q", "-j", join(d, "a.zip"), join(d, "hello.txt")])
+  writeZip(join(d, "a.zip"), d, ["hello.txt"])
   const bytes = new Uint8Array(readFileSync(join(d, "a.zip")))
   const fake = (async () => new Response(bytes)) as unknown as typeof fetch
   const ptr = parsePointer({ ...good, assets: [{ ...good.assets[0], sha256: sha256Hex(bytes) }] })

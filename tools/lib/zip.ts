@@ -1,6 +1,6 @@
-import { closeSync, openSync, readFileSync, writeSync } from "node:fs"
-import { join } from "node:path"
-import { crc32, deflateRawSync } from "node:zlib"
+import { closeSync, mkdirSync, openSync, readFileSync, writeFileSync, writeSync } from "node:fs"
+import { dirname, join, resolve, sep } from "node:path"
+import { crc32, deflateRawSync, inflateRawSync } from "node:zlib"
 
 /**
  * Minimal zip writer (deflate, zip32) so publishing works where no `zip` binary exists (Windows).
@@ -40,5 +40,40 @@ export const writeZip = (zipPath: string, root: string, files: string[]): void =
     out(end)
   } finally {
     closeSync(fd)
+  }
+}
+
+/** Minimal zip reader matching `writeZip` (stored/deflate, zip32); extracts into `dest`, rejecting paths that escape it. */
+export const extractZip = (bytes: Uint8Array, dest: string): void => {
+  const buf = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.length)
+  let eocd = -1
+  for (let i = buf.length - 22; i >= Math.max(0, buf.length - 22 - 0xffff); i--) {
+    if (buf.readUInt32LE(i) === 0x06054b50) { eocd = i; break }
+  }
+  if (eocd < 0) throw new Error("zip: end of central directory not found")
+  const count = buf.readUInt16LE(eocd + 10)
+  let p = buf.readUInt32LE(eocd + 16)
+  const root = resolve(dest)
+  for (let n = 0; n < count; n++) {
+    if (buf.readUInt32LE(p) !== 0x02014b50) throw new Error("zip: bad central directory entry")
+    const method = buf.readUInt16LE(p + 10)
+    const size = buf.readUInt32LE(p + 20)
+    const nameLen = buf.readUInt16LE(p + 28)
+    const extraLen = buf.readUInt16LE(p + 30)
+    const commentLen = buf.readUInt16LE(p + 32)
+    const local = buf.readUInt32LE(p + 42)
+    const name = buf.toString("utf8", p + 46, p + 46 + nameLen)
+    p += 46 + nameLen + extraLen + commentLen
+    const target = resolve(root, name)
+    if (target !== root && !target.startsWith(root + sep)) throw new Error(`zip: unsafe path ${name}`)
+    if (name.endsWith("/")) { mkdirSync(target, { recursive: true }); continue }
+    const start = local + 30 + buf.readUInt16LE(local + 26) + buf.readUInt16LE(local + 28)
+    const body = buf.subarray(start, start + size)
+    let data: Buffer
+    if (method === 0) data = body
+    else if (method === 8) data = inflateRawSync(body)
+    else throw new Error(`zip: unsupported method ${method} for ${name}`)
+    mkdirSync(dirname(target), { recursive: true })
+    writeFileSync(target, data)
   }
 }
