@@ -34,24 +34,19 @@ test.skipIf(!haveBrowser)("drafts drawn in the harness persist across a reload",
   for (const [x, y] of [[100, 100], [250, 100], [250, 200]] as const) await canvas.click({ position: { x, y } })
   await page.keyboard.press("Enter")
 
-  await page.getByText("Your drafts (2)").waitFor()
+  await page.getByText("Draw shapes (2)").waitFor()
   await page.evaluate(() => (self as any).__md.drafts.flush())
 
   await page.reload()
-  await page.getByText("Your drafts (2)").waitFor()
+  await page.getByText("Draw shapes (2)").waitFor()
   const kinds = await page.evaluate(() => (self as any).__md.drafts.list().map((r: any) => r.kind))
   expect(kinds).toEqual(["creepCamp", "walkableRegion"])
 
-  // Selecting a draft opens its form; editing the tier is saved.
-  await page.locator("li.draft .pick").first().click()
-  await page.getByLabel("Tier").selectOption("strong")
-  await page.evaluate(() => (self as any).__md.drafts.flush())
-  expect(await page.evaluate(() => (self as any).__md.drafts.list()[0].tier)).toBe("strong")
   // Submit: a name is required, then a download and a prefilled issue link appear.
-  await page.getByRole("button", { name: "Review & submit" }).click()
+  await page.getByRole("button", { name: "Send for review" }).click()
   await page.getByText("Enter a display name").waitFor()
   await page.getByLabel("Your name").fill("Ada")
-  await page.getByRole("button", { name: "Review & submit" }).click()
+  await page.getByRole("button", { name: "Send for review" }).click()
   const link = page.getByRole("link", { name: "Open GitHub issue" })
   await link.waitFor()
   expect(await link.getAttribute("href")).toContain("labels=metadata-submission")
@@ -80,8 +75,8 @@ test.skipIf(!haveBrowser)("review panel: open a submission, accept valid records
   await page.close()
 }, 60_000)
 
-// Submit now: with the human check and network faked, the file is posted and the PR link appears.
-test.skipIf(!haveBrowser)("submit now posts the submission and shows the pull request link", async () => {
+// Send for review: with the network faked and no human check, the file is posted and the PR link appears.
+test.skipIf(!haveBrowser)("send for review posts the submission and shows the pull request link", async () => {
   const page = await browser.newPage({ viewport: { width: 1200, height: 700 } })
   const errors: string[] = []
   page.on("pageerror", (e) => errors.push(e.message))
@@ -91,14 +86,48 @@ test.skipIf(!haveBrowser)("submit now posts the submission and shows the pull re
   await page.locator("#toolbar").getByRole("button", { name: "Creep camp" }).click()
   await page.locator("#map").click({ position: { x: 300, y: 300 } })
   await page.getByLabel("Your name").fill("Ada")
-  await page.getByRole("button", { name: "Review & submit" }).click()
-  await page.getByRole("button", { name: "Submit now" }).click()
+  await page.getByRole("button", { name: "Send for review" }).click()
   const link = page.getByRole("link", { name: "See your pull request" })
   await link.waitFor()
   expect(await link.getAttribute("href")).toBe("https://github.com/o/r/pull/42")
   const sent: string[] = await page.evaluate(() => (self as any).__md.sent)
   expect(sent).toHaveLength(1)
   expect(JSON.parse(sent[0]!).submitter.name).toBe("Ada")
+  expect(errors).toEqual([])
+  await page.close()
+}, 60_000)
+
+// Tagging: select entities on the map, press a tag once for all of them, see the tagged state, press again to remove.
+test.skipIf(!haveBrowser)("tag several selected entities at once, then untag them", async () => {
+  const page = await browser.newPage({ viewport: { width: 1200, height: 700 } })
+  const errors: string[] = []
+  page.on("pageerror", (e) => errors.push(e.message))
+  await page.goto(`http://localhost:${server.port}/?tags&mocksubmit`)
+  await page.waitForFunction(() => (self as any).__md?.tags)
+  await page.evaluate(() => (self as any).__md.drafts.clear())
+  const canvas = page.locator("#map")
+  const at = async (i: number) => page.evaluate((i) => { const m = (self as any).__md; const [x, y] = m.toScreen([(i % 4) * 400 - 600, Math.floor(i / 4) * 400 - 400, 0]); return { x, y } }, i)
+  const tag = page.getByRole("button", { name: /^Heavy box/ })
+  expect(await tag.isDisabled()).toBe(true)
+  await canvas.click({ position: await at(0) })
+  await canvas.click({ position: await at(1), modifiers: ["Shift"] })
+  await canvas.click({ position: await at(5), modifiers: ["Shift"] })
+  await page.getByText("3 selected").waitFor()
+  await tag.click()
+  expect(await tag.getAttribute("aria-pressed")).toBe("true")
+  expect(await page.evaluate(() => (self as any).__md.drafts.list().map((r: any) => `${r.label}:${r.properties.entityId}`))).toEqual(["heavy-box:ent-0", "heavy-box:ent-1", "heavy-box:ent-5"])
+  await tag.getByText("3 tagged").waitFor()
+  // A different selection keeps the earlier tags; one entity can carry two tags.
+  await canvas.click({ position: await at(0) })
+  await page.getByRole("button", { name: /^Labelling box/ }).click()
+  expect(await page.evaluate(() => (self as any).__md.drafts.list().length)).toBe(4)
+  await page.getByRole("button", { name: /^Heavy box/ }).click()   // all selected carry it, so this removes it
+  expect(await page.evaluate(() => (self as any).__md.drafts.list().map((r: any) => `${r.label}:${r.properties.entityId}`))).toEqual(["heavy-box:ent-1", "heavy-box:ent-5", "labelling-box:ent-0"])
+  // Tags go out in a submission like any draft.
+  await page.getByLabel("Your name").fill("Ada")
+  await page.getByRole("button", { name: "Send for review" }).click()
+  await page.getByRole("link", { name: "See your pull request" }).waitFor()
+  expect(JSON.parse((await page.evaluate(() => (self as any).__md.sent))[0]).records).toHaveLength(3)
   expect(errors).toEqual([])
   await page.close()
 }, 60_000)

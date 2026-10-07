@@ -1,6 +1,6 @@
 import { Effect, Stream } from "effect"
 import { ViewerService, type ExternalTool, type OverlayFeature, type OverlayStyle, type ToolContext, type Vec3 } from "@deadlock-query/contracts"
-import { createEditorController, createReviewController, indexedDbDraftStorage, mountEditorPanel, mountReviewPanel, openDraftStore, type QueueItem, type ReviewApi } from "../src/editor/index.ts"
+import { createEditorController, createTagController, type TaggableEntity, createReviewController, indexedDbDraftStorage, mountEditorPanel, mountReviewPanel, openDraftStore, type QueueItem, type ReviewApi } from "../src/editor/index.ts"
 import seeded from "../fixtures/submissions/valid.json"
 
 // A mock viewer: a top-down canvas where 1 pixel = 4 world units, centred on the origin. Enough to draw and reload.
@@ -12,6 +12,7 @@ const overlays = new Map<string, { features: ReadonlyArray<OverlayFeature>; styl
 let draft: ReadonlyArray<OverlayFeature> = []
 let active: ExternalTool | undefined
 let hint = ""
+let entityDraw: () => void = () => {}
 
 const toScreen = (p: Vec3): [number, number] => [canvas.width / 2 + p[0] / SCALE, canvas.height / 2 - p[1] / SCALE]
 const toWorld = (x: number, y: number): Vec3 => [(x - canvas.width / 2) * SCALE, -(y - canvas.height / 2) * SCALE, 0]
@@ -29,6 +30,7 @@ const redraw = () => {
   g.clearRect(0, 0, canvas.width, canvas.height)
   for (const { features, style } of overlays.values()) for (const f of features) drawFeature(f, style.color ?? "#fff", style.size ?? 8)
   for (const f of draft) drawFeature(f, "#ffd34d", 8)
+  entityDraw()
   ;(document.getElementById("hint") as HTMLElement).textContent = hint
 }
 
@@ -93,13 +95,35 @@ if (new URLSearchParams(location.search).has("review")) {
 } else {
 const drafts = await openDraftStore(indexedDbDraftStorage("harness"))
 const controller = createEditorController({ viewer, drafts, identity: () => ({ gameBuildId: "harness-build", mapName: "harness" }) })
-// `?mocksubmit` swaps the human check and the network for fakes so the submit flow can be tested without Cloudflare.
-const mock = new URLSearchParams(location.search).has("mocksubmit")
+// `?mocksubmit` swaps the network for a fake so the send flow can be tested without the worker.
+const params = new URLSearchParams(location.search)
+const mock = params.has("mocksubmit")
 const sent: string[] = []
-mountEditorPanel(document.getElementById("panel")!, controller, mock ? {
-  turnstile: async (_el, _key, onToken) => { onToken("test-token"); return { reset: () => onToken("test-token") } },
-  fetch: (async (_u: string, init: RequestInit) => { sent.push(String(init.body)); return Response.json({ id: "x", url: "https://github.com/o/r/pull/42" }, { status: 201 }) }) as unknown as typeof fetch
-} : { submitService: false })
+
+// Fake map entities for tagging: a grid of dots; clicking one selects it (shift adds) while no drawing tool is active.
+const entities: TaggableEntity[] = Array.from({ length: 12 }, (_, i) => ({ id: `ent-${i}`, label: `Entity ${i}`, position: [(i % 4) * 400 - 600, Math.floor(i / 4) * 400 - 400, 0] as Vec3 }))
+const picked = new Set<string>()
+const pickListeners = new Set<() => void>()
+const source = { selected: () => entities.filter((e) => picked.has(e.id)), subscribe: (fn: () => void) => { pickListeners.add(fn); return () => void pickListeners.delete(fn) } }
+if (params.has("tags")) {
+  canvas.addEventListener("click", (e) => {
+    if (active) return
+    const r = canvas.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top
+    const hit = entities.find((en) => { const [sx, sy] = toScreen(en.position); return Math.hypot(sx - x, sy - y) < 12 })
+    if (!e.shiftKey) picked.clear()
+    if (hit) picked.add(hit.id)
+    for (const fn of pickListeners) fn()
+    redraw()
+  })
+  entityDraw = () => { for (const en of entities) { const [x, y] = toScreen(en.position); g.fillStyle = picked.has(en.id) ? "#fff" : "#667"; g.beginPath(); g.arc(x, y, 6, 0, 7); g.fill() } }
+}
+const tags = params.has("tags") ? createTagController({ viewer, drafts, source }) : undefined
+mountEditorPanel(document.getElementById("panel")!, controller, {
+  ...(tags ? { tags } : {}),
+  ...(mock
+    ? { fetch: (async (_u: string, init: RequestInit) => { sent.push(String(init.body)); return Response.json({ id: "x", url: "https://github.com/o/r/pull/42" }, { status: 201 }) }) as unknown as typeof fetch }
+    : { submitService: false as const })
+})
 redraw()
-Object.assign(self, { __md: { controller, drafts, activate, tools, toWorld, toScreen, sent } })
+Object.assign(self, { __md: { controller, drafts, activate, tools, toWorld, toScreen, sent, tags, picked } })
 }

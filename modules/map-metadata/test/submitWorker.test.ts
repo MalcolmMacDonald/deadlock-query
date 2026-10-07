@@ -9,17 +9,16 @@ const memory = (): Counters => {
   const m = new Map<string, string>()
   return { get: async (k) => m.get(k) ?? null, put: async (k, v) => void m.set(k, v) }
 }
-const env = (over: Partial<Env> = {}): Env => ({ TURNSTILE_SECRET: "s", GITHUB_TOKEN: "t", GITHUB_REPO: "o/r", RATE: memory(), ...over })
+const env = (over: Partial<Env> = {}): Env => ({ GITHUB_TOKEN: "t", GITHUB_REPO: "o/r", RATE: memory(), ...over })
 
-/** Records every outbound call; Turnstile succeeds unless `turnstile` says otherwise, GitHub unless `failAt` matches. */
-const mockFetch = (opts: { turnstile?: boolean; failAt?: string } = {}) => {
+/** Records every outbound call; GitHub succeeds unless `failAt` matches. */
+const mockFetch = (opts: { failAt?: string } = {}) => {
   const calls: { method: string; url: string; body?: any }[] = []
   const f = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input)
     const method = init?.method ?? "GET"
     const body = init?.body instanceof URLSearchParams ? Object.fromEntries(init.body) : init?.body ? JSON.parse(String(init.body)) : undefined
     calls.push({ method, url, body })
-    if (url.includes("turnstile")) return Response.json({ success: opts.turnstile ?? true })
     if (opts.failAt && url.includes(opts.failAt)) return Response.json({ message: "no" }, { status: 500 })
     if (url.endsWith("/git/ref/heads/main")) return Response.json({ object: { sha: "abc" } })
     if (url.endsWith("/git/refs")) return Response.json({}, { status: 201 })
@@ -31,7 +30,7 @@ const mockFetch = (opts: { turnstile?: boolean; failAt?: string } = {}) => {
   return { calls, deps }
 }
 
-const post = (body: string, headers: Record<string, string> = { "x-turnstile-token": "tok", "cf-connecting-ip": "1.2.3.4" }) =>
+const post = (body: string, headers: Record<string, string> = { "cf-connecting-ip": "1.2.3.4" }) =>
   new Request("https://w.test/submit", { method: "POST", body, headers })
 
 test("a valid submission opens a PR under data/submissions and never touches data/metadata", async () => {
@@ -45,7 +44,7 @@ test("a valid submission opens a PR under data/submissions and never touches dat
   expect(put.body.branch).toBe(`metadata-submission/${validId}`)
   expect(Buffer.from(put.body.content, "base64").toString()).toBe(valid)
   expect(calls.some((c) => c.url.endsWith("/labels"))).toBe(true)
-  expect(calls.find((c) => c.url.includes("turnstile"))!.body).toMatchObject({ secret: "s", response: "tok", remoteip: "1.2.3.4" })
+  expect(calls.every((c) => c.url.includes("api.github.com"))).toBe(true)   // no human-check call
 })
 
 test("invalid content is a 4xx and nothing reaches GitHub", async () => {
@@ -65,13 +64,12 @@ test("unsafe submission ids (path traversal) are refused", async () => {
   expect(calls.some((c) => c.url.includes("api.github.com"))).toBe(false)
 })
 
-test("missing or failing Turnstile is 403; wrong method 405; wrong path 404; oversize 413", async () => {
-  expect((await handleRequest(post(valid, {}), env(), mockFetch().deps)).status).toBe(403)
-  expect((await handleRequest(post(valid), env(), mockFetch({ turnstile: false }).deps)).status).toBe(403)
+test("no human check is asked for; wrong method 405; wrong path 404; oversize 413", async () => {
+  expect((await handleRequest(post(valid, {}), env(), mockFetch().deps)).status).toBe(201)
   expect((await handleRequest(new Request("https://w.test/submit"), env(), mockFetch().deps)).status).toBe(405)
   expect((await handleRequest(new Request("https://w.test/other", { method: "POST" }), env(), mockFetch().deps)).status).toBe(404)
   expect((await handleRequest(post("x".repeat(300_000)), env(), mockFetch().deps)).status).toBe(413)
-  expect((await handleRequest(post(valid, { "content-length": "999999", "x-turnstile-token": "t" }), env(), mockFetch().deps)).status).toBe(413)
+  expect((await handleRequest(post(valid, { "content-length": "999999" }), env(), mockFetch().deps)).status).toBe(413)
 })
 
 test("per-IP and global limits answer 429 with Retry-After", async () => {
@@ -83,7 +81,7 @@ test("per-IP and global limits answer 429 with Retry-After", async () => {
   expect(third.status).toBe(429)
   expect(third.headers.get("retry-after")).toBe("3600")
   // Another address is unaffected until the global cap.
-  const other = { "x-turnstile-token": "t", "cf-connecting-ip": "9.9.9.9" }
+  const other = { "cf-connecting-ip": "9.9.9.9" }
   expect((await handleRequest(post(valid, other), e, deps)).status).toBe(201)
   const g = env({ GLOBAL_PER_DAY: "1" })
   expect((await handleRequest(post(valid), g, deps)).status).toBe(201)
