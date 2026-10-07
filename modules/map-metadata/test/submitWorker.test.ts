@@ -112,8 +112,14 @@ test("the PR body shows user text inside a fence it cannot close", async () => {
 })
 
 test("CORS: only the configured origin is allowed", async () => {
-  const none = await handleRequest(new Request("https://w.test/submit", { method: "OPTIONS" }), env())
+  const pre = (origin?: string) => new Request("https://w.test/submit", { method: "OPTIONS", ...(origin ? { headers: { origin } } : {}) })
+  const none = await handleRequest(pre("https://site.test"), env())
   expect(none.headers.get("access-control-allow-origin")).toBeNull()
-  const ok = await handleRequest(new Request("https://w.test/submit", { method: "OPTIONS" }), env({ ALLOWED_ORIGIN: "https://site.test" }))
-  expect(ok.headers.get("access-control-allow-origin")).toBe("https://site.test")
+  const list = env({ ALLOWED_ORIGIN: "https://a.test, https://b.test" })
+  expect((await handleRequest(pre("https://b.test"), list)).headers.get("access-control-allow-origin")).toBe("https://b.test")
+  expect((await handleRequest(pre("https://evil.test"), list)).headers.get("access-control-allow-origin")).toBeNull()
+  expect((await handleRequest(pre(), list)).headers.get("access-control-allow-origin")).toBeNull()
+  // The POST answer carries the matched origin too, so the browser can read it.
+  const post = await handleRequest(new Request("https://w.test/submit", { method: "POST", headers: { origin: "https://a.test" } }), list, mockFetch().deps)
+  expect(post.headers.get("access-control-allow-origin")).toBe("https://a.test")
 })

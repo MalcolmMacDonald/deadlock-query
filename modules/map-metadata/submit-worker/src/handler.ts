@@ -20,7 +20,7 @@ export interface Env {
   /** Limits; defaults below. */
   readonly PER_IP_PER_HOUR?: string
   readonly GLOBAL_PER_DAY?: string
-  /** Origin allowed to call from a browser (CORS); default `*` is refused in favour of no CORS headers. */
+  /** Origin(s) allowed to call from a browser (CORS), comma separated; the request's own origin is echoed when listed. Unset = no CORS headers. */
   readonly ALLOWED_ORIGIN?: string
 }
 
@@ -115,7 +115,17 @@ export const createSubmissionPr = async (s: Submission, text: string, env: Env, 
  * size, rate limits, Turnstile, JSON + schema + validators (degraded mode: no collision on the server), id safety. Then it
  * opens a PR. Errors never echo submitted text beyond validator messages.
  */
-export const handleRequest = async (req: Request, env: Env, deps: Deps = { fetch, now: Date.now }): Promise<Response> => {
+/** The request's `Origin` if the comma-separated allow list has it, else `undefined`. */
+export const matchOrigin = (req: Request, list: string | undefined): string | undefined => {
+  const origin = req.headers.get("origin")
+  return origin && list ? list.split(",").map((x) => x.trim()).filter(Boolean).find((x) => x === origin) : undefined
+}
+
+export const handleRequest = async (req: Request, envIn: Env, deps: Deps = { fetch, now: Date.now }): Promise<Response> => {
+  // From here `env.ALLOWED_ORIGIN` is the single matched origin (or none), which is what the response helpers echo.
+  const matched = matchOrigin(req, envIn.ALLOWED_ORIGIN)
+  const { ALLOWED_ORIGIN: _list, ...rest } = envIn
+  const env: Env = matched ? { ...rest, ALLOWED_ORIGIN: matched } : rest
   const url = new URL(req.url)
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: env.ALLOWED_ORIGIN ? { "access-control-allow-origin": env.ALLOWED_ORIGIN, "access-control-allow-methods": "POST", "access-control-allow-headers": "content-type, x-turnstile-token", "access-control-max-age": "600" } : {} })
   if (url.pathname !== "/submit") return fail(404, "not-found", "Not found", env)

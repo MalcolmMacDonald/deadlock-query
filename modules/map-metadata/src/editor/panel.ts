@@ -3,6 +3,8 @@ import { KIND_IDS, kindDefinition } from "../kinds.ts"
 import type { Issue } from "../issues.ts"
 import type { EditorController, EditorState } from "./controller.ts"
 import { fieldsFor, type FieldSpec } from "./fields.ts"
+import { postSubmission, type PostResult } from "../submit/client.ts"
+import { DEFAULT_SUBMIT_SERVICE, renderTurnstile, type RenderTurnstile, type SubmitService } from "../submit/service.ts"
 
 type Child = Node | string | undefined | false
 const h = <K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string, string | boolean | undefined> = {}, ...children: Child[]): HTMLElementTagNameMap[K] => {
@@ -69,7 +71,16 @@ const control = (spec: FieldSpec, record: MetadataRecord, onChange: (value: unkn
  * Mounts the `metadata.editor` panel into `root`. All text from drafts goes in as text nodes. Returns `dispose`.
  * Drawing happens with the viewer's tools (registered by the controller); this panel lists, edits and validates.
  */
-export const mountEditorPanel = (root: HTMLElement, c: EditorController): { readonly dispose: () => void } => {
+export interface EditorPanelOptions {
+  /** Where "Submit now" sends the file; `false` leaves only the download and issue fallback. Default: the live worker. */
+  readonly submitService?: SubmitService | false
+  /** Tests inject these; defaults are `fetch` and the Cloudflare Turnstile widget. */
+  readonly fetch?: typeof fetch
+  readonly turnstile?: RenderTurnstile
+}
+
+export const mountEditorPanel = (root: HTMLElement, c: EditorController, opts: EditorPanelOptions = {}): { readonly dispose: () => void } => {
+  const service = opts.submitService === undefined ? DEFAULT_SUBMIT_SERVICE : opts.submitService
   const style = h("style", {}, PANEL_STYLE)
   const body = h("div", { class: "dlq-md", role: "region", "aria-label": "Map metadata editor" })
   root.replaceChildren(style, body)
@@ -77,6 +88,19 @@ export const mountEditorPanel = (root: HTMLElement, c: EditorController): { read
   const remembered = (() => { try { return JSON.parse(localStorage.getItem("dlq-md-submitter") ?? "{}") as { name?: string; github?: string } } catch { return {} } })()
   const form = { name: remembered.name ?? "", github: remembered.github ?? "", note: "" }
   let outcome: ReturnType<EditorController["submit"]> | undefined
+  let token: string | undefined
+  let posting = false
+  let posted: PostResult | undefined
+  let checkFailed = false
+  let widget: { readonly reset: () => void } | undefined
+  // One widget element for the whole mount, re-attached on every render so the challenge is not redone.
+  const checkEl = h("div", { id: "dlq-md-human-check" })
+  const startCheck = () => {
+    if (!service || widget || checkFailed) return
+    widget = { reset: () => {} }   // placeholder while loading
+    void (opts.turnstile ?? renderTurnstile)(checkEl, service.siteKey, (t) => { token = t; render(c.state()) })
+      .then((w) => { widget = w }, () => { checkFailed = true; widget = undefined; render(c.state()) })
+  }
 
   const submitSection = (s: EditorState): Node => {
     const field = (key: "name" | "github" | "note", label: string, max: number) => {
@@ -101,6 +125,20 @@ export const mountEditorPanel = (root: HTMLElement, c: EditorController): { read
       })
       result.push(h("p", { role: "status" }, `Ready: ${s.records.length} feature${s.records.length === 1 ? "" : "s"}${o.warnings > 0 ? `, ${o.warnings} warning${o.warnings === 1 ? "" : "s"}` : ""}. Download the file, then open the issue and ${o.issueInlined ? "paste it (it is already filled in) or attach the file" : "drag the file into it"}.`),
         h("p", {}, dl, " ", h("a", { href: o.issueUrl, target: "_blank", rel: "noopener noreferrer" }, "Open GitHub issue")))
+      if (service && !checkFailed && !(posted && posted.ok)) {
+        startCheck()
+        const send = h("button", { type: "button", disabled: !token || posting }, posting ? "Sending…" : "Submit now")
+        send.addEventListener("click", async () => {
+          if (!token) return
+          posting = true; posted = undefined; render(c.state())
+          posted = await postSubmission(o.text, { url: service.url, turnstileToken: token, ...(opts.fetch ? { fetch: opts.fetch } : {}) })
+          posting = false; token = undefined; widget?.reset()
+          render(c.state())
+        })
+        result.push(h("p", {}, "Or send it straight to the reviewers (a quick human check first):"), checkEl, h("p", {}, send))
+      } else if (service && checkFailed) result.push(h("p", { class: "empty" }, "The human check could not load, so use the download and issue steps above."))
+      if (posted?.ok) result.push(h("p", { role: "status" }, "Sent. ", h("a", { href: posted.url, target: "_blank", rel: "noopener noreferrer" }, "See your pull request")))
+      else if (posted) result.push(h("p", { class: "status", role: "alert" }, posted.message), ...(posted.issues ? [h("ul", {}, ...posted.issues.slice(0, 5).map((i) => h("li", { class: "problem" }, i.message)))] : []))
     }
     return h("div", {}, h("h3", {}, "Submit"),
       h("div", { class: "detail" }, ...field("name", "Your name", 80), ...field("github", "GitHub (optional)", 39), ...field("note", "Note (optional)", 1000)),
@@ -166,6 +204,6 @@ export const mountEditorPanel = (root: HTMLElement, c: EditorController): { read
   }
 
   render(c.state())
-  const off = c.subscribe((s) => { message = ""; outcome = undefined; render(s) })
+  const off = c.subscribe((s) => { message = ""; outcome = undefined; posted = undefined; render(s) })
   return { dispose: () => { off(); root.replaceChildren() } }
 }

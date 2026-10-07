@@ -79,3 +79,26 @@ test.skipIf(!haveBrowser)("review panel: open a submission, accept valid records
   expect(errors).toEqual([])
   await page.close()
 }, 60_000)
+
+// Submit now: with the human check and network faked, the file is posted and the PR link appears.
+test.skipIf(!haveBrowser)("submit now posts the submission and shows the pull request link", async () => {
+  const page = await browser.newPage({ viewport: { width: 1200, height: 700 } })
+  const errors: string[] = []
+  page.on("pageerror", (e) => errors.push(e.message))
+  await page.goto(`http://localhost:${server.port}/?mocksubmit`)
+  await page.waitForFunction(() => (self as any).__md)
+  await page.evaluate(() => (self as any).__md.drafts.clear())
+  await page.locator("#toolbar").getByRole("button", { name: "Creep camp" }).click()
+  await page.locator("#map").click({ position: { x: 300, y: 300 } })
+  await page.getByLabel("Your name").fill("Ada")
+  await page.getByRole("button", { name: "Review & submit" }).click()
+  await page.getByRole("button", { name: "Submit now" }).click()
+  const link = page.getByRole("link", { name: "See your pull request" })
+  await link.waitFor()
+  expect(await link.getAttribute("href")).toBe("https://github.com/o/r/pull/42")
+  const sent: string[] = await page.evaluate(() => (self as any).__md.sent)
+  expect(sent).toHaveLength(1)
+  expect(JSON.parse(sent[0]!).submitter.name).toBe("Ada")
+  expect(errors).toEqual([])
+  await page.close()
+}, 60_000)
