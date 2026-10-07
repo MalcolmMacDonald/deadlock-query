@@ -49,6 +49,9 @@
         "@deadlock-query/contracts": "workspace:*",
         "effect": "4.0.1",
       },
+      "devDependencies": {
+        "playwright-core": "^1.56.1",
+      },
     },
     "modules/map-viewer": {
       "name": "@deadlock-query/map-viewer",
@@ -79,7 +82,7 @@
     },
     "modules/query-library": {
       "name": "@deadlock-query/query-library",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "devDependencies": {
         "@deadlock-query/contracts": "workspace:*",
         "@deadlock-query/spatial-core": "workspace:*",
