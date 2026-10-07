@@ -1,8 +1,8 @@
 # map-metadata — state
 
-- **Status:** M0-M3 done (M2's module side done; shell wires `context`/`setAccepted`); M4 `submit-worker` next
-- **Version:** 0.4.0
-- **Current milestone:** M3 complete
+- **Status:** M0-M4 done in code (live deploy needs Malcolm); M5 `metadata.review` next
+- **Version:** 0.5.0
+- **Current milestone:** M4 complete
 - **Last updated:** 2026-10-07
 
 ## Done
@@ -26,6 +26,8 @@
 
 - M3 (2026-10-07): `src/submit/submission.ts`: `buildSubmission(drafts, meta, ctx)` stamps every draft `proposed` with submitter, submission id and time, checks it with `validateSubmissionRecords` (identity, bounds, accepted records, collision when a probe is given) plus the contracts schema, and returns a `Submission` or just the report. `submissionFile` (canonical, pretty JSON, `metadata-submission-<id>.json`) and `issueLink` (prefilled new-issue URL with label `metadata-submission`; the JSON is inlined when the URL stays under 7000 chars, otherwise the body says to attach the file). `controller.submit({name, github?, note?})` wraps these; the panel's Submit section asks for a name (remembered in localStorage), shows blocking errors, then offers Download and Open GitHub issue. Drafts are kept after submitting.
 
+- M4 (2026-10-07): `submit-worker/` (Cloudflare Worker, `bunx wrangler dev` in that directory). `src/handler.ts` `handleRequest(req, env, deps)`: `POST /submit` with the submission JSON and `X-Turnstile-Token`; order of checks is method, size (256 KB), per-IP (5/h) and global (200/day) KV counters, Turnstile siteverify, JSON + schema + the module's validators (degraded: no collision on the server), safe id (`[A-Za-z0-9._-]`, so no path tricks), proposed-only. Then branch `metadata-submission/<id>`, file `data/submissions/<id>.json` (never `data/metadata/`), PR with label `metadata-submission` (label failure is ignored). Answers 201 `{id,url}`, 400 bad JSON, 403 Turnstile, 404/405, 413, 422 with up to 20 issues, 429 + Retry-After, 502 on GitHub failure. User text in the PR body sits in a code fence it cannot close. CORS only for `ALLOWED_ORIGIN`. `src/submit/client.ts` `postSubmission` for the editor (maps errors to friendly text). 14 contract tests with mocked Turnstile and GitHub (no wrangler needed in CI).
+
 ## In progress
 - (nothing)
 
@@ -35,10 +37,13 @@
 - Tune the default radii (camp 200, sacrifice 200, orb 100), `surfaceEpsilon` (24) and overlap tolerance (64) on the real dl_midtown data.
 
 ## Blockers / Requests to other modules
+- Malcolm (live M4): create a Turnstile widget (site key for the page, secret as `TURNSTILE_SECRET`), a KV namespace `RATE`, a repo-scoped `GITHUB_TOKEN` (Contents + Pull requests write), then `bunx wrangler deploy` in `modules/map-metadata/submit-worker/` and set `ALLOWED_ORIGIN`. Until then submissions use the download/issue fallback.
+- shell/editor: the panel does not call the worker yet because it needs the Turnstile site key and worker URL; once they exist, pass them to the panel and call `postSubmission`.
 - shell: pass `identity: () => ({ gameBuildId, mapName })` (or an `expect` in `context`) to `createEditorController`, otherwise Review & submit says the map is not loaded. (Earlier request, done in #157:) add the `metadata.editor` panel (`mountEditorPanel` + `createEditorController` from `@deadlock-query/map-metadata/editor`, storage `indexedDbDraftStorage(<gameBuildId>)`) to its module list; that is M2's integration work.
 - infra (root file, not editable from this module): NEXT.md row `screenshot-tool, map-metadata | Phase 3` can become `map-metadata | M1: editor panel (M0 done)`.
 
 ## Decisions log
+- 2026-10-07 — M4: worker is dependency-free (fetch + KV interface) so contract tests run under bun; rate limits are soft (KV is not atomic) which is fine for abuse control, the PR review is the real gate; the Turnstile token travels in a header so the submission document stays exactly the contracts `Submission`.
 - 2026-10-07 — M3: submitter name is required, GitHub handle optional and stored without `@`; the issue fallback targets this repo (`issueRepo` option); a draft's status/provenance are overwritten on submit so edits cannot smuggle `accepted`.
 - 2026-10-05 — Module scaffolded (rev 2 of IMPLEMENTATION_PLAN.md).
 - 2026-10-06 — Duplicate points are errors, overlapping regions are warnings (a reviewer may legitimately accept an overlap; a duplicate camp is never right). Rejected and stale records never count as neighbours.
