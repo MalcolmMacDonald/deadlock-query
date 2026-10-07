@@ -145,7 +145,8 @@ export const MockMapDataService = Layer.sync(MapDataService)(() => {
       const t = tiles.get(id)
       return t ? Effect.succeed(t) : Effect.fail(new MapDataError(`unknown tile ${id}`))
     },
-    collisionBytes: Effect.succeed(m.collisionGlb)
+    collisionBytes: Effect.succeed(m.collisionGlb),
+    bakedBytes: (file) => Effect.fail(new MapDataError(`no baked file ${file} in the mini map`))
   }
 })
 
