@@ -1,4 +1,6 @@
 import type { Entity, EntityKind, OverlayFeature, OverlayStyle } from "@deadlock-query/contracts"
+import { LANE_NAMES, LANE_STYLE, laneLabel, type LaneName } from "./lanes.ts"
+import { ziplinePaths } from "./ziplines.ts"
 
 /** Entity overlay layers all have ids under this prefix (`entities.guardian`, `entities.other`). */
 export const ENTITY_LAYER_PREFIX = "entities."
@@ -16,7 +18,7 @@ const KINDS: Record<EntityKind, KindStyle> = {
   baseSentry: { label: "Base sentries", color: "#d98a8a", size: 12 },
   healingOrb: { label: "Healing orbs", color: "#7be0a0", size: 10 },
   creepCamp: { label: "Creep camps", color: "#4fb36b", size: 14 },
-  zipline: { label: "Ziplines", color: "#5ec4e8", size: 9 },
+  zipline: { label: "Ziplines", color: "#dfe6ea", size: 9 },
   jumpPad: { label: "Jump pads", color: "#9fd35f", size: 10 },
   climbRope: { label: "Climb ropes", color: "#b9a46a", size: 9 },
   interior: { label: "Interiors", color: "#8f9bd6", size: 10 },
@@ -34,10 +36,13 @@ const OTHER_STYLE: KindStyle = { label: "Other entities", color: "#8a8f98", size
 /** Kinds that are few and worth a name on the map; the rest would be clutter. */
 const LABELLED: ReadonlySet<EntityKind> = new Set(["guardian", "walker", "patron", "barracks", "baseSentry", "shop", "capturePoint", "powerup", "spawn"])
 
-/** One-line description of an entity: kind or class, team and lane when it has them. */
+/** Ziplines are drawn as lines, one layer per lane colour: `entities.zipline.yellow`, `.blue`, `.green`. Lines of unknown lane and loose nodes stay in `entities.zipline`. */
+export const ziplineLaneLayerId = (lane: LaneName): string => `${ENTITY_LAYER_PREFIX}zipline.${lane}`
+
+/** One-line description of an entity: kind or class, team and lane (by colour: `Yellow lane`) when it has them. */
 export const describeEntity = (e: Entity): string => {
   const name = e.kind ? KINDS[e.kind].label.replace(/s$/, "") : e.class
-  const extra = [e.team !== undefined ? `team ${e.team}` : "", e.lane !== undefined ? `lane ${e.lane}` : ""].filter(Boolean).join(", ")
+  const extra = [e.team !== undefined ? `team ${e.team}` : "", e.lane !== undefined ? laneLabel(e.lane) : ""].filter(Boolean).join(", ")
   return extra ? `${name} (${extra})` : name
 }
 
@@ -58,27 +63,60 @@ export interface EntityLayer {
  * are `<layerId>:<index>`, indexing `entities`.
  */
 export const entityLayers = (entities: ReadonlyArray<Entity>): ReadonlyArray<EntityLayer> => {
+  const { paths, loose } = ziplinePaths(entities)
   const groups = new Map<string, Entity[]>()
-  for (const e of entities) {
-    const id = e.kind ? `${ENTITY_LAYER_PREFIX}${e.kind}` : OTHER_ENTITIES_LAYER
+  const add = (id: string, e: Entity): void => {
     const g = groups.get(id)
     if (g) g.push(e)
     else groups.set(id, [e])
   }
-  const order = [...Object.keys(KINDS).map((k) => `${ENTITY_LAYER_PREFIX}${k}`), OTHER_ENTITIES_LAYER]
+  for (const e of entities) {
+    if (e.kind === "zipline") continue // drawn as lines (or as points when loose), below
+    add(e.kind ? `${ENTITY_LAYER_PREFIX}${e.kind}` : OTHER_ENTITIES_LAYER, e)
+  }
+  for (const e of loose) add(`${ENTITY_LAYER_PREFIX}zipline`, e)
+
+  const lines = new Map<string, Array<{ readonly feature: OverlayFeature; readonly entity: Entity }>>()
+  for (const p of paths) {
+    const id = p.lane ? ziplineLaneLayerId(p.lane) : `${ENTITY_LAYER_PREFIX}zipline`
+    const list = lines.get(id) ?? []
+    list.push({ feature: { type: "polyline", points: p.points, label: describeEntity(p.entity) }, entity: p.entity })
+    lines.set(id, list)
+  }
+
+  const order = [
+    ...Object.keys(KINDS).flatMap((k) => k === "zipline" ? [`${ENTITY_LAYER_PREFIX}zipline`, ...LANE_NAMES.map(ziplineLaneLayerId)] : [`${ENTITY_LAYER_PREFIX}${k}`]),
+    OTHER_ENTITIES_LAYER
+  ]
   const out: EntityLayer[] = []
   for (const id of order) {
-    const list = groups.get(id)
-    if (!list) continue
+    const list = groups.get(id) ?? []
+    const drawn = lines.get(id) ?? []
+    if (list.length === 0 && drawn.length === 0) continue
+    const lane = LANE_NAMES.find((l) => id === ziplineLaneLayerId(l))
+    if (lane) {
+      out.push({
+        id,
+        label: `${LANE_STYLE[lane].label} lane ziplines (${drawn.length})`,
+        style: { color: LANE_STYLE[lane].color, size: KINDS.zipline.size },
+        features: drawn.map((d) => d.feature),
+        entities: drawn.map((d) => d.entity),
+        hiddenByDefault: false
+      })
+      continue
+    }
     const kind = id === OTHER_ENTITIES_LAYER ? undefined : (id.slice(ENTITY_LAYER_PREFIX.length) as EntityKind)
     const style = kind ? KINDS[kind] : OTHER_STYLE
     const labelled = kind !== undefined && LABELLED.has(kind)
     out.push({
       id,
-      label: `${style.label} (${list.length})`,
+      label: `${style.label} (${list.length + drawn.length})`,
       style: { color: style.color, size: style.size },
-      features: list.map((e): OverlayFeature => (labelled ? { type: "point", at: e.position, label: describeEntity(e) } : { type: "point", at: e.position })),
-      entities: list,
+      features: [
+        ...list.map((e): OverlayFeature => (labelled ? { type: "point", at: e.position, label: describeEntity(e) } : { type: "point", at: e.position })),
+        ...drawn.map((d) => d.feature)
+      ],
+      entities: [...list, ...drawn.map((d) => d.entity)],
       hiddenByDefault: kind === undefined
     })
   }

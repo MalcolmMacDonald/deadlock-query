@@ -1,5 +1,6 @@
 import type { Entity, OverlayFeature, OverlayStyle, Shot } from "@deadlock-query/contracts"
 import type { PanelComponent } from "./ViewerPanel.ts"
+import { LANE_STYLE, laneName } from "./lanes.ts"
 import type { Annotation } from "./annotations.ts"
 import type { ViewerController } from "./viewerService.ts"
 
@@ -66,7 +67,7 @@ export const entityItem = (e: Entity, featureId: string): InspectorItem => {
   const { properties, ...rest } = e as Entity & Record<string, unknown>
   const known = new Set<string>(ENTITY_FIELD_ORDER)
   const ordered: Record<string, unknown> = {}
-  for (const k of ENTITY_FIELD_ORDER) if (k in rest) ordered[k] = rest[k]
+  for (const k of ENTITY_FIELD_ORDER) if (k in rest) ordered[k] = k === "lane" && laneName(rest[k]) ? `${rest[k]} (${LANE_STYLE[laneName(rest[k])!].label})` : rest[k]
   for (const [k, v] of Object.entries(rest)) if (!known.has(k)) ordered[k] = v
   const props = properties as Record<string, unknown> | undefined
   const propFields = props ? Object.entries(props).flatMap(([k, v]) => flattenFields(v, k)) : []
