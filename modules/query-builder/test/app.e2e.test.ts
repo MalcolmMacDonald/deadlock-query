@@ -119,10 +119,17 @@ test.skipIf(!haveBrowser)("results drive the viewer overlay, and row â†” pick â†
   await page.evaluate((id) => (self as any).__qb.host.setSelected([id]), ids[0])
   await page.waitForFunction((id) => document.querySelector("tr.selected")?.getAttribute("data-row-id") === id, ids[0], { timeout: 5_000 })
 
+  // Pin keeps the layer on the map when the next run clears the live one; Unpin all removes it.
+  await page.click("[data-testid=pin]")
+  const pinnedIds = () => page.evaluate(() => [...(self as any).__qb.host.log.overlays.keys()].filter((k: string) => k.includes("-pin")))
+  expect((await pinnedIds()).length).toBe(1)
   // A result without geometry clears the overlay.
   await setSource(page, "map.guardians.count()")
   await page.click("#run")
   await page.waitForFunction(() => !(self as any).__qb.host.log.overlays.has("query-result"))
+  expect((await pinnedIds()).length).toBe(1)
+  await page.click("[data-testid=unpin]")
+  await page.waitForFunction(() => ![...(self as any).__qb.host.log.overlays.keys()].some((k: string) => k.includes("-pin")))
   expect(errors).toEqual([])
   await page.close()
 }, 90_000)
