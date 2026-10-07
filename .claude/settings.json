@@ -1,0 +1,1 @@
+{ "permissions": { "allow": ["Bash(python3:*)", "Bash(git checkout:*)", "Bash(bun test:*)"] } }
