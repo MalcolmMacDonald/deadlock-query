@@ -20,7 +20,8 @@ export const STYLE = `
 .dlq-qb .empty{color:#999;padding:4px 0}
 @media (forced-colors:active){.dlq-qb tr.selected td{outline:2px solid Highlight;outline-offset:-2px}.dlq-qb :focus-visible{outline-color:Highlight}}
 @media (prefers-reduced-motion:reduce){.dlq-qb *{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
-.dlq-qb header{display:flex;gap:8px;align-items:center;padding:6px 8px;border-bottom:1px solid #333}
+.dlq-qb header{display:flex;flex-wrap:wrap;gap:6px 8px;align-items:center;padding:6px 8px;border-bottom:1px solid #333}
+.dlq-qb header button{white-space:nowrap}.dlq-qb header #side-toggles{display:flex;flex-wrap:wrap;gap:4px}
 .dlq-qb .qb-body{flex:1;display:flex;min-height:0}
 .dlq-qb .qb-main{flex:1;display:flex;flex-direction:column;min-width:0;min-height:0}
 .dlq-qb .qb-editor{height:40%;min-height:160px}

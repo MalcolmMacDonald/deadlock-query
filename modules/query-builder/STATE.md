@@ -94,6 +94,8 @@ Also verified: library-class member completions with TSDoc signature, string-lit
 
 - 2026-10-06 — Result features carry `properties`: every non-geometry column of the row, keyed by column name (`rowProperties` in `viewerIntegration.ts`; one object shared by a row's features), so the viewer inspector (map-viewer `viewer.inspector`, contracts 0.5.1 `OverlayFeature.properties`) shows the whole result row when a point is selected.
 
+- 2026-10-07 — UX pass: the panel header wraps cleanly in a narrow dock (buttons never break onto two lines, the sidebar toggles wrap as a group), and before the first run the results area says how to run and where rows show up instead of staying blank. Found by driving the shell on the real dl_midtown bundle.
+
 ## In progress
 - (nothing)
 
