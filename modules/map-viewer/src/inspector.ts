@@ -133,6 +133,19 @@ const el = <K extends keyof HTMLElementTagNameMap>(tag: K, css = "", text?: stri
   return n
 }
 
+/** A value cell whose text is a flat button: click (or Enter) copies the value to the clipboard. */
+const valueCell = (value: string): HTMLTableCellElement => {
+  const td = el("td", "vertical-align:top;padding:1px 0")
+  const b = el("button", "background:none;border:0;padding:0;color:inherit;cursor:copy;word-break:break-all;font:inherit;font-family:monospace;text-align:left", value)
+  b.type = "button"
+  b.title = "Copy value"
+  b.onclick = () => {
+    void navigator.clipboard?.writeText(value).then(() => { b.title = "Copied"; setTimeout(() => { b.title = "Copy value" }, 1500) }, () => {})
+  }
+  td.append(b)
+  return td
+}
+
 /**
  * `viewer.inspector`: every field of what is selected on the map (entities, query-result features, annotations,
  * screenshots). Follows the controller's highlight list, so clicks, shift/ctrl-click multi-selection and
@@ -180,7 +193,7 @@ export const makeInspectorPanel = (controller: ViewerController): PanelComponent
             const tr = el("tr")
             tr.append(
               el("td", "vertical-align:top;padding:1px 6px 1px 0;color:var(--muted,#9aa3ad);word-break:break-all;width:40%", f.key),
-              el("td", "vertical-align:top;padding:1px 0;word-break:break-all;font-family:monospace", f.value)
+              valueCell(f.value)
             )
             table.append(tr)
           }

@@ -56,6 +56,8 @@
 
 - 2026-10-07 — Accessibility: the Layers panel's visibility checkbox, colour and opacity inputs are named after their layer (`aria-label`; `title` alone failed axe `label-title-only`), so the shell's `e2e/a11y.ts` passes again.
 
+- 2026-10-07 — Inspector: every field value is a flat button that copies the value on click or Enter (title "Copy value", "Copied" for 1.5 s); the whole-selection "Copy JSON" stays. Not unit-tested (the inspector tests run without a DOM); checked by eye in Chromium.
+
 ## In progress
 - (nothing)
 
