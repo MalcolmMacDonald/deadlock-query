@@ -10,6 +10,7 @@ import {
   type ChannelSpec, type SemanticsParams
 } from "@deadlock-query/spatial-core"
 import { mulMat4 } from "./mat4.ts"
+import { INTERIOR_VOLUMES_FILE, loadInteriorVolumes } from "./interior.ts"
 import { WALKABLE_NAV_FILE, loadWalkable, triangulate, type WalkableStats } from "./walkable.ts"
 
 /**
@@ -42,6 +43,9 @@ export const walkableLevels = (rc: Raycaster, x: number, y: number, top: number,
 }
 
 /** Channels written to the sample grid. `floorHeight` is built in; the rest call the owner-authored semantics. */
+/** Height above the floor point at which an interior volume is probed (the floor itself may sit on a volume's bottom face). */
+const INTERIOR_PROBE_HEIGHT = 16
+
 export const INTERIOR_CHANNEL = "interior"
 export const WALL_DISTANCE_CHANNEL = "wallDistance"
 
@@ -68,6 +72,8 @@ export interface BakedRecord {
   readonly inputKey: string
   /** Raw-only extras (not in the contracts schema yet). Absent on older bakes (= collision). */
   readonly floorSource?: "game-nav" | "collision"
+  /** Where the `interior` channel came from: the map's interior volumes or the collision semantics (absent = collision). */
+  readonly interiorSource?: "volumes" | "collision"
   readonly walkable?: WalkableStats & { readonly file: string; readonly sha256: string; readonly triangles: number; readonly coveredCells: number; readonly totalCells: number; readonly multiLevelCells: number }
   readonly bvh: BakedFile & { readonly triangles: number; readonly vertices: number; readonly excludedLayers: ReadonlyArray<string>; readonly skippedNodes: number }
   readonly sampleGrid: BakedFile & {
@@ -193,7 +199,8 @@ export const bakeBundle = async (dir: string, o: BakeOptions = {}): Promise<Bake
   const key = inputKey({
     bake: BAKE_VERSION, collision: sha256(readFileSync(collisionPath)), glbToWorld: manifest.collision.glbToWorld,
     exclude, cellSize, semVersion, placeholder: PLACEHOLDER_SEMANTICS,
-    floor: useNav ? sha256(readFileSync(walkablePath)) : "collision"
+    floor: useNav ? sha256(readFileSync(walkablePath)) : "collision",
+    interior: existsSync(join(dir, INTERIOR_VOLUMES_FILE)) ? sha256(readFileSync(join(dir, INTERIOR_VOLUMES_FILE))) : "collision"
   })
 
   const prev = manifest.baked as Partial<BakedRecord> | undefined
@@ -237,7 +244,12 @@ export const bakeBundle = async (dir: string, o: BakeOptions = {}): Promise<Bake
     // The level just under the topmost one (NaN where the cell has a single level), so a query can reach floors under bridges and roofs.
     [FLOOR_LOWER_CHANNEL]: { type: "f32", gen: (c) => walkableLevels(floorRc, c.x, c.y, bounds.max[2] + 1, WALKABLE_LEVEL_GAP)[1] ?? NaN }
   } : {}
-  const grid = SampleGrid.build(floorRc, bounds, cellSize, { ...semanticsChannels(params, params.maxRange, rc), ...levelChannels }, {
+  // `interior` comes from the map's interior volumes when the bundle has them; otherwise the (provisional) collision semantics.
+  const volumes = loadInteriorVolumes(join(dir, INTERIOR_VOLUMES_FILE))
+  const volumeChannels: Record<string, ChannelSpec> = volumes
+    ? { [INTERIOR_CHANNEL]: { type: "u8", gen: (c) => (Number.isNaN(c.floorZ) ? 0 : volumes.contains(c.x, c.y, c.floorZ + INTERIOR_PROBE_HEIGHT) ? 1 : 0) } }
+    : {}
+  const grid = SampleGrid.build(floorRc, bounds, cellSize, { ...semanticsChannels(params, params.maxRange, rc), ...levelChannels, ...volumeChannels }, {
     onProgress: (done, total) => {
       const pct = Math.floor((done / total) * 10) * 10
       if (pct !== lastPct) { lastPct = pct; o.log?.(`bake: sample grid ${pct}%`) }
@@ -267,6 +279,7 @@ export const bakeBundle = async (dir: string, o: BakeOptions = {}): Promise<Bake
     placeholder: PLACEHOLDER_SEMANTICS,
     inputKey: key,
     floorSource: useNav ? "game-nav" : "collision",
+    interiorSource: volumes ? "volumes" : "collision",
     ...(walkable ? { walkable } : {}),
     bvh: {
       file: "baked/collision.bvh", bytes: bvhBytes.length, sha256: sha256(bvhBytes),
