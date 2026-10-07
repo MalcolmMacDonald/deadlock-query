@@ -57,6 +57,24 @@ export const frameBounds = (min: Vec3, max: Vec3, fovDeg = 50, aspect = 1.6): Ca
   return normalize({ target, yaw: Math.PI / 2, pitch: -MAX_PITCH, distance })
 }
 
+/**
+ * Home view for a map: top-down on the middle 96% of the entities (2nd to 98th percentile per axis, so a few stray
+ * entities far outside the playable area do not push the camera out), with some margin. `undefined` for fewer than
+ * `MIN_FRAME_ENTITIES` positions, where the caller falls back to the manifest bounds.
+ */
+export const MIN_FRAME_ENTITIES = 20
+export const frameEntities = (positions: ReadonlyArray<Vec3>, fovDeg = 50, aspect = 1.6): CameraPose | undefined => {
+  const pts = positions.filter((p) => p[0] !== 0 || p[1] !== 0 || p[2] !== 0) // worldspawn and friends sit at the origin
+  if (pts.length < MIN_FRAME_ENTITIES) return undefined
+  const range = (axis: 0 | 1 | 2): [number, number] => {
+    const v = pts.map((p) => p[axis]).sort((a, b) => a - b)
+    return [v[Math.floor(v.length * 0.02)]!, v[Math.min(v.length - 1, Math.floor(v.length * 0.98))]!]
+  }
+  const [x0, x1] = range(0), [y0, y1] = range(1), [z0, z1] = range(2)
+  const px = (x1 - x0) * 0.08, py = (y1 - y0) * 0.08
+  return frameBounds([x0 - px, y0 - py, z0], [x1 + px, y1 + py, z1], fovDeg, aspect)
+}
+
 /** Closest `frameSelection` gets to a single point: far enough to see the surroundings (Source units, a person is ~70 tall). */
 export const FOCUS_MIN_DISTANCE = 300
 

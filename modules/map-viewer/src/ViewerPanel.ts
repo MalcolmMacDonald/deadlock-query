@@ -2,7 +2,7 @@ import { Effect } from "effect"
 import * as THREE from "three"
 import { MapDataService, tilesAtLod, type Entity, type Manifest, type Vec3 } from "@deadlock-query/contracts"
 import { boundsOf, fitTopDown } from "./projection.ts"
-import { frameBounds, type CameraMode } from "./camera.ts"
+import { frameBounds, frameEntities, type CameraMode } from "./camera.ts"
 import { FOV_DEG, ViewerControls } from "./controls.ts"
 import { buildScene, glbToThreeMatrix, makeColoredTerrainMaterial, makeTerrainMaterial, setSurfaceVisible, surfaceMeshes } from "./scene.ts"
 import { declutterLabels } from "./labels.ts"
@@ -79,7 +79,14 @@ export const loadViewerData = Effect.gen(function* () {
   return { manifest, entities, tiles } satisfies ViewerData
 })
 
-const MODE_LABELS: ReadonlyArray<readonly [CameraMode, string]> = [["map", "Map"], ["orbit", "Orbit"], ["fly", "Fly"]]
+const MODE_LABELS: ReadonlyArray<readonly [CameraMode, string, string]> = [
+  ["map", "Map", "Top-down view: drag to pan, scroll to zoom (key 1)"],
+  ["orbit", "Orbit", "Drag to rotate around the target, right-drag or Shift-drag to pan, scroll to zoom (key 2)"],
+  ["fly", "Fly", "Drag to look, W A S D Q E to move, scroll changes speed (key 3)"],
+]
+const RESET_HINT = "Back to the whole map (R or Home)"
+const TOOLTIP_CSS = "position:absolute;z-index:4;pointer-events:none;display:none;max-width:260px;padding:3px 7px;border-radius:4px;background:rgba(20,22,26,.92);color:#e8eaed;border:1px solid #4a4a4a;font:12px sans-serif;white-space:nowrap"
+
 
 export const makeViewerPanel = (data: ViewerData, controller: ViewerController = new ViewerController()): PanelComponent => ({
   mount: (container) => {
@@ -135,9 +142,10 @@ export const makeViewerPanel = (data: ViewerData, controller: ViewerController =
       }
     })
     live = controls
-    const buttons = MODE_LABELS.map(([mode, label]) => {
+    const buttons = MODE_LABELS.map(([mode, label, hint]) => {
       const b = document.createElement("button")
       b.textContent = label
+      b.title = hint
       b.dataset.mode = mode
       b.onclick = () => { controls.setMode(mode); sync() }
       bar.appendChild(b)
@@ -148,6 +156,19 @@ export const makeViewerPanel = (data: ViewerData, controller: ViewerController =
       canvas.dataset.mode = controls.mode
     }
     sync()
+    // The home view frames the playable area (set again once a bundle's entities are known).
+    let home = controls.pose
+    const goHome = () => { controls.setPose(home) }
+    const homeButton = document.createElement("button")
+    homeButton.textContent = "Reset view"
+    homeButton.title = RESET_HINT
+    homeButton.dataset.testid = "reset-view"
+    homeButton.onclick = () => { goHome(); canvas.focus() }
+    bar.appendChild(homeButton)
+    const tip = document.createElement("div")
+    tip.style.cssText = TOOLTIP_CSS
+    tip.dataset.testid = "viewer-tooltip"
+    root.appendChild(tip)
 
     const resize = () => {
       const r = root.getBoundingClientRect()
@@ -333,7 +354,22 @@ export const makeViewerPanel = (data: ViewerData, controller: ViewerController =
       showSnap(undefined)
       const id = pickAt(e)
       if (id !== hovered) { hovered = id; controller.emit({ _tag: "hover", id }) }
+      showTip(id, e)
     }
+    /** Name of the feature under the cursor next to it (entity name, query-result id, annotation, ...). */
+    const showTip = (id: string | null, e: PointerEvent) => {
+      if (!id) { tip.style.display = "none"; return }
+      const item = controller.inspect(id)
+      tip.textContent = item.subtitle ? `${item.title} · ${item.subtitle}` : item.title
+      const r = root.getBoundingClientRect()
+      const x = e.clientX - r.left + 14, y = e.clientY - r.top + 14
+      tip.style.display = "block"
+      tip.style.left = `${Math.max(4, Math.min(x, r.width - tip.offsetWidth - 4))}px`
+      tip.style.top = `${Math.max(4, Math.min(y, r.height - tip.offsetHeight - 4))}px`
+    }
+    const hideTip = () => { tip.style.display = "none"; hovered = null }
+    canvas.addEventListener("pointerleave", hideTip)
+    canvas.addEventListener("pointerdown", hideTip)
     const onDown = (e: PointerEvent) => {
       down = { x: e.clientX, y: e.clientY }
       const i = grabsHandle(e) ? handleAt(e) : undefined
@@ -367,6 +403,7 @@ export const makeViewerPanel = (data: ViewerData, controller: ViewerController =
     const typing = (t: EventTarget | null) => t instanceof HTMLElement && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))
     const onKey = (e: KeyboardEvent) => {
       const mod = e.ctrlKey || e.metaKey
+      if ((e.key.toLowerCase() === "r" || e.key === "Home") && !mod && !e.altKey && !typing(e.target)) { goHome(); e.preventDefault(); return }
       if (e.key.toLowerCase() === "f" && !mod && !e.altKey && !typing(e.target)) { if (controller.focusSelection()) e.preventDefault(); return }
       if (e.key === "Escape") {
         if (vertexDrag) { vertexDrag = undefined; controller.cancelVertexEdit(); showSnap(undefined) }
@@ -457,7 +494,8 @@ export const makeViewerPanel = (data: ViewerData, controller: ViewerController =
           controller.setScreenshots(undefined)
           setWorld(g)
           startStreaming(loaded)
-          controls.setPose(frameBounds(manifest.bounds.min, manifest.bounds.max, FOV_DEG))
+          home = frameEntities(entities.map((en) => en.position as Vec3), FOV_DEG) ?? frameBounds(manifest.bounds.min, manifest.bounds.max, FOV_DEG)
+          controls.setPose(home)
           if (data.screenshotsUrl) {
             const url = new URL(data.screenshotsUrl, base).href
             void controller.loadScreenshots(url).then((ws) => { for (const w of ws) console.warn("screenshots:", w) }, (err) => console.warn("screenshots not loaded:", err))
@@ -473,6 +511,8 @@ export const makeViewerPanel = (data: ViewerData, controller: ViewerController =
       canvas.removeEventListener("pointerdown", onDown)
       canvas.removeEventListener("pointerup", onUp)
       canvas.removeEventListener("keydown", onKey)
+      canvas.removeEventListener("pointerleave", hideTip)
+      canvas.removeEventListener("pointerdown", hideTip)
       canvas.removeEventListener("dblclick", onDblClick)
       unsubTool()
       unmountShotPopup()
