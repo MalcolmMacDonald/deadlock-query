@@ -18,7 +18,7 @@ export const PANEL_STYLE = `
 .dlq-md button,.dlq-md select,.dlq-md input{font:inherit;color:inherit;background:#2a2d33;border:1px solid #444;border-radius:4px;padding:3px 6px}
 .dlq-md button{cursor:pointer}.dlq-md button:focus-visible,.dlq-md input:focus-visible,.dlq-md select:focus-visible{outline:2px solid #6aa9ff;outline-offset:1px}
 .dlq-md .kinds{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:4px}
-.dlq-md .kinds div{padding:4px 6px;border-left:4px solid var(--c);background:#23262b;border-radius:3px}
+.dlq-md .kinds button{text-align:left;padding:4px 6px;border-left:4px solid var(--c);background:#23262b;border-radius:3px}
 .dlq-md .kinds small{display:block;opacity:.7}
 .dlq-md ul{list-style:none;margin:0;padding:0}
 .dlq-md li.draft{display:flex;gap:6px;align-items:center;padding:3px 4px;border-radius:3px}
@@ -80,7 +80,8 @@ export const mountEditorPanel = (root: HTMLElement, c: EditorController): { read
     const keep = active instanceof HTMLElement && body.contains(active) ? active.id : ""
     const kinds = h("div", { class: "kinds" }, ...KIND_IDS.map((k) => {
       const d = kindDefinition(k)
-      const el = h("div", { style: `--c:${d.style.color}` }, `${d.style.glyph} ${d.label}`, h("small", {}, d.tool.hint))
+      const el = h("button", { type: "button", style: `--c:${d.style.color}`, title: d.tool.hint }, `${d.style.glyph} ${d.label}`, h("small", {}, d.tool.hint))
+      el.addEventListener("click", () => { if (!c.activate(k)) { message = `Pick "${d.tool.label}" in the Tools panel.`; render(c.state()) } })
       return el
     }))
     const options = h("div", {},
@@ -90,7 +91,7 @@ export const mountEditorPanel = (root: HTMLElement, c: EditorController): { read
       (() => { const el = h("select", { id: "dlq-md-shape" }, ...["point", "polyline", "polygon"].map((o) => h("option", { value: o, selected: o === s.options.customShape }, o))); el.addEventListener("change", () => c.setOptions({ customShape: el.value as never })); return el })())
 
     const list = s.records.length === 0
-      ? h("p", { class: "empty" }, "Nothing drawn yet. Pick a tool in the Tools panel, then click the map. Drafts are saved in this browser.")
+      ? h("p", { class: "empty" }, "Nothing drawn yet. Pick a tool above, then click the map. Drafts are saved in this browser.")
       : h("ul", { role: "listbox", "aria-label": "Your drafts" }, ...s.records.map((r) => {
           const d = kindDefinition(r.kind)
           const pick = h("button", { class: "pick", id: `dlq-md-pick-${r.id}`, type: "button" }, `${d.style.glyph} ${r.name ?? d.label}`)
