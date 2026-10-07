@@ -14,7 +14,7 @@ import { SnapState } from "./snapping.ts"
 import { insertVertex, moveVertex, removeVertex } from "./vertexEdit.ts"
 import { LayerStore, type LayerAppearance } from "./layers.ts"
 import { SurfaceStore, type SurfaceKind } from "./surfaces.ts"
-import { ToolMachine, type ExternalTool } from "./tools.ts"
+import { ToolMachine, TOOL_IDS, type ExternalTool } from "./tools.ts"
 import type { StreamStats } from "./tileStreamer.ts"
 import { DEFAULT_COLOR, normalizeFeatures, parseFeatureId, ringOf } from "./overlays.ts"
 import { annotationItem, entityItem, featureItem, shotItem, unknownItem, type InspectorItem } from "./inspector.ts"
@@ -544,6 +544,14 @@ export class ViewerController {
    * panel and receives snapped map clicks while active. Returns the unregister function.
    */
   registerTool(tool: ExternalTool): () => void { return this.tools.register(tool) }
+  /** Makes a built-in or registered tool the active one (`ViewerService.activateTool`); throws on an unknown id. */
+  activateTool(id: string): void {
+    const known = id === "select" || (TOOL_IDS as ReadonlyArray<string>).includes(id) || this.tools.registered.some((t) => t.id === id)
+    if (!known) throw new Error(`unknown tool "${id}"`)
+    this.tools.setTool(id)
+  }
+  /** Returns to the Select tool (`ViewerService.deactivateTool`). */
+  deactivateTool(): void { this.tools.setTool("select") }
   loadBundle(url: string): Promise<void> { return this.surface ? this.surface.loadBundle(url) : Promise.reject(new Error("viewer panel is not mounted")) }
 }
 
@@ -558,5 +566,7 @@ export const makeViewerService = (c: ViewerController): Layer.Layer<ViewerServic
     highlight: (ids) => Effect.sync(() => c.highlight(ids)),
     events: c.events,
     captureImage: Effect.tryPromise({ try: () => c.capture(), catch: (e) => e instanceof Error ? e : new Error(String(e)) }),
-    registerTool: (tool) => Effect.sync(() => c.registerTool(tool))
+    registerTool: (tool) => Effect.sync(() => c.registerTool(tool)),
+    activateTool: (id) => Effect.sync(() => c.activateTool(id)),
+    deactivateTool: () => Effect.sync(() => c.deactivateTool())
   })
