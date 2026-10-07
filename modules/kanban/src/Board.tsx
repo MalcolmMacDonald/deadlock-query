@@ -3,6 +3,7 @@ import { Effect, type Layer } from "effect"
 import { DevAuth } from "@deadlock-query/contracts"
 import { COLUMNS, groupByColumn } from "./board.ts"
 import { GitHubApi, type Issue } from "./github.ts"
+import { FeatureFormView } from "./FeatureForm.tsx"
 import { loadPrefs, moveLane, orderLanes, savePrefs, toggleCollapsed, type PrefsStore } from "./lanes.ts"
 
 export const BoardView = ({ issues, module, collapsed = false, onToggle, onMove }: {
@@ -53,7 +54,10 @@ export const Board = ({ layer, modules, store }: { layer: Layer.Layer<GitHubApi 
   }, [layer])
   if (state.auth === "loading") return <p>Loading…</p>
   if (state.auth === "anonymous") return <p role="alert">Locked: sign in to the dev site to use the kanban.</p>
-  return state.error ? <p role="alert">{state.error}</p> : <>{orderLanes(modules, prefs).map((m) => (
+  return state.error ? <p role="alert">{state.error}</p> : <><FeatureFormView modules={modules} onCreate={(d) => void Effect.runPromise(Effect.gen(function* () {
+      const created = yield* (yield* GitHubApi).createIssue(d)
+      return created
+    }).pipe(Effect.provide(layer))).then((i) => setState((s) => ({ ...s, issues: [...s.issues, i] })))} />{orderLanes(modules, prefs).map((m) => (
     <BoardView key={m} issues={state.issues} module={m} collapsed={prefs.collapsed.includes(m)}
       onToggle={() => update(toggleCollapsed(prefs, m))} onMove={(d) => update(moveLane(modules, prefs, m, d))} />
   ))}</>

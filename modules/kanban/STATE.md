@@ -1,8 +1,8 @@
 # kanban — state
 
-- **Status:** M0, M1 done against mocks
-- **Version:** 0.2.0
-- **Current milestone:** M2 (creation form + issue template)
+- **Status:** M0-M2 done against mocks
+- **Version:** 0.3.0
+- **Current milestone:** M3 (claude.yml)
 - **Last updated:** 2026-10-07
 
 ## Done
@@ -10,11 +10,13 @@
 
 - M1: one lane per module (`modules` prop, manifest order), collapse and up/down reorder persisted via an injected `PrefsStore` (localStorage in the harness).
 
+- M2: `createIssue` on `GitHubApi` (mock assigns numbers, backlog), `buildFeatureIssue` validation (module required, exactly one `module:<id>` label, title required), `FeatureFormView` on the board.
+
 ## In progress
 - (nothing)
 
 ## Next
-- M2 (creation form, mock). The shell should pass module ids from `module.json` files; the harness uses a fixed list. M3/M4 are workflow files; M5+ need the live proxy.
+- M3/M4 are workflow files under `.github/` (outside `modules/kanban/`; the scope check will need the infra prefix or a root PR). The `.github/ISSUE_TEMPLATE/feature.yml` template and the sandbox-repo acceptance for M2 are likewise left to that root PR. The shell should pass module ids from `module.json` files; the harness uses a fixed list. M3/M4 are workflow files; M5+ need the live proxy.
 - Live path: a `GitHubApi` implementation that calls the dev `/api/github/*` proxy. Blocked on infra M5 live (`GITHUB_TOKEN_PROXY`); going live is a layer swap.
 
 ## Blockers / Requests to other modules

@@ -9,10 +9,19 @@ export interface Issue {
   readonly pr?: { readonly number: number; readonly ci: "pending" | "success" | "failure"; readonly merged: boolean }
 }
 
+export interface IssueDraft {
+  readonly title: string
+  readonly body: string
+  readonly labels: ReadonlyArray<string>
+}
+
 /** All GitHub access goes through this service; the live implementation is the dev-site proxy (infra M5). */
 export class GitHubApi extends Context.Service<
   GitHubApi,
-  { readonly listIssues: Effect.Effect<ReadonlyArray<Issue>, Error> }
+  {
+    readonly listIssues: Effect.Effect<ReadonlyArray<Issue>, Error>
+    readonly createIssue: (draft: IssueDraft) => Effect.Effect<Issue, Error>
+  }
 >()("@deadlock-query/kanban/GitHubApi") {}
 
 export const fixtureIssues: ReadonlyArray<Issue> = [
@@ -24,5 +33,16 @@ export const fixtureIssues: ReadonlyArray<Issue> = [
   { number: 6, title: "Bad tiling", labels: ["module:map-viewer", "reverted"], state: "closed" }
 ]
 
-export const MockGitHubApi = (issues: ReadonlyArray<Issue> = fixtureIssues) =>
-  Layer.succeed(GitHubApi)({ listIssues: Effect.succeed(issues) })
+export const MockGitHubApi = (initial: ReadonlyArray<Issue> = fixtureIssues) =>
+  Layer.sync(GitHubApi)(() => {
+    const issues = [...initial]
+    return {
+      listIssues: Effect.sync(() => [...issues]),
+      createIssue: (draft) =>
+        Effect.sync(() => {
+          const issue: Issue = { number: Math.max(0, ...issues.map((i) => i.number)) + 1, title: draft.title, labels: draft.labels, state: "open" }
+          issues.push(issue)
+          return issue
+        })
+    }
+  })
