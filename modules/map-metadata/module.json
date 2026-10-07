@@ -1,6 +1,6 @@
 {
   "id": "map-metadata",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "kind": "web",
   "dependsOn": ["contracts"],
   "devOnly": false,
