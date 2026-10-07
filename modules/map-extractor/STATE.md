@@ -196,6 +196,9 @@ UX pass on the published bundle (build 25761866, extractor 0.5.0, 414 tiles, 424
 - **Dark bake fix (2026-10-07):** `buildMips` now leaves fully transparent texels (alpha 0, usually black padding) out of the colour average at every level (unless a whole block is transparent), the mip cache key and the lite colour revision (`colorRev` 3) changed so old caches rebuild. Needs a re-extract + republish to show; not yet checked on real data.
 - Also found: LOD1 is 32.6 % and LOD2 30 % of LOD0 triangles on the published bundle (targets 25 % and 6 %): the tiles are triangle soup (about 1.7 vertices per triangle), so the simplifier barely collapses them. Follow-up.
 
+## Multi-level floors (2026-10-07)
+19 % of floor cells have a second walkable level, and `floorHeight` only holds the topmost. No contracts change was needed: grid channels are an open list of names, so a nav-sourced `bake` (BAKE_VERSION 1.1.0) now also writes `floorLevels` (u8, distinct walkable levels in the cell, surfaces within 48 units merged; 0 = no floor) and `floorHeightLower` (f32, the level just under the top one, NaN for single-level cells). `floorHeight` is unchanged. The `multiLevelCells` stat is read from `floorLevels` (no second ray pass). Only cells with two levels carry `floorHeightLower`; a third level is counted in `floorLevels` but not stored. For spatial-core / query-builder: to use a lower floor, read `floorHeightLower` where `floorLevels` > 1 (nothing consumes it yet; requested in Blockers if a full per-level grid is wanted).
+
 ## Navmesh sign-off
 - 2026-10-07: Malcolm looked at the game-nav navmesh OBJ (`lite.qa/navmesh.obj`, build 25761866) and said it looks good. Signed off for the game-nav source; the Recast fallback is not signed off (its input is the clip volumes). Hull choice (`--flow-hull`, default 0) is still unverified.
 
