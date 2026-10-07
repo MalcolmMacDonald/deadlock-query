@@ -91,3 +91,22 @@ describe("travel time/distance on a hand-computed grid navmesh", () => {
     expect(() => vec(0, 0, 0).travelTimeTo(vec(1, 1, 0))).toThrow(/navmesh/)
   })
 })
+
+test("distance-field cache is bounded by bytes, not only by entry count", () => {
+  // 20 fields of 2M polygons (16 MB each) cannot all stay cached; the newest ones must.
+  let calls = 0
+  const costs = new Float64Array(2_000_000)
+  const mesh: NavMeshLike = {
+    findPath: () => null,
+    distanceField: () => { calls++; return { costAt: () => 1, costs } }
+  }
+  const m = MapContext.fromBundle({ ...mini, spatial: { raycaster: floor as RaycasterLike, nav: { mesh } } })
+  const a = Array.from({ length: 20 }, (_, i) => vec(i * 10, 0, 0))
+  for (const p of a) p.travelTimeTo(vec(0, 0, 0))
+  expect(calls).toBe(20)
+  a[19]!.travelTimeTo(vec(5, 5, 0)) // newest is still cached
+  expect(calls).toBe(20)
+  a[0]!.travelTimeTo(vec(5, 5, 0)) // oldest was evicted by the byte budget
+  expect(calls).toBe(21)
+  void m
+})
