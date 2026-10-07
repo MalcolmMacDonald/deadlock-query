@@ -1,4 +1,4 @@
-import { Context, Effect, Layer, Stream } from "effect"
+import { Context, Effect, Layer, Queue, Stream } from "effect"
 import type { Entity, Manifest } from "./MapBundle.ts"
 import type { QueryResult } from "./QueryResult.ts"
 import type { Annotation } from "./Annotation.ts"
@@ -9,8 +9,18 @@ export class SelectionBus extends Context.Service<
   {
     readonly select: (ids: ReadonlyArray<string>) => Effect.Effect<void>
     readonly current: Effect.Effect<ReadonlyArray<string>>
+    /** Emits the new selection after every `select` (optional, so older implementations still type-check; fall back to polling `current`). */
+    readonly changes?: Stream.Stream<ReadonlyArray<string>>
   }
 >()("@deadlock-query/SelectionBus") {}
+
+/** Options for `ViewerService.captureImageWith`. */
+export interface CaptureOptions {
+  /** Pixel ratio relative to the canvas size (default 1). */
+  readonly scale?: number
+  /** Leave the background transparent (default false). */
+  readonly transparent?: boolean
+}
 
 export interface OverlayStyle {
   readonly color?: string
@@ -80,6 +90,8 @@ export class MapDataService extends Context.Service<
     readonly entities: Effect.Effect<ReadonlyArray<Entity>, MapDataError>
     readonly loadTile: (tileId: string) => Effect.Effect<Uint8Array, MapDataError>
     readonly collisionBytes: Effect.Effect<Uint8Array, MapDataError>
+    /** Bytes of a baked file named by `manifest.baked` (e.g. `baked.bvh.file`, `baked.sampleGrid.file`); optional for older implementations. */
+    readonly bakedBytes?: (file: string) => Effect.Effect<Uint8Array, MapDataError>
   }
 >()("@deadlock-query/MapDataService") {}
 
@@ -115,6 +127,8 @@ export class ViewerService extends Context.Service<
     ) => Effect.Effect<void>
     readonly events: Stream.Stream<ViewerEvent>
     readonly captureImage: Effect.Effect<Uint8Array, Error>
+    /** `captureImage` with options; optional so existing implementations stay valid (callers fall back to `captureImage`). */
+    readonly captureImageWith?: (opts: CaptureOptions) => Effect.Effect<Uint8Array, Error>
     readonly removeOverlay: (layerId: string) => Effect.Effect<void>
     readonly highlight: (ids: ReadonlyArray<string>) => Effect.Effect<void>
     /**
@@ -139,9 +153,18 @@ export class DevAuth extends Context.Service<
 
 export const MockSelectionBus = Layer.sync(SelectionBus)(() => {
   let ids: ReadonlyArray<string> = []
+  const subs = new Set<(v: ReadonlyArray<string>) => void>()
   return {
-    select: (next) => Effect.sync(() => void (ids = next)),
-    current: Effect.sync(() => ids)
+    select: (next) => Effect.sync(() => { ids = next; subs.forEach((f) => f(next)) }),
+    current: Effect.sync(() => ids),
+    changes: Stream.callback<ReadonlyArray<string>>((q) => Effect.acquireRelease(
+      Effect.sync(() => {
+        const f = (v: ReadonlyArray<string>) => void Queue.offerUnsafe(q, v)
+        subs.add(f)
+        return f
+      }),
+      (f) => Effect.sync(() => void subs.delete(f))
+    ))
   }
 })
 
