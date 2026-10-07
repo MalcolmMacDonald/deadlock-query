@@ -559,3 +559,26 @@ test.skipIf(!haveBrowser)("parameter-name inlay hints appear next to literal arg
   expect(errors).toEqual([])
   await page.close()
 }, 60_000)
+
+test.skipIf(!haveBrowser)("progress() shows in the status while a query runs, and a query's own time budget stops it cleanly", async () => {
+  const { page, errors } = await open()
+  await page.evaluate(() => {
+    const seen: string[] = []
+    ;(self as any).__statusSeen = seen
+    new MutationObserver(() => seen.push(document.querySelector("#status")?.textContent ?? "")).observe(document.querySelector("#status")!, { childList: true, characterData: true, subtree: true })
+  })
+  await setSource(page, 'for (let i = 0; i < 5; i++) { progress((i + 1) / 5, "step " + (i + 1)); const t = Date.now(); while (Date.now() - t < 120) {} }\n5')
+  await page.click("#run")
+  await page.waitForSelector("[data-testid=results-table] tbody tr, [data-testid=error]", { timeout: 20_000 })
+  expect(await page.$("[data-testid=error]") ? await page.textContent("[data-testid=error]") : "").toBe("")
+  const seen: string[] = await page.evaluate(() => (self as any).__statusSeen)
+  expect(seen.some((s) => /running… \d+% step \d/.test(s))).toBe(true)
+  expect(await page.textContent("#status")).toBe("done")
+
+  await setSource(page, "withRun({ maxMillis: 60 }, () => { for (;;) progress(0) })")
+  await page.click("#run")
+  await page.waitForSelector("[data-testid=error]", { timeout: 20_000 })
+  expect(await page.textContent("[data-testid=error]")).toContain("time budget")
+  expect(errors).toEqual([])
+  await page.close()
+}, 90_000)

@@ -406,6 +406,8 @@ export const mountQueryEditor = async (container: HTMLElement, opts: QueryEditor
       runBtn.disabled = true
       cancelBtn.disabled = false
       status.textContent = "running…"
+      // progress(f) / ctx.progress(f) from the query (library >= 0.5): shown next to the status.
+      runner.onProgress = (fraction, label) => { status.textContent = `running… ${Math.round(fraction * 100)}%${label ? ` ${label}` : ""}` }
       clearNotices()
       const source = model.getValue()
       lastRunSource = source
@@ -425,10 +427,11 @@ export const mountQueryEditor = async (container: HTMLElement, opts: QueryEditor
         err.textContent = e instanceof Error ? e.message : String(e)
         out.replaceChildren(err)
         if (!(e instanceof Error && e.message === "Query cancelled.")) store.record({ source, status: "error", error: err.textContent ?? "" })
-        status.textContent = "error"
+        status.textContent = e instanceof Error && e.message === "Query cancelled." ? "cancelled" : "error"
         currentResult = null
         table = null
       } finally {
+        runner.onProgress = undefined
         runBtn.disabled = false
         cancelBtn.disabled = true
         panes.refresh()
