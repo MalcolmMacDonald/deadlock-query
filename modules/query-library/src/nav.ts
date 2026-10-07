@@ -10,10 +10,15 @@ import type { MovementModelLike, NavInput } from "./spatial.ts"
  */
 export const seconds = (n: number): number => n
 
-type Field = { costAt(p: readonly [number, number, number], maxSnap?: number): number }
+type Field = { costAt(p: readonly [number, number, number], maxSnap?: number): number; readonly costs?: ArrayLike<number> }
 /** Floating pickups on the real map hover up to ~855 units above the mesh, so the default must cover them (200 left every orb unreachable). */
 const DEFAULT_MAX_SNAP = 900
 const MAX_FIELDS = 256
+/** Cache budget in bytes of per-polygon costs: a real-map field is ~0.7 MB (85k polygons), so 256 entries would be ~175 MB. */
+const MAX_FIELD_BYTES = 96 * 1024 * 1024
+const MIN_FIELDS = 8
+const bytesOf = (f: Field): number => (f.costs?.length ?? 0) * 8
+let fieldBytes = 0
 const fields = new Map<string, Field>()
 let fieldsFor: NavInput | undefined
 
@@ -43,13 +48,18 @@ const snap = (nav: NavInput): number => nav.maxSnap ?? DEFAULT_MAX_SNAP
 
 /** Distance fields are memoised per (model, source set); cleared when a new nav backend is active. */
 const fieldFor = (nav: NavInput, mode: "time" | "distance", sources: ReadonlyArray<Vec3>): Field => {
-  if (fieldsFor !== nav) { fields.clear(); fieldsFor = nav }
+  if (fieldsFor !== nav) { fields.clear(); fieldBytes = 0; fieldsFor = nav }
   const key = `${mode}|${sources.map((s) => `${s.x},${s.y},${s.z}`).join(";")}`
   const hit = fields.get(key)
   if (hit) { fields.delete(key); fields.set(key, hit); return hit }
   const f = nav.mesh.distanceField(sources.map((s) => s.toArray()), mode === "time" ? timeModel(nav) : distanceModel(nav))
-  if (fields.size >= MAX_FIELDS) fields.delete(fields.keys().next().value!)
-  fields.set(key, f)
+  const add = bytesOf(f)
+  while (fields.size >= MAX_FIELDS || (fields.size >= MIN_FIELDS && fieldBytes + add > MAX_FIELD_BYTES)) {
+    const oldest = fields.keys().next().value!
+    fieldBytes -= bytesOf(fields.get(oldest)!)
+    fields.delete(oldest)
+  }
+  fields.set(key, f); fieldBytes += add
   return f
 }
 
