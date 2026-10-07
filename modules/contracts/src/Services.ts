@@ -122,6 +122,10 @@ export class ViewerService extends Context.Service<
      * built-in id.
      */
     readonly registerTool: (tool: ExternalTool) => Effect.Effect<() => void>
+    /** Makes the tool with this id (built-in or registered) the active viewer tool; fails (defect) on an unknown id. */
+    readonly activateTool?: (id: string) => Effect.Effect<void>
+    /** Returns the viewer to its default tool. */
+    readonly deactivateTool?: () => Effect.Effect<void>
   }
 >()("@deadlock-query/ViewerService") {}
 
