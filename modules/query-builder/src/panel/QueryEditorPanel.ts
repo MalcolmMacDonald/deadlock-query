@@ -71,8 +71,9 @@ export interface QueryEditorHandle {
   readonly shareUrl: () => Promise<string>
 }
 
+// Object rows give the result table real column names (array rows would be c1, c2, ...).
 const DEFAULT_SOURCE = `map.guardians
-  .select((g) => [g.id, g.position, map.healingOrbs.closest(g)!.id])
+  .select((g) => ({ guardian: g.id, position: g.position, nearestHealingOrb: map.healingOrbs.closest(g)!.id }))
   .toArray()
 `
 const STYLE_ID = "dlq-qb-style"

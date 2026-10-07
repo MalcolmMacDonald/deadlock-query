@@ -96,6 +96,8 @@ Also verified: library-class member completions with TSDoc signature, string-lit
 
 - 2026-10-07 — UX pass: the panel header wraps cleanly in a narrow dock (buttons never break onto two lines, the sidebar toggles wrap as a group), and before the first run the results area says how to run and where rows show up instead of staying blank. Found by driving the shell on the real dl_midtown bundle.
 
+- 2026-10-07 — Result columns: the editor's starting query returns objects (`guardian`, `position`, `nearestHealingOrb`), so the table shows real column names instead of c1/c2/c3. Array rows still get positional `c1…` names on purpose (exports, share links and saved queries depend on them); the docs/gallery already show object selects.
+
 ## In progress
 - (nothing)
 
