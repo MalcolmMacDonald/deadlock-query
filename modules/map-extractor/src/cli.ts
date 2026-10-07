@@ -22,7 +22,7 @@ const USAGE = `dlq-extract <command> [--json] [--game-dir <path>]
   list-maps  maps present in the game paks
   extract    --map <name> [--tier full|lite] [--force] [--out <dir>] [--tri-budget <n>] [--full-fraction <0..1>] [--keep-work] [--materials]   (default map ${lock.game.mainMap}, tier lite, out <repo>/data/bundles)
   inspect    <bundle-dir>   validate manifest/entities against contracts, report sizes and frame sanity
-  tile       <bundle-dir> [--lods <n>] [--lod-ratio <r>] [--keep-textures]   lite tier: meshopt-compress tiles, add simplified LODs (<id>#lod<n>), drop textures
+  tile       <bundle-dir> [--lods <n>] [--lod-ratio <r>] [--lod-error <e>] [--keep-textures]   lite tier: meshopt-compress tiles, add simplified LODs (default 3: <id>#lod1, <id>#lod2 at 25 % and 6 %; error bound 0.1 of the tile), drop textures
   bake       <bundle-dir> [--cell-size <n>] [--exclude-layers a,b] [--floor-source auto|game-nav|collision] [--force]   collision BVH + sample grid (floorHeight, interior, wallDistance) into <bundle>/baked, recorded in the manifest (default cell ${DEFAULT_CELL_SIZE}, excludes ${DEFAULT_EXCLUDE_LAYERS.join(",")}; floorHeight from the game's nav faces when the bundle has collision/walkable.nav),
              then the navmesh (baked/navmesh.bin + OBJ in <bundle>.qa/) unless --no-navmesh: from the game's nav faces (+ .navflowmap connections, --flow-hull <n>, default 0) when present, else Recast (force with --nav-source game|recast):
              [--agent-radius ${DEFAULT_NAV_AGENT.radius}] [--agent-height ${DEFAULT_NAV_AGENT.height}] [--agent-climb ${DEFAULT_NAV_AGENT.climb}] [--agent-slope ${DEFAULT_NAV_AGENT.slopeDegrees}] [--nav-cell-size 8] [--nav-cell-height 4] [--nav-tile-size 128] [--nav-exclude-layers ${DEFAULT_NAV_EXCLUDE_LAYERS.join(",")}] [--qa-dir <dir>|--no-qa]
@@ -145,6 +145,7 @@ export const mainAsync = async (argv: ReadonlyArray<string>): Promise<number> =>
     const r = await tileBundle(dir, {
       ...(num("--lods") !== undefined ? { lods: num("--lods")! } : {}),
       ...(num("--lod-ratio") !== undefined ? { lodRatio: num("--lod-ratio")! } : {}),
+      ...(num("--lod-error") !== undefined ? { lodError: num("--lod-error")! } : {}),
       keepTextures: rest.includes("--keep-textures"), log: (m) => console.error(m)
     })
     const mb = (n: number) => `${(n / 1048576).toFixed(1)} MB`

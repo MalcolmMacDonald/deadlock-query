@@ -4,6 +4,7 @@ import { createHash } from "node:crypto"
 import { transformPoint, type Aabb, type Mat4 } from "@deadlock-query/contracts"
 import { MeshoptSimplifier } from "meshoptimizer"
 import { readGltfJson } from "./gltfInfo.ts"
+import { mipForDensity, sampleMips, toByte, type ColorProvider, type MaterialPaint } from "./colors.ts"
 
 /** Await before `buildLiteTiles` (the decimation pass uses the meshopt WASM simplifier). */
 export const liteReady: Promise<void> = MeshoptSimplifier.ready
@@ -17,7 +18,7 @@ export const liteReady: Promise<void> = MeshoptSimplifier.ready
  */
 
 export interface LiteOptions {
-  /** Total triangles to keep (default 5 M, roughly 150 MB of tiles). */
+  /** Total triangles to keep (default: all of them; a finite budget keeps the largest primitives and decimates the rest). */
   readonly triBudget?: number
   /**
    * Share of `triBudget` spent on the largest primitives at full detail (default 0.6). The remaining primitives are all
@@ -33,6 +34,8 @@ export interface LiteOptions {
   readonly tileBytes?: number
   /** Grid cell edge in loaded-frame units (metres; default 128). */
   readonly cell?: number
+  /** Bakes a `COLOR_0` (RGBA8, linear) into every vertex from the primitive's material; without it tiles stay colourless unless the export itself carries vertex colours. */
+  readonly colors?: ColorProvider
   readonly log?: ((m: string) => void) | undefined
 }
 
@@ -46,7 +49,14 @@ export interface LiteTile {
   readonly triangles: number
 }
 
-export interface LiteResult { readonly tiles: LiteTile[]; readonly keptTriangles: number; readonly totalTriangles: number; readonly textureBytes: number; readonly warnings: string[] }
+export interface LiteColorStats { readonly primitives: number; readonly painted: number; readonly textured: number; readonly unpainted: ReadonlyArray<string> }
+export interface LiteResult {
+  readonly tiles: LiteTile[]; readonly keptTriangles: number; readonly totalTriangles: number; readonly textureBytes: number; readonly warnings: string[]
+  /** Triangles of primitives that were split because one primitive would not fit a tile. */
+  readonly splitTriangles: number
+  /** Present when tiles carry `COLOR_0`. */
+  readonly colors?: LiteColorStats
+}
 
 interface G {
   buffers?: Array<{ uri?: string; byteLength: number }>
@@ -140,7 +150,7 @@ const readAccessor = (g: G, r: BufferReader, idx: number): { data: Float32Array 
   return { data: out, comps }
 }
 
-interface Cand { node: number; prim: number; mesh: number; matrix: Mat4; tris: number; /** vertices actually referenced by the indices */ verts: number; /** key of decimated indices in `decimated`, when simplified */ dec?: string; diag: number; centre: [number, number, number]; material: number; hasUv: boolean }
+interface Cand { node: number; prim: number; mesh: number; matrix: Mat4; tris: number; /** vertices actually referenced by the indices */ verts: number; /** key of decimated indices in `decimated`, when simplified */ dec?: string; diag: number; centre: [number, number, number]; material: number; hasUv: boolean; hasColor: boolean }
 
 /** Nodes with their world matrices (scene graph walk; no hierarchy is typical for VRF exports). */
 const worldNodes = (g: G): Array<{ node: number; matrix: Mat4 }> => {
@@ -175,7 +185,7 @@ const TEXTURE_SLOTS = (m: Record<string, any>): Array<Record<string, any>> =>
   [m.pbrMetallicRoughness?.baseColorTexture, m.pbrMetallicRoughness?.metallicRoughnessTexture, m.normalTexture, m.occlusionTexture, m.emissiveTexture].filter(Boolean)
 
 export const buildLiteTiles = (gltfPath: string, outDir: string, opts: LiteOptions = {}): LiteResult => {
-  const triBudget = opts.triBudget ?? 5_000_000
+  const triBudget = opts.triBudget ?? Infinity
   const tileBytes = opts.tileBytes ?? 18 * 1024 * 1024
   const cell = opts.cell ?? 128
   const fullFraction = Math.min(1, Math.max(0, opts.fullFraction ?? 0.6))
@@ -245,7 +255,7 @@ export const buildLiteTiles = (gltfPath: string, outDir: string, opts: LiteOptio
           lo = lo.map((v, i) => Math.min(v, q[i]!)); hi = hi.map((v, i) => Math.max(v, q[i]!))
         }
         cands.push({
-          node, prim, mesh, matrix, tris, verts: info.verts, material: p.material ?? -1, hasUv: p.attributes["TEXCOORD_0"] !== undefined,
+          node, prim, mesh, matrix, tris, verts: info.verts, material: p.material ?? -1, hasUv: p.attributes["TEXCOORD_0"] !== undefined, hasColor: p.attributes["COLOR_0"] !== undefined,
           diag: Math.hypot(hi[0]! - lo[0]!, hi[1]! - lo[1]!, hi[2]! - lo[2]!),
           centre: [(lo[0]! + hi[0]!) / 2, (lo[1]! + hi[1]!) / 2, (lo[2]! + hi[2]!) / 2]
         })
@@ -331,12 +341,111 @@ export const buildLiteTiles = (gltfPath: string, outDir: string, opts: LiteOptio
     opts.log?.(`lite render: keeping ${kept.length}/${cands.length} primitives, ${keptTris}/${total} triangles (${decimatedPrims} decimated from ${decimatedFrom} to ${decimatedTo} triangles)`)
 
     // Group by grid cell (loaded X/Z), then fill tiles up to the byte budget.
-    const cells = new Map<string, Cand[]>()
+    const colorMode = opts.colors !== undefined || kept.some((c) => c.hasColor)
+    // Per-vertex colour: the material's tint times its texture sampled at the vertex's UV (mip level matched to the primitive's vertex
+    // spacing in UV space), times the export's own vertex colour when it has one. Linear RGBA8, as glTF's COLOR_0.
+    const colorStats = { primitives: 0, painted: 0, textured: 0 }
+    const unpainted = new Set<string>()
+    const rgb: [number, number, number] = [0, 0, 0]
+    const paintVertices = (c: Cand, p: NonNullable<G["meshes"]>[number]["primitives"][number], srcOf: ReadonlyArray<number>, C: Uint8Array, vo: number) => {
+      const n = srcOf.length
+      const meshName = g.meshes![c.mesh]!.name ?? ""
+      const names = [g.materials?.[p.material ?? -1]?.["name"] as string | undefined, /_mt_(.+)$/.exec(meshName)?.[1]].filter((x): x is string => !!x)
+      const paint: MaterialPaint | undefined = opts.colors?.paintFor(names)
+      colorStats.primitives++
+      if (paint) colorStats.painted++
+      else if (opts.colors && unpainted.size < 20) unpainted.add(names[0] ?? meshName ?? "(unnamed)")
+      const tint = paint?.tint ?? opts.colors?.fallback ?? [1, 1, 1]
+      const tex = paint?.texture
+      const uv = tex && p.attributes["TEXCOORD_0"] !== undefined ? (read(p.attributes["TEXCOORD_0"]) as Float32Array) : undefined
+      let level = 0
+      if (tex && uv) {
+        colorStats.textured++
+        let u0 = Infinity, u1 = -Infinity, v0 = Infinity, v1 = -Infinity
+        for (const v of srcOf) { const u = uv[v * 2]!, w = uv[v * 2 + 1]!; if (u < u0) u0 = u; if (u > u1) u1 = u; if (w < v0) v0 = w; if (w > v1) v1 = w }
+        level = mipForDensity(tex, (u1 - u0) * (v1 - v0), n)
+      }
+      let src: { data: Float32Array | Uint32Array; comps: number } | undefined
+      if (p.attributes["COLOR_0"] !== undefined) src = readAccessor(g, reader, p.attributes["COLOR_0"])
+      for (let i = 0; i < n; i++) {
+        const v = srcOf[i]!
+        let r = tint[0], gr = tint[1], b = tint[2]
+        if (tex && uv) { sampleMips(tex, uv[v * 2]!, uv[v * 2 + 1]!, level, rgb); r *= rgb[0]; gr *= rgb[1]; b *= rgb[2] }
+        let a = 1
+        if (src) { const k = src.comps; r *= src.data[v * k]!; gr *= src.data[v * k + 1]!; b *= src.data[v * k + 2]!; if (k === 4) a = src.data[v * 4 + 3]! }
+        const d = (vo + i) * 4
+        C[d] = toByte(r); C[d + 1] = toByte(gr); C[d + 2] = toByte(b); C[d + 3] = toByte(a)
+      }
+    }
+    const estimate = (c: Cand) => c.verts * (12 + 12 + 8 + (colorMode ? 4 : 0)) + c.tris * 3 * 4
+    const splitCandidate = (c: Cand): Cand[] => {
+      const p = g.meshes![c.mesh]!.primitives[c.prim]!
+      const pos = read(p.attributes["POSITION"]!) as Float32Array
+      const src = c.dec !== undefined ? decimated.get(c.dec)!.idx : p.indices !== undefined ? (read(p.indices) as Uint32Array) : undefined
+      const vertexOf = (t: number, k: number) => (src ? src[t * 3 + k]! : t * 3 + k)
+      const n = c.tris
+      const cen = new Float32Array(n * 3)
+      const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity]
+      for (let t = 0; t < n; t++) for (let k = 0; k < 3; k++) {
+        let sum = 0
+        for (let j = 0; j < 3; j++) sum += pos[vertexOf(t, j) * 3 + k]!
+        const v = sum / 3
+        cen[t * 3 + k] = v
+        if (v < lo[k]!) lo[k] = v
+        if (v > hi[k]!) hi[k] = v
+      }
+      const axis = hi[0]! - lo[0]! >= hi[1]! - lo[1]! && hi[0]! - lo[0]! >= hi[2]! - lo[2]! ? 0 : hi[1]! - lo[1]! >= hi[2]! - lo[2]! ? 1 : 2
+      const order = Uint32Array.from({ length: n }, (_, i) => i).sort((a, b) => cen[a * 3 + axis]! - cen[b * 3 + axis]! || a - b)
+      const out: Cand[] = []
+      const seen = new Uint8Array(pos.length / 3)
+      const emit = (from: number, to: number) => {
+        const m = to - from
+        const idx = new Uint32Array(m * 3)
+        let verts = 0
+        const used: number[] = []
+        for (let i = 0; i < m; i++) for (let k = 0; k < 3; k++) {
+          const v = vertexOf(order[from + i]!, k)
+          idx[i * 3 + k] = v
+          if (!seen[v]) { seen[v] = 1; verts++; used.push(v) }
+        }
+        const wlo = [Infinity, Infinity, Infinity], whi = [-Infinity, -Infinity, -Infinity]
+        const mt = c.matrix
+        for (const v of used) {
+          seen[v] = 0
+          const x = pos[v * 3]!, y = pos[v * 3 + 1]!, z = pos[v * 3 + 2]!
+          const w = [mt[0]! * x + mt[4]! * y + mt[8]! * z + mt[12]!, mt[1]! * x + mt[5]! * y + mt[9]! * z + mt[13]!, mt[2]! * x + mt[6]! * y + mt[10]! * z + mt[14]!]
+          for (let k = 0; k < 3; k++) { if (w[k]! < wlo[k]!) wlo[k] = w[k]!; if (w[k]! > whi[k]!) whi[k] = w[k]! }
+        }
+        const key = `split:${c.node}:${c.prim}:${from}`
+        decimated.set(key, { idx, tris: m, verts })
+        const part: Cand = {
+          ...c, tris: m, verts, dec: key, diag: Math.hypot(whi[0]! - wlo[0]!, whi[1]! - wlo[1]!, whi[2]! - wlo[2]!),
+          centre: [(wlo[0]! + whi[0]!) / 2, (wlo[1]! + whi[1]!) / 2, (wlo[2]! + whi[2]!) / 2]
+        }
+        if (estimate(part) > tileBytes && m > 1) {
+          decimated.delete(key)
+          const mid = from + (m >> 1)
+          emit(from, mid); emit(mid, to)
+        } else out.push(part)
+      }
+      emit(0, n)
+      return out
+    }
+    // A primitive that cannot fit one tile is cut into parts of about `tileBytes` along its longest axis (by triangle centroid),
+    // so a very large mesh is never dropped; the parts then land in the grid cells of their own centres.
+    let splitTriangles = 0
+    const parts: Cand[] = []
     for (const c of kept) {
+      if (estimate(c) <= tileBytes) { parts.push(c); continue }
+      const split = splitCandidate(c)
+      splitTriangles += c.tris
+      parts.push(...split)
+    }
+    const cells = new Map<string, Cand[]>()
+    for (const c of parts) {
       const key = `${Math.floor(c.centre[0] / cell)}_${Math.floor(c.centre[2] / cell)}`
       ;(cells.get(key) ?? cells.set(key, []).get(key)!).push(c)
     }
-    const estimate = (c: Cand) => c.verts * (12 + 12 + 8) + c.tris * 3 * 4
     const tileGroups: Array<{ id: string; prims: Cand[] }> = []
     const oversized: Cand[] = []
     for (const key of [...cells.keys()].sort()) {
@@ -350,7 +459,8 @@ export const buildLiteTiles = (gltfPath: string, outDir: string, opts: LiteOptio
       flush()
     }
 
-    if (oversized.length) warnings.push(`${oversized.length} primitives exceed the ${(tileBytes / 1048576).toFixed(0)} MB tile budget (largest ${(Math.max(...oversized.map(estimate)) / 1048576).toFixed(1)} MB, ${oversized.reduce((n, c) => n + c.tris, 0)} triangles); dropped`)
+    if (oversized.length) warnings.push(`${oversized.length} primitives exceed the ${(tileBytes / 1048576).toFixed(0)} MB tile budget even after splitting (largest ${(Math.max(...oversized.map(estimate)) / 1048576).toFixed(1)} MB, ${oversized.reduce((n, c) => n + c.tris, 0)} triangles); dropped`)
+    if (splitTriangles) opts.log?.(`lite render: split ${splitTriangles} triangles of oversized primitives into tile-sized parts`)
 
     const matName = (i: number) => (g.materials?.[i]?.name as string | undefined) ?? `material_${i}`
     const copiedImages = new Set<string>()
@@ -378,8 +488,10 @@ export const buildLiteTiles = (gltfPath: string, outDir: string, opts: LiteOptio
       for (const [mat, list] of [...byMat.entries()].sort((a, b) => a[0] - b[0])) {
         const nV = list.reduce((n, c) => n + c.verts, 0), nI = list.reduce((n, c) => n + c.tris * 3, 0)
         const P = new Float32Array(nV * 3), N = new Float32Array(nV * 3)
-        const withUv = list.every((c) => c.hasUv)
+        // With colours baked the UVs have no further use (the lite tier has no textures), so they are not written.
+        const withUv = list.every((c) => c.hasUv) && !opts.colors
         const T = withUv ? new Float32Array(nV * 2) : undefined
+        const C = colorMode ? new Uint8Array(nV * 4) : undefined
         const I = new Uint32Array(nI)
         let vo = 0, io = 0
         for (const c of list) {
@@ -391,13 +503,14 @@ export const buildLiteTiles = (gltfPath: string, outDir: string, opts: LiteOptio
           const m = c.matrix
           // Only the referenced vertices are emitted (first-use order, so output stays deterministic).
           const remap = new Int32Array(pos.length / 3).fill(-1)
+          const srcOf: number[] = []
           let nUsed = 0
           const n3 = c.tris * 3
           for (let i = 0; i < n3; i++) {
             const v = idx ? idx[i]! : i
             let o = remap[v]!
             if (o < 0) {
-              o = nUsed++; remap[v] = o
+              o = nUsed++; remap[v] = o; srcOf.push(v)
               const x = pos[v * 3]!, y = pos[v * 3 + 1]!, z = pos[v * 3 + 2]!
               const wx = m[0]! * x + m[4]! * y + m[8]! * z + m[12]!, wy = m[1]! * x + m[5]! * y + m[9]! * z + m[13]!, wz = m[2]! * x + m[6]! * y + m[10]! * z + m[14]!
               const d = vo + o
@@ -418,6 +531,7 @@ export const buildLiteTiles = (gltfPath: string, outDir: string, opts: LiteOptio
             }
             I[io + i] = o + vo
           }
+          if (C) paintVertices(c, p, srcOf, C, vo)
           vo += nUsed; io += n3
         }
         const attrs: Record<string, number> = {}
@@ -425,6 +539,7 @@ export const buildLiteTiles = (gltfPath: string, outDir: string, opts: LiteOptio
         attrs["POSITION"] = accessors.length - 1
         accessors.push({ bufferView: addView(N, 34962), componentType: 5126, count: nV, type: "VEC3" }); attrs["NORMAL"] = accessors.length - 1
         if (T) { accessors.push({ bufferView: addView(T, 34962), componentType: 5126, count: nV, type: "VEC2" }); attrs["TEXCOORD_0"] = accessors.length - 1 }
+        if (C) { accessors.push({ bufferView: addView(C, 34962), componentType: 5121, normalized: true, count: nV, type: "VEC4" }); attrs["COLOR_0"] = accessors.length - 1 }
         accessors.push({ bufferView: addView(I, 34963), componentType: 5125, count: nI, type: "SCALAR" })
         const prim: Record<string, unknown> = { attributes: attrs, indices: accessors.length - 1, mode: 4 }
         if (mat >= 0) { prim["material"] = usedMats.length; usedMats.push(mat) }
@@ -489,7 +604,10 @@ export const buildLiteTiles = (gltfPath: string, outDir: string, opts: LiteOptio
       })
       tileTris += tTris
     }
-    return { tiles, keptTriangles: tileTris, totalTriangles: total, textureBytes, warnings }
+    return {
+      tiles, keptTriangles: tileTris, totalTriangles: total, textureBytes, warnings, splitTriangles,
+      ...(colorMode ? { colors: { ...colorStats, unpainted: [...unpainted].sort() } } : {})
+    }
   } finally {
     reader.close()
   }

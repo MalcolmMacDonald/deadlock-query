@@ -9,7 +9,7 @@ import { MeshoptDecoder } from "meshoptimizer"
 import { isLodTile, tileBundle } from "../src/tiling.ts"
 
 /** A `n x n` quad grid with a gentle bump, as one tile .glb with a textured material. */
-const writeTile = async (path: string, n: number, texture?: string) => {
+const writeTile = async (path: string, n: number, texture?: string, colors = false) => {
   const doc = new Document()
   const buf = doc.createBuffer()
   const pos = new Float32Array((n + 1) * (n + 1) * 3), nor = new Float32Array((n + 1) * (n + 1) * 3), uv = new Float32Array((n + 1) * (n + 1) * 2)
@@ -29,6 +29,12 @@ const writeTile = async (path: string, n: number, texture?: string) => {
     .setAttribute("NORMAL", doc.createAccessor().setType("VEC3").setArray(nor).setBuffer(buf))
     .setAttribute("TEXCOORD_0", doc.createAccessor().setType("VEC2").setArray(uv).setBuffer(buf))
     .setIndices(doc.createAccessor().setType("SCALAR").setArray(idx).setBuffer(buf))
+  if (colors) {
+    // a red-to-blue ramp along X, RGBA8 normalised
+    const col = new Uint8Array((n + 1) * (n + 1) * 4)
+    for (let j = 0; j <= n; j++) for (let i = 0; i <= n; i++) col.set([Math.round(255 * (1 - i / n)), 0, Math.round(255 * (i / n)), 255], (j * (n + 1) + i) * 4)
+    prim.setAttribute("COLOR_0", doc.createAccessor().setType("VEC4").setArray(col).setNormalized(true).setBuffer(buf))
+  }
   const mesh = doc.createMesh("m").addPrimitive(prim)
   doc.createScene().addChild(doc.createNode("n").setMesh(mesh))
   if (!texture) return void (await new NodeIO().write(path, doc))
@@ -47,11 +53,11 @@ const writeTile = async (path: string, n: number, texture?: string) => {
   writeFileSync(join(dirname(path), texture), "png")
 }
 
-const bundle = async (n = 60) => {
+const bundle = async (n = 60, colors = false) => {
   const dir = mkdtempSync(join(tmpdir(), "dlq-tile-"))
   mkdirSync(join(dir, "render/tiles"), { recursive: true })
   const file = "render/tiles/0_0.glb"
-  await writeTile(join(dir, file), n, "tex.png")
+  await writeTile(join(dir, file), n, colors ? undefined : "tex.png", colors)
   const raw = readFileSync(join(dir, file))
   const bounds = { min: [0, -3, 0] as const, max: [n * 2, 3, n * 2] as const }
   writeFileSync(join(dir, "manifest.json"), JSON.stringify({
@@ -154,4 +160,31 @@ test("running tile again after an extract rewrote the manifest (tiles already co
   for (const t of again.tiles) expect(createHash("sha256").update(readFileSync(join(dir, t.file))).digest("hex")).toBe(t.sha256)
   expect(tris(await decode(join(dir, "render/tiles/0_0.glb")))).toBe(60 * 60 * 2) // LOD0 keeps every triangle through the second pass
   expect(tris(await decode(join(dir, "render/tiles/0_0.lod1.glb")))).toBeLessThan(tris(await decode(join(dir, "render/tiles/0_0.glb"))))
+})
+
+test("keeps COLOR_0 through compression and every LOD, makes 3 LODs by default and tags LOD tiles with lod / lodOf", async () => {
+  const { dir } = await bundle(60, true)
+  const r = await tileBundle(dir)
+  expect(r.errors).toEqual([])
+  const m = JSON.parse(readFileSync(join(dir, "manifest.json"), "utf8"))
+  expect(m.tiles.map((t: any) => t.id)).toEqual(["0_0", "0_0#lod1", "0_0#lod2"])
+  expect(m.tiles.map((t: any) => t.lod)).toEqual([undefined, 1, 2])
+  expect(m.tiles.map((t: any) => t.lodOf)).toEqual([undefined, "0_0", "0_0"])
+  const counts: number[] = []
+  for (const t of m.tiles) {
+    const d = await decode(join(dir, t.file))
+    const prim = d.getRoot().listMeshes()[0]!.listPrimitives()[0]!
+    const c = prim.getAttribute("COLOR_0")!
+    expect(c).toBeTruthy()
+    expect(c.getNormalized()).toBe(true)
+    // the ramp survives: the vertex with the smallest x is red, the largest blue
+    const pos = prim.getAttribute("POSITION")!
+    let lo = 0, hi = 0
+    for (let i = 0; i < pos.getCount(); i++) { if (pos.getScalar(i) < pos.getScalar(lo)) lo = i; if (pos.getScalar(i) > pos.getScalar(hi)) hi = i }
+    expect(c.getElement(lo, [0, 0, 0, 0])[0]).toBeGreaterThan(0.9)
+    expect(c.getElement(hi, [0, 0, 0, 0])[2]).toBeGreaterThan(0.9)
+    counts.push(tris(d))
+  }
+  expect(counts[1]!).toBeLessThan(counts[0]! * 0.5)
+  expect(counts[2]!).toBeLessThan(counts[1]!)
 })
