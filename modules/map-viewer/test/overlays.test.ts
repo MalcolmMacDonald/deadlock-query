@@ -68,7 +68,7 @@ test("ViewerService: overlays set before a panel mounts replay on attach; camera
   c.attach({
     setOverlay: (id) => calls.push(`set:${id}`), removeOverlay: (id) => calls.push(`rm:${id}`),
     highlight: (ids) => calls.push(`hl:${ids}`), getPose: () => ({ target: [9, 9, 9], yaw: 0, pitch: 0, distance: 1 }),
-    setAppearance: () => {}, setDraft: () => {}, setHandles: () => {},
+    setAppearance: () => {}, setSurfaceVisible: () => {}, setDraft: () => {}, setHandles: () => {},
     setPose: () => {}, capture: async () => new Uint8Array([1]), loadBundle: async () => {}
   })
   expect(calls).toEqual(["set:a", "hl:a:0"])

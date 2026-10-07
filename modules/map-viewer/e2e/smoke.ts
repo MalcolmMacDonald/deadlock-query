@@ -486,6 +486,36 @@ try {
   if (clear.transparent < 1000 || clear.opaque < 1000) fail(`transparent capture ${JSON.stringify(clear)}`)
   const after = await png({})
   if (after.transparent !== 0) fail("capture options leaked into later captures")
+  // Map surfaces: the render mesh is the default, the collision mesh is a Layers-panel toggle and starts hidden.
+  const surfacesAttr = () => canvas.getAttribute("data-surfaces")
+  const surfaceBox = (k: string) => page.locator(`[data-testid="viewer-layers"] [data-surface="${k}"] input`)
+  if ((await surfacesAttr()) !== "render") fail(`default surfaces: ${await surfacesAttr()}`)
+  if (!(await surfaceBox("render").isChecked()) || (await surfaceBox("collision").isChecked())) fail("surface checkboxes should start render on, collision off")
+  await page.evaluate(() => { const v = (globalThis as any).__viewer; v.setPose({ target: [0, 0, 0], yaw: Math.PI / 2, pitch: -1.55, distance: 3000 }) })
+  await settle()
+  const bluish = () => page.evaluate(() => {
+    const c = document.querySelector("canvas")!
+    const d = document.createElement("canvas"); d.width = c.width; d.height = c.height
+    const ctx = d.getContext("2d")!; ctx.drawImage(c, 0, 0)
+    const px = ctx.getImageData(0, 0, d.width, d.height).data
+    let n = 0
+    for (let i = 0; i < px.length; i += 4) if (px[i + 2]! > px[i]! + 25 && px[i + 2]! > 80) n++
+    return n
+  })
+  const noCollision = await bluish()
+  await surfaceBox("collision").check()
+  await settle()
+  if ((await surfacesAttr()) !== "render,collision") fail(`collision toggle did not apply: ${await surfacesAttr()}`)
+  const withCollision = await bluish()
+  if (withCollision <= noCollision) fail(`collision mesh not drawn (${noCollision} -> ${withCollision} bluish px)`)
+  await surfaceBox("render").uncheck()
+  await surfaceBox("collision").uncheck()
+  await settle()
+  if ((await surfacesAttr()) !== "") fail("both surfaces should hide")
+  await surfaceBox("collision").uncheck()
+  await surfaceBox("render").check()
+  await settle()
+  if ((await surfacesAttr()) !== "render") fail(`render toggle did not apply: ${await surfacesAttr()}`)
   if (errors.length) fail(errors.join("; "))
   console.log("map-viewer e2e smoke: ok")
 } finally {

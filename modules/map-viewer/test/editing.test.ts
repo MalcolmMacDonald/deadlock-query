@@ -107,7 +107,7 @@ test("controller pushes handles to the surface", () => {
   const c = new ViewerController()
   const log: string[] = []
   c.attach({
-    setOverlay: () => {}, removeOverlay: () => {}, highlight: () => {}, setAppearance: () => {}, setDraft: () => {},
+    setOverlay: () => {}, removeOverlay: () => {}, highlight: () => {}, setAppearance: () => {}, setDraft: () => {}, setSurfaceVisible: () => {},
     setHandles: (pts, active) => { log.push(`${pts.length}:${active}`) },
     getPose: () => ({ target: [0, 0, 0], yaw: 0, pitch: 0, distance: 1 }), setPose: () => {},
     capture: async () => new Uint8Array(), loadBundle: async () => {}

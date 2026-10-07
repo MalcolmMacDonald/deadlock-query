@@ -13,6 +13,7 @@ import {
 import { SnapState } from "./snapping.ts"
 import { insertVertex, moveVertex, removeVertex } from "./vertexEdit.ts"
 import { LayerStore, type LayerAppearance } from "./layers.ts"
+import { SurfaceStore, type SurfaceKind } from "./surfaces.ts"
 import { ToolMachine, type ExternalTool } from "./tools.ts"
 import type { StreamStats } from "./tileStreamer.ts"
 import { DEFAULT_COLOR, normalizeFeatures, parseFeatureId } from "./overlays.ts"
@@ -39,6 +40,8 @@ export interface ViewerSurface {
   readonly removeOverlay: (layerId: string) => void
   readonly highlight: (ids: ReadonlyArray<string>) => void
   readonly setAppearance: (layerId: string, a: LayerAppearance) => void
+  /** Shows or hides the map's render or collision mesh. */
+  readonly setSurfaceVisible: (kind: SurfaceKind, visible: boolean) => void
   readonly setDraft: (features: ReadonlyArray<OverlayFeature>) => void
   /** Vertex handles of the selected annotation (`active` is the selected vertex). Empty clears them. */
   readonly setHandles: (points: ReadonlyArray<Vec3>, active: number | undefined) => void
@@ -73,6 +76,8 @@ export class ViewerController {
 
   /** Layers panel state (visibility, colour, opacity, order) for every overlay layer, annotations included. */
   readonly layers = new LayerStore()
+  /** Which map meshes are drawn: render mesh by default, collision mesh on request (the Layers panel's Map surfaces). */
+  readonly surfaces = new SurfaceStore()
   readonly annotations = new AnnotationStore()
   readonly tools = new ToolMachine((a) =>
     this.annotations.add(this.activeLayerId === undefined ? a : ({ ...a, layer: this.activeLayerId } as typeof a)))
@@ -93,6 +98,7 @@ export class ViewerController {
     this.layers.subscribe(() => {
       for (const l of this.layers.list()) this.surface?.setAppearance(l.id, this.layers.appearance(l.id))
     })
+    this.surfaces.subscribe(() => this.syncSurfaces())
     this.tools.subscribe(() => { this.surface?.setDraft(this.tools.draft()); this.syncHandles() })
     this.annotations.subscribe(() => { this.syncAnnotations(); this.scheduleSave() })
   }
@@ -172,11 +178,16 @@ export class ViewerController {
   attach(surface: ViewerSurface): () => void {
     this.surface = surface
     for (const l of this.layers.list()) surface.setAppearance(l.id, this.layers.appearance(l.id))
+    this.syncSurfaces()
     for (const [id, [f, s]] of this.overlays) surface.setOverlay(id, f, s)
     surface.setDraft(this.tools.draft())
     this.syncHandles()
     if (this.highlighted.length) surface.highlight(this.highlighted)
     return () => { if (this.surface === surface) { this.pose = surface.getPose(); this.surface = undefined } }
+  }
+
+  private syncSurfaces() {
+    for (const s of this.surfaces.list()) this.surface?.setSurfaceVisible(s.kind, s.visible)
   }
 
   setOverlay(id: string, f: ReadonlyArray<Vec3> | ReadonlyArray<OverlayFeature>, s?: OverlayStyle, label?: string) {

@@ -4,7 +4,7 @@ import { MapDataService, tilesAtLod, type Entity, type Manifest, type Vec3 } fro
 import { boundsOf, fitTopDown } from "./projection.ts"
 import { frameBounds, type CameraMode } from "./camera.ts"
 import { FOV_DEG, ViewerControls } from "./controls.ts"
-import { buildScene, glbToThreeMatrix, makeTerrainMaterial, surfaceMeshes } from "./scene.ts"
+import { buildScene, glbToThreeMatrix, makeTerrainMaterial, setSurfaceVisible, surfaceMeshes } from "./scene.ts"
 import { declutterLabels } from "./labels.ts"
 import { OverlayScene, parseFeatureId, pickFeature } from "./overlays.ts"
 import { MAX_CAPTURE_SCALE, ViewerController } from "./viewerService.ts"
@@ -19,6 +19,7 @@ import { defaultDecoder } from "./defaultDecoder.ts"
 import type { TileDecoder } from "./tileDecode.ts"
 import { mountShotPopup } from "./shotPopup.ts"
 import type { ScreenshotSource } from "./screenshots.ts"
+import type { SurfaceKind } from "./surfaces.ts"
 
 export const VIEWER_PANEL_ID = "viewer.main"
 
@@ -49,7 +50,7 @@ export interface ViewerData {
   /** Fetches one tile's GLB. When set, tiles are streamed by camera (frustum + LOD + memory budget) instead of read from `tiles`. */
   readonly tileSource?: ((tile: ManifestTile) => Promise<Uint8Array>) | undefined
   readonly streaming?: StreamingConfig | undefined
-  /** Raw collision GLB bytes (drawn when the bundle has no render tiles). */
+  /** Raw collision GLB bytes (loaded with the map; drawn only when the user shows the collision mesh, or the bundle has no render tiles). */
   readonly collision?: Uint8Array | undefined
   /** Bytes of the bundle's `baked/collision.bvh` (spatial-core `Raycaster.serialize()`); picking builds its own BVH without it. */
   readonly bakedBvh?: Uint8Array | undefined
@@ -61,6 +62,12 @@ export interface ViewerData {
 
 /** Path of the baked collision BVH in a manifest (`baked.bvh.file`), if the bundle was baked. */
 export const bakedBvhFile = (manifest: Manifest): string | undefined => manifest.baked?.bvh?.file
+
+/** Which meshes a map has: render tiles in the manifest, and a collision GLB the manifest points at. */
+export const surfacesOf = (data: Pick<ViewerData, "manifest" | "collision">): Record<SurfaceKind, boolean> => ({
+  render: data.manifest.tiles.length > 0,
+  collision: data.collision !== undefined && data.manifest.collision !== undefined
+})
 
 export const loadViewerData = Effect.gen(function* () {
   const data = yield* MapDataService
@@ -177,12 +184,28 @@ export const makeViewerPanel = (data: ViewerData, controller: ViewerController =
       canvas.dataset.picker = picker?.source ?? "none"
       return picker
     }
+    /** Applies the Layers panel's render / collision choice to the eager scene and the streamed tiles. */
+    const surfaceShown: Record<SurfaceKind, boolean> = { render: true, collision: true }
+    const applySurface = (kind: SurfaceKind) => {
+      if (world) setSurfaceVisible(world, kind, surfaceShown[kind])
+      if (kind === "render" && streamer) streamer.root.visible = surfaceShown.render
+      canvas.dataset.surfaces = (["render", "collision"] as const).filter((k) => surfaceShown[k]).join(",")
+    }
+    const setSurfaceShown = (kind: SurfaceKind, visible: boolean) => {
+      surfaceShown[kind] = visible
+      applySurface(kind)
+      // A BVH built from the visible meshes no longer matches what is drawn; the baked one does not depend on it.
+      if (picker?.source === "meshes") { picker = undefined; pickerReady = false }
+      requestRender()
+    }
     const setWorld = (g: THREE.Group) => {
       if (world) scene.remove(world)
       world = g
       picker = undefined
       pickerReady = false
       scene.add(g)
+      applySurface("render")
+      applySurface("collision")
       canvas.dataset.loaded = "true"
       requestRender()
     }
@@ -227,6 +250,7 @@ export const makeViewerPanel = (data: ViewerData, controller: ViewerController =
         }
       })
       streamer = s
+      s.root.visible = surfaceShown.render
       scene.add(s.root)
       streamDirty = true
       requestRender()
@@ -370,6 +394,7 @@ export const makeViewerPanel = (data: ViewerData, controller: ViewerController =
     syncTool()
 
     controller.setMap({ mapName: data.manifest.mapName, gameBuildId: data.manifest.gameBuildId })
+    controller.surfaces.setAvailable(surfacesOf(data))
     controller.setEntities(data.entities)
     if (data.screenshots) controller.setScreenshots(data.screenshots)
     const unmountShotPopup = mountShotPopup(root, controller)
@@ -379,6 +404,7 @@ export const makeViewerPanel = (data: ViewerData, controller: ViewerController =
       removeOverlay: (id) => overlays.remove(id),
       highlight: (ids) => overlays.highlight(ids),
       setAppearance: (id, a) => overlays.setAppearance(id, a),
+      setSurfaceVisible: setSurfaceShown,
       setDraft: (f) => overlays.setDraft(f),
       setHandles: (pts, active) => overlays.setHandles(pts, active),
       getPose: () => controls.pose,
@@ -423,6 +449,7 @@ export const makeViewerPanel = (data: ViewerData, controller: ViewerController =
         if (!disposed) {
           bakedBvh = bvh
           controller.setMap({ mapName: manifest.mapName, gameBuildId: manifest.gameBuildId })
+          controller.surfaces.setAvailable(surfacesOf(loaded))
           controller.setEntities(entities)
           controller.setScreenshots(undefined)
           setWorld(g)
