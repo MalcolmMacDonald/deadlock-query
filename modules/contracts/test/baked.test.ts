@@ -46,6 +46,56 @@ test("manifest accepts the real baked shape, with and without navmesh", () => {
   expect(decode({ ...m, baked: noNav }).baked?.navmesh).toBeUndefined()
 })
 
+/** Shape written by map-extractor 0.8.0 when the navmesh and floor come from the game's `.nav` (Recast fields are zeros / empty). */
+const gameNavBaked = () => {
+  const b = realBaked()
+  const walkable = { file: "collision/walkable.nav", sha256: "d", faces: 103780, polygons: 85485, duplicateFaces: 18295, degenerateFaces: 0, vertices: 105910, stitchedEdges: 12491 }
+  return {
+    ...b,
+    floorSource: "game-nav" as const,
+    walkable: { ...walkable, triangles: 120000, coveredCells: 46930, totalCells: 99234, multiLevelCells: 8898 },
+    navmesh: {
+      bakeVersion: "1.1.0", inputKey: "k3", file: "baked/navmesh.bin", bytes: 2_800_000, sha256: "e",
+      polygons: 85485, vertices: 105910, tiles: 0, stitchedEdges: 12491, components: 1739, largestComponentShare: 0.749,
+      links: { count: 2468, dropped: 7, byKind: { navConnection: 2455, jumpPad: 13 } },
+      agent: { radius: 0, height: 0, climb: 0, slopeDegrees: 0 }, recast: { cellSize: 0, cellHeight: 0, tileSize: 0 },
+      excludedLayers: [], inputTriangles: 120000,
+      source: "game-nav" as const,
+      walkable: { ...walkable, flowFile: "collision/walkable.navflowmap", flowHull: 0 },
+      componentsWithLinks: 927, largestComponentShareWithLinks: 0.922
+    }
+  }
+}
+
+test("baked accepts the game-nav shape, and a navmesh without the Recast-only fields", () => {
+  const m = buildMiniMap().manifest
+  const full = decode({ ...m, baked: gameNavBaked() })
+  expect(full.baked?.floorSource).toBe("game-nav")
+  expect(full.baked?.walkable?.multiLevelCells).toBe(8898)
+  expect(full.baked?.navmesh?.source).toBe("game-nav")
+  expect(full.baked?.navmesh?.walkable?.flowHull).toBe(0)
+  expect(full.baked?.navmesh?.links.byKind["navConnection"]).toBe(2455)
+  const { tiles: _t, agent: _a, recast: _r, excludedLayers: _e, inputTriangles: _i, ...lean } = gameNavBaked().navmesh
+  const leanDecoded = decode({ ...m, baked: { ...gameNavBaked(), navmesh: lean } })
+  expect(leanDecoded.baked?.navmesh?.agent).toBeUndefined()
+  expect(leanDecoded.baked?.navmesh?.componentsWithLinks).toBe(927)
+  expect(Effect.runSync(Schema.encodeEffect(Baked)(Effect.runSync(Schema.decodeUnknownEffect(Baked)(gameNavBaked()))))).toEqual(gameNavBaked())
+})
+
+test("source and floorSource only take their known values", () => {
+  const bad = (b: unknown) => () => Effect.runSync(Schema.decodeUnknownEffect(Baked)(b))
+  expect(bad({ ...gameNavBaked(), floorSource: "recast" })).toThrow()
+  expect(bad({ ...gameNavBaked(), navmesh: { ...gameNavBaked().navmesh, source: "collision" } })).toThrow()
+  expect(bad({ ...gameNavBaked(), walkable: { file: "x" } })).toThrow()
+})
+
+test("collision ref may name the walkable nav files", () => {
+  const m = buildMiniMap().manifest
+  const c = decode({ ...m, collision: { ...m.collision, walkableNav: "collision/walkable.nav", walkableFlowmap: "collision/walkable.navflowmap" } })
+  expect(c.collision?.walkableNav).toBe("collision/walkable.nav")
+  expect(decode(m).collision?.walkableNav).toBeUndefined()
+})
+
 test("baked rejects missing or mistyped fields", () => {
   const bad = (f: (b: ReturnType<typeof realBaked>) => unknown) => () => Effect.runSync(Schema.decodeUnknownEffect(Baked)(f(realBaked())))
   expect(bad((b) => ({ ...b, bvh: { ...b.bvh, sha256: 1 } }))).toThrow()

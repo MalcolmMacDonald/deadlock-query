@@ -1,5 +1,11 @@
 # contracts changelog
 
+## 0.6.0 — game-nav navmesh and floor (additive, schemaVersion stays 1.0.0)
+- `BakedNavmesh`: the Recast-only fields `tiles`, `agent`, `recast`, `excludedLayers` and `inputTriangles` are now optional (a navmesh taken from the game's own `.nav` has none; the extractor writes zeros / empty for them, which readers should treat as absent). New optional `source` (`"game-nav" | "recast"`, absent = `recast`), `componentsWithLinks`, `largestComponentShareWithLinks` (components once links count as connections) and `walkable` (`WalkableStats` plus `flowFile` / `flowHull`).
+- `Baked` gains optional `floorSource` (`"game-nav" | "collision"`, absent = `collision`) and `walkable` (`WalkableStats` plus `triangles`, `coveredCells`, `totalCells`, `multiLevelCells`).
+- `CollisionRef` gains optional `walkableNav` / `walkableFlowmap` (bundle paths of the game's nav files, `collision/walkable.nav` / `.navflowmap`). The extractor does not write them to the manifest yet.
+- New exports: `NavSource`, `WalkableStats`. `NavAgent` is unchanged. Existing bundles decode unchanged; code that read `navmesh.agent` etc. must handle `undefined`.
+
 ## 0.5.1 — OverlayFeature.properties (additive, schemaVersion stays 1.0.0)
 - `OverlayFeature` gained an optional `properties` record on every variant. The viewer's inspector lists it when the feature is selected, so query results can show the other columns of a row. Existing features are unaffected.
 
