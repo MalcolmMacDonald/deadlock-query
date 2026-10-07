@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test"
+import type { Vec3 } from "@deadlock-query/contracts"
 import {
   ViewerController, annotationLayers, isHidden, isLocked, labelAnchor, layerLabels, MAX_LABELS_PER_LAYER
 } from "../src/index.ts"
@@ -133,4 +134,26 @@ test("label anchors: point, middle of a path, polygon mean; empty labels and the
   const many = Array.from({ length: MAX_LABELS_PER_LAYER + 50 }, (_, i) => ({ type: "point" as const, at: [i, 0, 0] as [number, number, number], label: `n${i}` }))
   expect(layerLabels(many)).toHaveLength(MAX_LABELS_PER_LAYER)
   expect(layerLabels([{ type: "point", at: [0, 0, 0], label: "x".repeat(500) }])[0]!.text.length).toBeLessThanOrEqual(120)
+})
+
+test("focusSelection frames what is selected: a picked point, several features, an annotation; nothing selected does nothing", () => {
+  const { c, a } = withThree()
+  const far = { target: [9000, 9000, 0] as Vec3, yaw: 1, pitch: -0.7, distance: 20_000 }
+  c.setPose(far)
+  expect(c.focusSelection()).toBe(false)
+  expect(c.getPose()).toEqual(far)
+  c.setOverlay("pts", [{ type: "point", at: [100, 200, 30] }, { type: "point", at: [300, 200, 30] }])
+  c.selectFeature("pts:0")
+  expect(c.focusSelection()).toBe(true)
+  expect(c.getPose().target).toEqual([100, 200, 30])
+  expect(c.getPose().distance).toBeLessThan(far.distance)
+  expect([c.getPose().yaw, c.getPose().pitch]).toEqual([1, -0.7])
+  c.selectFeature("pts:1", true)
+  c.focusSelection()
+  expect(c.getPose().target).toEqual([200, 200, 30])
+  c.clearSelection()
+  c.setSelection([a.id])
+  expect(c.selectionPoints()).toEqual(a.points)
+  c.clearSelection()
+  expect(c.selectionPoints()).toEqual([])
 })

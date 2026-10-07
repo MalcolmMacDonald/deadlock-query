@@ -236,7 +236,7 @@ export const makeToolsPanel = (controller: ViewerController): PanelComponent => 
     })
 
     const HINTS: Record<BuiltinToolId, string> = {
-      select: "Click an annotation to select it (Shift/Ctrl-click adds or removes, Ctrl+A selects all); drag a blue handle to move a vertex, double-click an edge to add one, Delete removes the vertex (or the annotation).",
+      select: "Click an annotation to select it (Shift/Ctrl-click adds or removes, Ctrl+A selects all); drag a blue handle to move a vertex, double-click an edge to add one, Delete removes the vertex (or the annotation); F frames the selection.",
       point: "Click the map to drop a point.",
       label: "Click the map, then type the label text.",
       polyline: "Click to add vertices; double-click or Enter to finish, Esc to cancel.",

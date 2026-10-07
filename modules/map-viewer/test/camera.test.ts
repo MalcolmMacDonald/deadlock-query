@@ -3,7 +3,7 @@ import * as THREE from "three"
 import { Effect } from "effect"
 import { MockMapDataService, worldToThree } from "@deadlock-query/contracts"
 import {
-  MAX_PITCH, buildScene, decodeCamera, encodeCamera, eyeOf, fly, frameBounds, glbToThreeMatrix, loadViewerData,
+  FOCUS_MIN_DISTANCE, MAX_PITCH, buildScene, decodeCamera, encodeCamera, eyeOf, fly, frameBounds, frameSelection, glbToThreeMatrix, loadViewerData,
   pan, poseFromEye, rotate, switchMode, zoom, WORLD_TO_THREE
 } from "../src/index.ts"
 
@@ -78,4 +78,17 @@ test("fixture render tile lands inside manifest bounds after glbToWorld + worldT
   expect(box.min.z).toBeGreaterThanOrEqual(Math.min(lo[2], hi[2]) - eps)
   expect(box.max.z).toBeLessThanOrEqual(Math.max(lo[2], hi[2]) + eps)
   expect(glbToThreeMatrix(data.manifest.coordinateSystem.glbToWorld).elements.length).toBe(16)
+})
+
+test("frameSelection centres on the selection's bounds, keeps the view direction and never hugs a lone point", () => {
+  const pose = { target: [0, 0, 0] as const, yaw: 1, pitch: -0.7, distance: 5000 }
+  expect(frameSelection(pose, [])).toBeUndefined()
+  const one = frameSelection(pose, [[100, 200, 30]])!
+  expect(one.target).toEqual([100, 200, 30])
+  expect(one.distance).toBe(FOCUS_MIN_DISTANCE)
+  expect([one.yaw, one.pitch]).toEqual([1, -0.7])
+  const many = frameSelection(pose, [[0, 0, 0], [2000, 0, 0], [0, 1000, 400]])!
+  close(many.target, [1000, 500, 200])
+  // The bounding sphere (radius ~1.1k) fits inside the vertical field of view.
+  expect(many.distance).toBeGreaterThan(Math.hypot(2000, 1000, 400) / 2 / Math.sin((50 * Math.PI) / 360))
 })

@@ -57,6 +57,24 @@ export const frameBounds = (min: Vec3, max: Vec3, fovDeg = 50, aspect = 1.6): Ca
   return normalize({ target, yaw: Math.PI / 2, pitch: -MAX_PITCH, distance })
 }
 
+/** Closest `frameSelection` gets to a single point: far enough to see the surroundings (Source units, a person is ~70 tall). */
+export const FOCUS_MIN_DISTANCE = 300
+
+/**
+ * Pose centred on the bounding box of `points`, keeping the current viewing direction. The distance fits the box's
+ * bounding sphere in the view with some margin, and never goes below `FOCUS_MIN_DISTANCE` so a lone point is not
+ * hugged. `undefined` when there is nothing to frame.
+ */
+export const frameSelection = (pose: CameraPose, points: ReadonlyArray<Vec3>, fovDeg = 50): CameraPose | undefined => {
+  if (points.length === 0) return undefined
+  const min: [number, number, number] = [Infinity, Infinity, Infinity], max: [number, number, number] = [-Infinity, -Infinity, -Infinity]
+  for (const p of points) for (let i = 0; i < 3; i++) { min[i] = Math.min(min[i]!, p[i]!); max[i] = Math.max(max[i]!, p[i]!) }
+  const target: Vec3 = [(min[0] + max[0]) / 2, (min[1] + max[1]) / 2, (min[2] + max[2]) / 2]
+  const radius = Math.hypot(max[0] - min[0], max[1] - min[1], max[2] - min[2]) / 2
+  const distance = Math.max(FOCUS_MIN_DISTANCE, (radius / Math.sin((fovDeg * Math.PI) / 360)) * 1.15)
+  return normalize({ ...pose, target, distance })
+}
+
 /** Pan in the ground plane by screen-space pixel deltas (drag right moves the map right). */
 export const pan = (pose: CameraPose, dxPx: number, dyPx: number, viewportHeight: number, fovDeg = 50): CameraPose => {
   const worldPerPx = (2 * pose.distance * Math.tan((fovDeg * Math.PI) / 360)) / Math.max(1, viewportHeight)

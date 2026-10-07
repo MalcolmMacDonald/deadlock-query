@@ -53,7 +53,8 @@ export const parseFeatureId = (id: string): { readonly layerId: string; readonly
   return i < 0 || !Number.isInteger(index) ? undefined : { layerId: id.slice(0, i), index }
 }
 
-const ringOf = (f: OverlayFeature): ReadonlyArray<Vec3> =>
+/** Every vertex of a feature (a point's one position, a line's points, a polygon's ring). */
+export const ringOf = (f: OverlayFeature): ReadonlyArray<Vec3> =>
   f.type === "point" ? [f.at] : f.type === "polygon" ? f.ring : f.points
 
 /** Camera-independent projection used for CPU picking: world position -> pixel (or undefined if behind the eye). */
