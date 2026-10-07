@@ -1,8 +1,8 @@
 # map-metadata — state
 
-- **Status:** M0-M4 done in code (live deploy needs Malcolm); M5 `metadata.review` next
-- **Version:** 0.5.0
-- **Current milestone:** M4 complete
+- **Status:** M0-M4 done (live deploy: KV id set, secrets and deploy are Malcolm's); M5 review logic done, review panel UI next
+- **Version:** 0.6.0
+- **Current milestone:** M5 in progress (logic done)
 - **Last updated:** 2026-10-07
 
 ## Done
@@ -28,6 +28,8 @@
 
 - M4 (2026-10-07): `submit-worker/` (Cloudflare Worker, `bunx wrangler dev` in that directory). `src/handler.ts` `handleRequest(req, env, deps)`: `POST /submit` with the submission JSON and `X-Turnstile-Token`; order of checks is method, size (256 KB), per-IP (5/h) and global (200/day) KV counters, Turnstile siteverify, JSON + schema + the module's validators (degraded: no collision on the server), safe id (`[A-Za-z0-9._-]`, so no path tricks), proposed-only. Then branch `metadata-submission/<id>`, file `data/submissions/<id>.json` (never `data/metadata/`), PR with label `metadata-submission` (label failure is ignored). Answers 201 `{id,url}`, 400 bad JSON, 403 Turnstile, 404/405, 413, 422 with up to 20 issues, 429 + Retry-After, 502 on GitHub failure. User text in the PR body sits in a code fence it cannot close. CORS only for `ALLOWED_ORIGIN`. `src/submit/client.ts` `postSubmission` for the editor (maps errors to friendly text). 14 contract tests with mocked Turnstile and GitHub (no wrangler needed in CI).
 
+- M5 logic (2026-10-07): `src/review/`. `ReviewApi` (queue, submission, dataFile, commitFile, merge, close, comment) with `proxyApi(fetch)` over the dev site's `/api/github/*` (CSRF header, no token in the browser; the queue is open PRs whose head branch starts `metadata-submission/` and lives in the same repo). `loadForReview` validates a PR's submission; `bulkDecisions` (`acceptValid` rejects records with errors, `rejectAll`); `applyDecisions` stamps `status`, reviewer, `reviewedAt`, comment and merges into `data/metadata/<build>/<kind>.json` (replace by id, sorted, canonical text); `commitDecisions` commits those files to the PR branch then merges (or closes the PR when nothing was accepted) and refuses undecided records; `requestChanges` and `rejectSubmission` comment/close. 7 tests with a fake API and a mocked proxy.
+
 ## In progress
 - (nothing)
 
@@ -37,6 +39,7 @@
 - Tune the default radii (camp 200, sacrifice 200, orb 100), `surfaceEpsilon` (24) and overlap tolerance (64) on the real dl_midtown data.
 
 ## Blockers / Requests to other modules
+- infra (proxy allowlist, `modules/infra/src/proxy.ts`): review needs `PUT /contents/<path>` (commit decided files to the PR branch), `PUT /pulls/<n>/merge` and `PATCH /pulls/<n>` (close) added, with the proxy token allowed Contents and Pull requests write. Without them the review panel can list and show submissions but not accept or reject. Prefer restricting `PUT /contents/` to `data/metadata/**` and `PATCH /pulls` to `state: closed`.
 - Malcolm (live M4): create a Turnstile widget (site key for the page, secret as `TURNSTILE_SECRET`), a KV namespace `RATE`, a repo-scoped `GITHUB_TOKEN` (Contents + Pull requests write), then `bunx wrangler deploy` in `modules/map-metadata/submit-worker/` and set `ALLOWED_ORIGIN`. Until then submissions use the download/issue fallback.
 - shell/editor: the panel does not call the worker yet because it needs the Turnstile site key and worker URL; once they exist, pass them to the panel and call `postSubmission`.
 - shell: pass `identity: () => ({ gameBuildId, mapName })` (or an `expect` in `context`) to `createEditorController`, otherwise Review & submit says the map is not loaded. (Earlier request, done in #157:) add the `metadata.editor` panel (`mountEditorPanel` + `createEditorController` from `@deadlock-query/map-metadata/editor`, storage `indexedDbDraftStorage(<gameBuildId>)`) to its module list; that is M2's integration work.
