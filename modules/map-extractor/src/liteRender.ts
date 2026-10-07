@@ -350,11 +350,12 @@ export const buildLiteTiles = (gltfPath: string, outDir: string, opts: LiteOptio
     const paintVertices = (c: Cand, p: NonNullable<G["meshes"]>[number]["primitives"][number], srcOf: ReadonlyArray<number>, C: Uint8Array, vo: number) => {
       const n = srcOf.length
       const meshName = g.meshes![c.mesh]!.name ?? ""
-      const names = [g.materials?.[p.material ?? -1]?.["name"] as string | undefined, /_mt_(.+)$/.exec(meshName)?.[1]].filter((x): x is string => !!x)
+      // The export carries no materials: the mesh name holds the material (`..._agg_merge_<material>_<k>_fragment<j>`, `..._mt_<material>`).
+      const names = [g.materials?.[p.material ?? -1]?.["name"] as string | undefined, /_mt_(.+)$/.exec(meshName)?.[1], meshName].filter((x): x is string => !!x)
       const paint: MaterialPaint | undefined = opts.colors?.paintFor(names)
       colorStats.primitives++
       if (paint) colorStats.painted++
-      else if (opts.colors && unpainted.size < 20) unpainted.add(names[0] ?? meshName ?? "(unnamed)")
+      else if (opts.colors && unpainted.size < 20) unpainted.add(meshName || "(unnamed)")
       const tint = paint?.tint ?? opts.colors?.fallback ?? [1, 1, 1]
       const tex = paint?.texture
       const uv = tex && p.attributes["TEXCOORD_0"] !== undefined ? (read(p.attributes["TEXCOORD_0"]) as Float32Array) : undefined
@@ -371,10 +372,10 @@ export const buildLiteTiles = (gltfPath: string, outDir: string, opts: LiteOptio
         const v = srcOf[i]!
         let r = tint[0], gr = tint[1], b = tint[2]
         if (tex && uv) { sampleMips(tex, uv[v * 2]!, uv[v * 2 + 1]!, level, rgb); r *= rgb[0]; gr *= rgb[1]; b *= rgb[2] }
-        let a = 1
-        if (src) { const k = src.comps; r *= src.data[v * k]!; gr *= src.data[v * k + 1]!; b *= src.data[v * k + 2]!; if (k === 4) a = src.data[v * 4 + 3]! }
+        // The export's own vertex colour multiplies in; its alpha is a blend weight for the game's layered shaders, not opacity, so it is dropped.
+        if (src) { const k = src.comps; r *= src.data[v * k]!; gr *= src.data[v * k + 1]!; b *= src.data[v * k + 2]! }
         const d = (vo + i) * 4
-        C[d] = toByte(r); C[d + 1] = toByte(gr); C[d + 2] = toByte(b); C[d + 3] = toByte(a)
+        C[d] = toByte(r); C[d + 1] = toByte(gr); C[d + 2] = toByte(b); C[d + 3] = 255
       }
     }
     const estimate = (c: Cand) => c.verts * (12 + 12 + 8 + (colorMode ? 4 : 0)) + c.tris * 3 * 4

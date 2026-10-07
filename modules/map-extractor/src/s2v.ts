@@ -39,6 +39,10 @@ export const args = {
    * and writes `<out>/maps/<map>.nav` (and the other two); a map with only a `.nav` gets `-o` as the file path.
    */
   nav: (vpk: string, map: string, out: string) => args.file(vpk, `maps/${map}.nav`, out),
+  /** Raw file (no `-d`): `.vmat_c` cannot be decompiled by this Source2Viewer build (VCS 72), but extracts fine and `dumpData` reads it. */
+  raw: (vpk: string, inner: string, out: string) => ["-i", vpk, "-f", inner, "-o", out],
+  /** Prints a resource's DATA block as text (KeyValues3). */
+  dumpData: (file: string) => ["-i", file, "-b", "DATA"],
   entities: (vpk: string, map: string, out: string) => args.file(vpk, `maps/${map}/entities/default_ents.vents_c`, out),
   /**
    * `--gltf_export_materials` writes glTF materials plus their textures beside the .gltf. Opt-in: on the real dl_midtown
