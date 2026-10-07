@@ -223,7 +223,7 @@ test("bakes a COLOR_0 per vertex from the material paint: tint, texture sampled 
   ]), [0.2, 0.2, 0.2])
   const out = mkdtempSync(join(tmpdir(), "dlq-out-"))
   const r = buildLiteTiles(src, out, { cell: 1e6, colors: provider })
-  expect(r.colors).toEqual({ primitives: 3, painted: 2, textured: 2, unpainted: ["unknown"] })
+  expect(r.colors).toEqual({ primitives: 3, painted: 2, textured: 2, unpainted: ["b_mt_unknown"] })
   expect(r.tiles).toHaveLength(1)
   const [C] = colorsOf(join(out, r.tiles[0]!.file))
   const rgba = (i: number) => [...C!.subarray(i * 4, i * 4 + 4)]

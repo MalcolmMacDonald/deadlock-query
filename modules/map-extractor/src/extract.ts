@@ -7,11 +7,12 @@ import { gltfInfo, readGltfJson, type GltfInfo } from "./gltfInfo.ts"
 import { invertAffine } from "./mat4.ts"
 import { args, firstExceptionLine, lastRunOutput, run, type S2VRunner } from "./s2v.ts"
 import { buildLiteTiles, liteReady, type LiteOptions } from "./liteRender.ts"
+import { buildPaints } from "./materials.ts"
 import { toEntities, parseVents } from "./vents.ts"
 import { WALKABLE_FLOW_FILE, WALKABLE_NAV_FILE } from "./walkable.ts"
 
 /** Unchanged by the `nav` stage on purpose: adding it must not invalidate the cached multi-GB render stages. */
-export const EXTRACTOR_VERSION = "0.4.0"
+export const EXTRACTOR_VERSION = "0.5.0"
 export type Tier = "full" | "lite"
 
 export interface ExtractOptions {
@@ -27,6 +28,12 @@ export interface ExtractOptions {
   readonly lite?: LiteOptions
   /** Lite tier: keep the multi-GB full render export in `.work` after deriving the lite tiles. */
   readonly keepWork?: boolean
+  /**
+   * `pak01_dir.vpk` of the game: lite tier bakes vertex colours from the materials and textures in it (see `materials.ts`).
+   * Without it, or with `colors: false`, tiles carry only the export's own vertex colours.
+   */
+  readonly gameVpk?: string
+  readonly colors?: boolean
   /** Pass `--gltf_export_materials` to the render export (off by default; see `args.render`). */
   readonly materials?: boolean
   readonly log?: (msg: string) => void
@@ -165,7 +172,7 @@ export const extract = async (o: ExtractOptions): Promise<ExtractResult> => {
     const fullGltf = join(work, "render-full", "n0.gltf")
     const liteDir = join(dir, "render")
     const manifestTiles = join(work, "lite-tiles.json")
-    const liteKey = `render-lite-${createHash("sha256").update(JSON.stringify({ ...o.lite, log: undefined, materials: o.materials === true })).digest("hex").slice(0, 8)}`
+    const liteKey = `render-lite-${createHash("sha256").update(JSON.stringify({ ...o.lite, log: undefined, materials: o.materials === true, colors: o.gameVpk !== undefined && o.colors !== false })).digest("hex").slice(0, 8)}`
     await stage(o, dir, liteKey, [manifestTiles], async () => {
       if (o.force || !existsSync(fullGltf)) {
         rmSync(join(work, "render-full"), { recursive: true, force: true }); mkdirSync(join(work, "render-full"), { recursive: true })
@@ -174,7 +181,16 @@ export const extract = async (o: ExtractOptions): Promise<ExtractResult> => {
       mkdirSync(liteDir, { recursive: true }) // an empty dir can vanish during the multi-minute export
       for (const f of readdirSync(liteDir)) rmSync(join(liteDir, f), { recursive: true, force: true })
       await liteReady
-      const r = buildLiteTiles(fullGltf, liteDir, { ...o.lite, log: o.log })
+      let colors: LiteOptions["colors"]
+      if (o.gameVpk !== undefined && o.colors !== false) {
+        const g = readGltfJson(fullGltf) as { meshes?: Array<{ name?: string }> }
+        const painted = await buildPaints({ runner: o.runner, gameVpk: o.gameVpk, mapVpk: o.vpk, map: o.map, workDir: join(work, "paints"), meshNames: (g.meshes ?? []).flatMap((m) => (m.name ? [m.name] : [])), log: o.log })
+        colors = painted.provider
+        const p = painted.report
+        warnings.push(`colours: ${p.resolved}/${p.stems} materials painted (${p.textured} with a texture, ${p.textures} textures) in ${p.seconds.toFixed(0)} s${p.unresolved.length ? `; unresolved: ${p.unresolved.slice(0, 15).join(", ")}${p.unresolved.length > 15 ? ` and ${p.unresolved.length - 15} more` : ""}` : ""}`)
+      }
+      const r = buildLiteTiles(fullGltf, liteDir, { ...o.lite, ...(colors ? { colors } : {}), log: o.log })
+      if (r.colors) warnings.push(`colours: ${r.colors.painted}/${r.colors.primitives} primitives painted from a material${r.colors.unpainted.length ? ` (fallback grey, e.g. ${r.colors.unpainted.slice(0, 5).join(", ")})` : ""}`)
       warnings.push(...r.warnings.map((w) => `lite render: ${w}`))
       writeFileSync(manifestTiles, JSON.stringify({ tiles: r.tiles, keptTriangles: r.keptTriangles, totalTriangles: r.totalTriangles, textureBytes: r.textureBytes }))
     })

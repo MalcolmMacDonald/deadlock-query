@@ -20,7 +20,7 @@ const DEFAULT_OUT = resolve(import.meta.dir, "..", "..", "..", "data", "bundles"
 const USAGE = `dlq-extract <command> [--json] [--game-dir <path>]
   doctor     check Deadlock install, build id and Source2Viewer CLI
   list-maps  maps present in the game paks
-  extract    --map <name> [--tier full|lite] [--force] [--out <dir>] [--tri-budget <n>] [--full-fraction <0..1>] [--keep-work] [--materials]   (default map ${lock.game.mainMap}, tier lite, out <repo>/data/bundles)
+  extract    --map <name> [--tier full|lite] [--force] [--out <dir>] [--tri-budget <n>] [--full-fraction <0..1>] [--keep-work] [--materials] [--no-colors]   (lite tier bakes vertex colours from the game's materials unless --no-colors; default map ${lock.game.mainMap}, tier lite, out <repo>/data/bundles)
   inspect    <bundle-dir>   validate manifest/entities against contracts, report sizes and frame sanity
   tile       <bundle-dir> [--lods <n>] [--lod-ratio <r>] [--lod-error <e>] [--keep-textures]   lite tier: meshopt-compress tiles, add simplified LODs (default 3: <id>#lod1, <id>#lod2 at 25 % and 6 %; error bound 0.1 of the tile), drop textures
   bake       <bundle-dir> [--cell-size <n>] [--exclude-layers a,b] [--floor-source auto|game-nav|collision] [--force]   collision BVH + sample grid (floorHeight, interior, wallDistance) into <bundle>/baked, recorded in the manifest (default cell ${DEFAULT_CELL_SIZE}, excludes ${DEFAULT_EXCLUDE_LAYERS.join(",")}; floorHeight from the game's nav faces when the bundle has collision/walkable.nav),
@@ -166,6 +166,7 @@ export const mainAsync = async (argv: ReadonlyArray<string>): Promise<number> =>
       const r = await extract({
         vpk: join(game.mapsDir, `${map}.vpk`), map, buildId: game.buildId, s2vVersion: tool.version ?? tool.pinnedVersion,
         tier, outRoot: flag(rest, "--out") ?? DEFAULT_OUT, runner: bunRunner(tool.path), force: rest.includes("--force"), keepWork: rest.includes("--keep-work"), materials: rest.includes("--materials"),
+        colors: !rest.includes("--no-colors"), gameVpk: join(game.citadel, "pak01_dir.vpk"),
         lite: {
           ...(flag(rest, "--tri-budget") ? { triBudget: Number(flag(rest, "--tri-budget")) } : {}),
           ...(flag(rest, "--full-fraction") ? { fullFraction: Number(flag(rest, "--full-fraction")) } : {})
