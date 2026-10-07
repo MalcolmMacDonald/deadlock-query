@@ -44,7 +44,7 @@
     },
     "modules/map-metadata": {
       "name": "@deadlock-query/map-metadata",
-      "version": "1.0.0-rc.2",
+      "version": "1.0.0-rc.1",
       "dependencies": {
         "@deadlock-query/contracts": "workspace:*",
         "effect": "4.0.1",
