@@ -6,6 +6,7 @@
 - **Last updated:** 2026-10-06
 
 ## Done
+- 2026-10-07 — The shell prefetches the query editor (Monaco chunk and TypeScript worker) when the browser is idle (`src/idle.ts` `whenIdle`, `prefetchEditor` in `src/editor.tsx`, called from `main.tsx`), so the editor tab opens faster. Tests: `test/idle.test.ts`.
 - M0: Vite + React 18 + dockview app, two dummy modules via static `src/modules.ts`, versioned localStorage layout persistence (`src/layout.ts`, unit-tested), Reset layout button. `bun run e2e` (Playwright, not in `verify`) drags a panel and checks it survives reload.
 
 - M1: `src/runtime.ts` `composeModules` builds each module Layer in isolation (shared MemoMap, base = contracts mock SelectionBus/ViewerService/DevAuth), merges healthy ones into one `ManagedRuntime`; failed modules' panels render `ErrorPanel`. `src/panels.tsx` mounts React components or `{ mount(container) => dispose }` handles, each in an error boundary. Unit tests + `e2e/isolation.ts` (`?demoFailure` adds a module whose Layer dies).
@@ -37,7 +38,6 @@
 
 ## Next
 - M5 leftover: a real Lighthouse accessibility run (acceptance is >= 90). It is not installed here; the axe-core audit (same engine) is clean on the dock, About, toast and palette in both themes, so the score should be high, but it is unmeasured. Also no keyboard way to resize groups yet.
-- Optional: call `qb.prefetchQueryEditor({ getWorkerUrl })` when idle (query-builder M6) so the editor opens faster.
 - M2 (remaining): swap the fixture for the published MapBundle once Malcolm publishes a real one.
 - M3 leftovers: share links are uncompressed (a default layout is a few KB); compress if links get unwieldy. Review preset has nothing to show until map-metadata ships a `metadata.*` panel.
 - Infra follow-up: ship `library.json` without the standalone editor app (it is only published for that file now).
