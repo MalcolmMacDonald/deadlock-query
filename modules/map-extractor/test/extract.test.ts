@@ -170,3 +170,11 @@ test("lite: a render export that exits 0 without n0.gltf fails as ExportFailed, 
   expect(err.stderr).toContain("n0.gltf")
   expect(err.stderr).toContain("not enough space")
 })
+
+test("vents: a triple-quoted multi-line value (the real pathnodes) is one flat number list", () => {
+  const text = ['====0====', 'classname  "citadel_zipline_path"', 'pathnodes                      """', '[', '\t[', '\t\t0.0, 0.0, 0.0, -0.0,', '\t\t2.5,', '\t],', '\t[', '\t\t238.5, 609.7, -8.0, 0.3,', '\t\t1.0,', '\t],', ']', '"""', 'targetname  "x"'].join("\r\n")
+  const props = parseVents(text)[0]!.props
+  expect(props["pathnodes"]).toEqual([0, 0, 0, -0, 2.5, 238.5, 609.7, -8, 0.3, 1])
+  expect(props["targetname"]).toBe("x")
+  expect(Object.keys(props)).toEqual(["classname", "pathnodes", "targetname"])
+})
