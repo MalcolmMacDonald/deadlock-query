@@ -88,6 +88,25 @@ export const rowProperties = (result: QueryResult, row: number): Record<string, 
   return out
 }
 
+/** Most distinct looks a styled result may have; more than this and the style columns are ignored (one layer each). */
+export const MAX_STYLE_GROUPS = 12
+
+/** Result columns that style the map: a string column named `color` (any CSS colour) and a number column named `size`. */
+const styleColumns = (result: QueryResult): { color: number; size: number } | undefined => {
+  const find = (name: string, type: string) => result.columns.findIndex((c) => c.name === name && c.type === type)
+  const color = find("color", "string"), size = find("size", "number")
+  if (color < 0 && size < 0) return undefined
+  const cols = { color, size }
+  const looks = new Set(result.rows.map((_, r) => JSON.stringify(rowStyle(result, r, cols))))
+  return looks.size > MAX_STYLE_GROUPS ? undefined : cols
+}
+
+const rowStyle = (result: QueryResult, row: number, cols: { color: number; size: number }): OverlayStyle => {
+  const c = cols.color >= 0 ? result.rows[row]![cols.color] : undefined
+  const z = cols.size >= 0 ? result.rows[row]![cols.size] : undefined
+  return { ...(typeof c === "string" && c !== "" ? { color: c } : {}), ...(typeof z === "number" && Number.isFinite(z) && z > 0 ? { size: z } : {}) }
+}
+
 export interface ResultLayer {
   readonly id: string
   readonly column: string
@@ -106,16 +125,21 @@ export const overlayFeatures = (result: QueryResult, layerId: string = RESULT_LA
   const rowToFeatures = new Map<string, string[]>()
   const props = new Map<number, Record<string, unknown>>() // shared by a row's features, one per geometry column
   const propsOf = (row: number) => { let p = props.get(row); if (!p) props.set(row, p = rowProperties(result, row)); return p }
+  const styleCols = styleColumns(result)
   result.geometryColumns.forEach((geomCol, n) => {
-    const id = columnLayerId(layerId, n)
-    const features: OverlayFeature[] = []
+    const base = columnLayerId(layerId, n)
+    const groups = new Map<string, { id: string; style: OverlayStyle; features: OverlayFeature[] }>()
     for (const { rowId, row, feature } of geometryToFeatures(result, geomCol)) {
-      const featureId = `${id}:${features.length}`
+      const rs = styleCols ? rowStyle(result, row, styleCols) : undefined
+      const key = rs ? JSON.stringify(rs) : ""
+      let g = groups.get(key)
+      if (!g) groups.set(key, g = { id: groups.size === 0 ? base : `${base}@${groups.size}`, style: { color: COLUMN_COLORS[n % COLUMN_COLORS.length]!, ...rs }, features: [] })
+      const featureId = `${g.id}:${g.features.length}`
       featureToRow.set(featureId, rowId)
       rowToFeatures.set(rowId, [...(rowToFeatures.get(rowId) ?? []), featureId])
-      features.push({ ...feature, label: rowLabel(result, row, geomCol), properties: propsOf(row) })
+      g.features.push({ ...feature, label: rowLabel(result, row, geomCol), properties: propsOf(row) })
     }
-    if (features.length > 0) layers.push({ id, column: geomCol, style: { color: COLUMN_COLORS[n % COLUMN_COLORS.length]! }, features })
+    for (const g of groups.values()) layers.push({ id: g.id, column: geomCol, style: g.style, features: g.features })
   })
   return { layers, features: layers.flatMap((l) => l.features), featureToRow, rowToFeatures }
 }
