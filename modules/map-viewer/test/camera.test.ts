@@ -4,7 +4,7 @@ import { Effect } from "effect"
 import { MockMapDataService, worldToThree } from "@deadlock-query/contracts"
 import {
   FOCUS_MIN_DISTANCE, MAX_PITCH, buildScene, decodeCamera, encodeCamera, eyeOf, fly, frameBounds, frameEntities, frameSelection, glbToThreeMatrix, loadViewerData,
-  pan, poseFromEye, rotate, switchMode, zoom, WORLD_TO_THREE
+  keyboardStep, pan, poseFromEye, rotate, switchMode, zoom, WORLD_TO_THREE
 } from "../src/index.ts"
 
 const close = (a: ReadonlyArray<number>, b: ReadonlyArray<number>, dp = 3) => a.forEach((v, i) => expect(v).toBeCloseTo(b[i]!, dp))
@@ -102,4 +102,19 @@ test("frameSelection centres on the selection's bounds, keeps the view direction
   close(many.target, [1000, 500, 200])
   // The bounding sphere (radius ~1.1k) fits inside the vertical field of view.
   expect(many.distance).toBeGreaterThan(Math.hypot(2000, 1000, 400) / 2 / Math.sin((50 * Math.PI) / 360))
+})
+
+test("keyboardStep: arrows pan in Map, turn in Orbit and Fly, plus/minus zoom, Shift triples, other keys do nothing", () => {
+  const p = { target: [0, 0, 0] as [number, number, number], yaw: 0, pitch: -1, distance: 1000 }
+  const right = keyboardStep(p, "map", "ArrowRight", 800)
+  const drag = pan(p, -60, 0, 800)
+  close(right.target, drag.target)
+  expect(keyboardStep(p, "map", "ArrowRight", 800, true).target[1]).toBeCloseTo(right.target[1]! * 3, 3)
+  expect(keyboardStep(p, "orbit", "ArrowLeft", 800).yaw).toBeGreaterThan(p.yaw)
+  expect(keyboardStep(p, "orbit", "ArrowLeft", 800).target).toEqual(p.target)
+  expect(keyboardStep(p, "fly", "ArrowLeft", 800).target).not.toEqual(p.target)
+  expect(keyboardStep(p, "map", "+", 800).distance).toBeLessThan(p.distance)
+  expect(keyboardStep(p, "orbit", "-", 800).distance).toBeGreaterThan(p.distance)
+  expect(keyboardStep(p, "fly", "+", 800)).toBe(p)
+  expect(keyboardStep(p, "map", "x", 800)).toBe(p)
 })

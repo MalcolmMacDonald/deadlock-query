@@ -1,7 +1,7 @@
 # map-viewer — state
 
 - **Status:** M6 done (entity layers, screenshot markers and popups); M5 done (`registerTool` is on the `ViewerService` layer); M4 done; real-hardware perf checks pending
-- **Version:** 0.16.0
+- **Version:** 0.17.0
 - **Current milestone:** M7 (SDF labels, performance pass)
 - **Last updated:** 2026-10-07
 
@@ -44,6 +44,8 @@
 - 2026-10-07 — M7 (outlined labels): label sprites are drawn as haloed text (dark stroke, round joins, mipmapped texture) instead of text on a dark pill, so they stay readable over any surface without hiding the map. Chose a canvas halo over a true SDF atlas: no new dependency or font asset, same declutter and constant-pixel sizing; revisit with a glyph atlas only if label counts need it. Remaining M7: theming, touch, keyboard-only a11y, docs.
 
 - 2026-10-07 — `ViewerService.activateTool(id)` / `deactivateTool()` (optional in contracts): `ViewerController.activateTool` selects a built-in or registered tool via `tools.setTool` and throws on an unknown id (a defect through the service); `deactivateTool` returns to Select. Unblocks map-metadata M2.
+
+- 2026-10-07 — M7 (keyboard-only camera): with the canvas focused, arrows pan (Map) or turn the view (Orbit about the target, Fly about the eye), `+`/`-` zoom (Map/Orbit), Shift triples the step (`keyboardStep` in `src/camera.ts`, pure and unit-tested). The canvas has `role="application"` and an `aria-label` listing the keys, and a focus ring that shows for keyboard focus only (`:focus-visible`). Remaining M7: touch (pinch/two-finger), theming, docs.
 
 ## In progress
 - (nothing)

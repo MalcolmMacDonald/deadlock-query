@@ -96,6 +96,12 @@ export const makeViewerPanel = (data: ViewerData, controller: ViewerController =
     canvas.dataset.testid = "viewer-canvas"
     canvas.style.cssText = "width:100%;height:100%;display:block;outline:none"
     root.appendChild(canvas)
+    // Keyboard users get a visible focus ring; mouse clicks (which also focus the canvas) do not.
+    canvas.setAttribute("role", "application")
+    canvas.setAttribute("aria-label", "Map viewer. Arrow keys move the camera, plus and minus zoom, 1 2 3 switch camera mode, F focuses the selection.")
+    const ring = () => { canvas.style.outline = canvas.matches(":focus-visible") ? "2px solid #6aa9ff" : "none"; canvas.style.outlineOffset = "-2px" }
+    canvas.addEventListener("focus", ring)
+    canvas.addEventListener("blur", ring)
     const bar = document.createElement("div")
     bar.style.cssText = "position:absolute;top:8px;left:8px;display:flex;gap:4px;font:12px sans-serif"
     root.appendChild(bar)
