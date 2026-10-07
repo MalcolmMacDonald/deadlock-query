@@ -76,7 +76,7 @@ export const renderSidebar = (doc: Document, opts: SidebarOptions): Sidebar => {
   list.dataset.testid = "docs-list"
   const detail = el(doc, "div", "doc-detail")
   detail.dataset.testid = "docs-detail"
-  detail.textContent = "Select an entry to see its signature, notes and examples."
+  detail.textContent = "Select an entry to see its signature, notes and examples. Map: name a string column `color` (a CSS colour) and a number column `size` to style points; Pin keeps a result on the map while you run others."
   docsPane.append(search, list, detail)
 
   let selectedId: string | undefined
