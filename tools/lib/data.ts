@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto"
-import { mkdirSync, writeFileSync } from "node:fs"
-import { spawnSync } from "node:child_process"
+import { mkdirSync } from "node:fs"
+import { extractZip } from "./zip.ts"
 
 export interface DataAsset { name: string; sha256: string; dest: string }
 export interface DataPointer { buildId: string; tag: string; assets: DataAsset[] }
@@ -57,10 +57,6 @@ export const fetchData = async (
     if (got !== a.sha256) throw new Error(`${a.name}: sha256 mismatch (expected ${a.sha256}, got ${got})`)
     const dir = `${out}/${a.dest}`
     mkdirSync(dir, { recursive: true })
-    const zip = `${dir}/.asset.zip`
-    writeFileSync(zip, bytes)
-    const r = spawnSync("unzip", ["-q", "-o", zip, "-d", dir])
-    if (r.status !== 0) throw new Error(`unzip ${a.name} failed: ${r.stderr}`)
-    spawnSync("rm", ["-f", zip])
+    extractZip(bytes, dir)
   }
 }
