@@ -1,7 +1,7 @@
 import * as THREE from "three"
 import {
-  CAMERA_KEYS, eyeOf, fly, keyboardStep, pan, rotate, switchMode, zoom,
-  type CameraMode, type CameraPose
+  CAMERA_KEYS, eyeOf, fly, keyboardStep, pan, pinchDelta, rotate, switchMode, zoom,
+  type CameraMode, type CameraPose, type TouchPair
 } from "./camera.ts"
 import { decodeCamera, encodeCamera } from "./hashState.ts"
 
@@ -74,15 +74,38 @@ export class ViewerControls {
     el.tabIndex = 0
     el.style.touchAction = "none"
     this.on(el, "contextmenu", (e: Event) => e.preventDefault())
+    // Touch: two fingers pinch to zoom and drag to pan (any mode); one finger keeps the mode's usual drag.
+    const touches = new Map<number, { x: number; y: number }>()
+    const pair = (): TouchPair | undefined => {
+      const v = [...touches.values()]
+      return v.length === 2 ? [v[0]!, v[1]!] : undefined
+    }
     this.on(el, "pointerdown", (e: PointerEvent) => {
       el.focus()
+      if (e.pointerType === "touch") {
+        touches.set(e.pointerId, { x: e.clientX, y: e.clientY })
+        if (touches.size === 2) { last = undefined; el.setPointerCapture?.(e.pointerId); return }
+      }
       if (this.o.intercept?.(e)) return
       last = { x: e.clientX, y: e.clientY, button: e.button }
       el.setPointerCapture?.(e.pointerId)
       el.focus()
     })
-    this.on(el, "pointerup", () => { last = undefined })
+    const release = (e: PointerEvent) => { touches.delete(e.pointerId); last = undefined }
+    this.on(el, "pointerup", release)
+    this.on(el, "pointercancel", release)
     this.on(el, "pointermove", (e: PointerEvent) => {
+      if (touches.has(e.pointerId)) {
+        const before = pair()
+        touches.set(e.pointerId, { x: e.clientX, y: e.clientY })
+        const after = pair()
+        if (before && after) {
+          const d = pinchDelta(before, after)
+          this.pose = zoom(pan(this.pose, d.dx, d.dy, el.clientHeight, FOV_DEG), 1 / d.scale)
+          this.apply()
+          return
+        }
+      }
       if (!last) return
       const dx = e.clientX - last.x, dy = e.clientY - last.y
       last = { x: e.clientX, y: e.clientY, button: last.button }

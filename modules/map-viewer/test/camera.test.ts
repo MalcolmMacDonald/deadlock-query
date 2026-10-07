@@ -4,7 +4,7 @@ import { Effect } from "effect"
 import { MockMapDataService, worldToThree } from "@deadlock-query/contracts"
 import {
   FOCUS_MIN_DISTANCE, MAX_PITCH, buildScene, decodeCamera, encodeCamera, eyeOf, fly, frameBounds, frameEntities, frameSelection, glbToThreeMatrix, loadViewerData,
-  keyboardStep, pan, poseFromEye, rotate, switchMode, zoom, WORLD_TO_THREE
+  keyboardStep, pan, pinchDelta, poseFromEye, rotate, switchMode, zoom, WORLD_TO_THREE
 } from "../src/index.ts"
 
 const close = (a: ReadonlyArray<number>, b: ReadonlyArray<number>, dp = 3) => a.forEach((v, i) => expect(v).toBeCloseTo(b[i]!, dp))
@@ -117,4 +117,14 @@ test("keyboardStep: arrows pan in Map, turn in Orbit and Fly, plus/minus zoom, S
   expect(keyboardStep(p, "orbit", "-", 800).distance).toBeGreaterThan(p.distance)
   expect(keyboardStep(p, "fly", "+", 800)).toBe(p)
   expect(keyboardStep(p, "map", "x", 800)).toBe(p)
+})
+
+test("pinchDelta: spreading fingers scales up, moving both moves the midpoint, a collapsed pair is scale 1", () => {
+  const a = [{ x: 0, y: 0 }, { x: 100, y: 0 }] as const
+  const spread = pinchDelta(a, [{ x: -50, y: 0 }, { x: 150, y: 0 }])
+  expect(spread.scale).toBeCloseTo(2)
+  expect(spread.dx).toBeCloseTo(0)
+  const moved = pinchDelta(a, [{ x: 10, y: 20 }, { x: 110, y: 20 }])
+  expect(moved).toEqual({ scale: 1, dx: 10, dy: 20 })
+  expect(pinchDelta([{ x: 5, y: 5 }, { x: 5, y: 5 }], a).scale).toBe(1)
 })
