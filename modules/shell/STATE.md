@@ -41,6 +41,8 @@
 
 - 2026-10-07 — Reviewer panel: `metadata.review` ("Review submissions", map-metadata's `createReviewController` + `mountReviewPanel` over `proxyApi()` and the shared viewer) is a dev-only module entry in `src/modules.ts`, so it exists only on dev builds behind the lock screen; prod omits it. The editor now also passes `identity` so "Review & submit" knows the map. The proxy still needs the commit/merge/close routes (infra request in map-metadata STATE.md) before Accept/Reject work live.
 
+- 2026-10-07 — History panel: `metadata.history` ("Metadata history", public) shows map-metadata's `mountHistoryPanel` over every record of `metadata.bundle.json` (`loadMetadataSupport` now also returns all records, not just accepted ones); clicking a record flies the camera to its position. Empty until a bundle is published.
+
 ## In progress
 - (nothing yet)
 

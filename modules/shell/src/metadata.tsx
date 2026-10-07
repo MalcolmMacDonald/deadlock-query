@@ -56,6 +56,12 @@ export const metadataModule: ModuleDefinition<ViewerService> = {
       defaultPlacement: "right",
       component: ({ api }: IDockviewPanelProps) => <LazyPanel api={api}>{() => <MetadataHost />}</LazyPanel>,
     },
+    {
+      id: "metadata.history",
+      title: "Metadata history",
+      defaultPlacement: "right",
+      component: ({ api }: IDockviewPanelProps) => <LazyPanel api={api}>{() => <HistoryHost />}</LazyPanel>,
+    },
   ],
 }
 
@@ -98,4 +104,31 @@ export const metadataReviewModule: ModuleDefinition<ViewerService> = {
       component: ({ api }: IDockviewPanelProps) => <LazyPanel api={api}>{() => <ReviewHost />}</LazyPanel>,
     },
   ],
+}
+
+/** Mounts the history panel: the audit trail of every record in the published `metadata.bundle.json`, click to fly there. */
+const mountHistory = (container: HTMLElement): (() => void) => {
+  let dispose = () => {}
+  let cancelled = false
+  void Promise.all([import("@deadlock-query/map-metadata/editor"), viewerReady, loadMetadataSupport(BUNDLE_MANIFEST_URL).catch(() => undefined)])
+    .then(([md, viewer, support]) => {
+      if (cancelled) return
+      const records = support?.records ?? []
+      const panel = md.mountHistoryPanel(container, () => records, (id) => {
+        const at = records.find((r) => r.id === id)
+        const p = at && "position" in at ? (at.position as readonly [number, number, number]) : undefined
+        if (p) void Effect.runFork(viewer.flyTo([p[0], p[1], p[2]]))
+      })
+      dispose = () => panel.dispose()
+    })
+    .catch((e) => {
+      container.textContent = `History panel failed to load: ${String(e)}`
+    })
+  return () => { cancelled = true; dispose() }
+}
+
+const HistoryHost = () => {
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => mountHistory(ref.current!), [])
+  return <div ref={ref} style={{ width: "100%", height: "100%", overflow: "auto" }} />
 }

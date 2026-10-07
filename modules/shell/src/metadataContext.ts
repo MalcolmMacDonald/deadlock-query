@@ -21,6 +21,8 @@ export interface MetadataSupport {
   readonly manifest: Pick<Manifest, "mapName" | "gameBuildId" | "bounds">
   readonly collision: CollisionProbe | undefined
   readonly accepted: ReadonlyArray<MetadataRecord>
+  /** Every record of `metadata.bundle.json` whatever its status (the history panel's audit trail). */
+  readonly records: ReadonlyArray<MetadataRecord>
 }
 
 type Fetch = (url: string) => Promise<Response>
@@ -36,7 +38,7 @@ export const loadMetadataSupport = async (manifestUrl: string, fetcher: Fetch = 
   if (!manifestRes.ok) return undefined
   const manifest = (await manifestRes.json()) as Manifest
   const bvhFile = manifest.baked?.bvh?.file
-  const [collision, accepted] = await Promise.all([
+  const [collision, records] = await Promise.all([
     bvhFile
       ? fetcher(new URL(bvhFile, base).href)
           .then(async (r) => (r.ok ? probeFromRaycaster(Raycaster.deserialize(await r.arrayBuffer())) : undefined))
@@ -46,9 +48,9 @@ export const loadMetadataSupport = async (manifestUrl: string, fetcher: Fetch = 
       .then(async (r) => {
         if (!r.ok) return []
         const json = (await r.json()) as { records?: ReadonlyArray<MetadataRecord> }
-        return (json.records ?? []).filter((x) => x.status === "accepted")
+        return json.records ?? []
       })
       .catch(() => []),
   ])
-  return { manifest, collision, accepted }
+  return { manifest, collision, accepted: records.filter((x) => x.status === "accepted"), records }
 }
