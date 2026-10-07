@@ -98,6 +98,8 @@ Also verified: library-class member completions with TSDoc signature, string-lit
 
 - 2026-10-07 — Result columns: the editor's starting query returns objects (`guardian`, `position`, `nearestHealingOrb`), so the table shows real column names instead of c1/c2/c3. Array rows still get positional `c1…` names on purpose (exports, share links and saved queries depend on them); the docs/gallery already show object selects.
 
+- 2026-10-07 — UX round two: clicking a result row now also flies the map camera to it (first feature: the point, or the centre of a line/area; `featureFocus`, `focusRow`). Map picks do not move the camera. Already present and not redone: sortable/filterable/paged table, CSV/JSON/GeoJSON export and copy, gallery, saved queries, share links, friendly errors, real column names.
+
 ## In progress
 - (nothing)
 

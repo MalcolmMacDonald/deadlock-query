@@ -70,6 +70,16 @@ export const rowLabel = (result: QueryResult, row: number, geometryColumnName: s
   return `#${row + 1}`
 }
 
+/** Where to aim the camera for a row: the first feature's point, or the centre of its line/area. `undefined` for a row with no geometry. */
+export const featureFocus = (f: OverlayFeature | undefined): Vec3 | undefined => {
+  if (!f) return undefined
+  if (f.type === "point") return f.at
+  const pts = f.type === "polygon" ? f.ring : f.points
+  if (pts.length === 0) return undefined
+  const sum = pts.reduce<[number, number, number]>((a, p) => [a[0] + p[0], a[1] + p[1], a[2] + p[2]], [0, 0, 0])
+  return [sum[0] / pts.length, sum[1] / pts.length, sum[2] / pts.length]
+}
+
 /** The other columns of a result row (everything but its geometry columns), keyed by column name, for the viewer's inspector. */
 export const rowProperties = (result: QueryResult, row: number): Record<string, unknown> => {
   const geometry = new Set(result.geometryColumns)
