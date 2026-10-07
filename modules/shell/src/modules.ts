@@ -1,7 +1,7 @@
 import type { ModuleDefinition } from "@deadlock-query/contracts"
 import { shellModule } from "./about.tsx"
 import { editorModule } from "./editor.tsx"
-import { metadataModule } from "./metadata.tsx"
+import { metadataModule, metadataReviewModule } from "./metadata.tsx"
 import { dummyBroken, dummyDevOnly } from "./dummy/modules.tsx"
 import { target, type Target } from "./target.ts"
 import { viewerModule } from "./viewer.ts"
@@ -23,6 +23,7 @@ export const moduleEntries: ReadonlyArray<ModuleEntry> = [
   { module: viewerModule },
   { module: editorModule },
   { module: metadataModule },
+  { module: metadataReviewModule, devOnly: true },
   { module: shellModule },
   ...(demoFailure ? [{ module: dummyBroken }] : []),
   ...(demoDevOnly ? [{ module: dummyDevOnly, devOnly: true }] : []),

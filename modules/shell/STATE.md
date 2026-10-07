@@ -39,6 +39,8 @@
 
 - 2026-10-07 — Metadata editor context: `src/metadataContext.ts` (`loadMetadataSupport`) reads the published manifest, builds a `CollisionProbe` from `baked/collision.bvh` with spatial-core's `Raycaster` (`groundZ` = first hit of a downward ray; `insideSolid` is conservative, odd crossings up and down on slightly tilted rays so an open mesh cannot flag good points) and loads `metadata.bundle.json` beside the manifest (accepted records only; 404 = none). `src/metadata.tsx` passes bounds, the probe and the accepted records as the controller's `context` / `setAccepted`; each missing piece degrades the editor's checks. `module.json` / `package.json` now depend on spatial-core. Checked the probe on the real dl_midtown BVH (ground under the map origin at z 1536, 3 ms). No `metadata.bundle.json` is published yet, so accepted records are empty until the data pipeline ships one.
 
+- 2026-10-07 — Reviewer panel: `metadata.review` ("Review submissions", map-metadata's `createReviewController` + `mountReviewPanel` over `proxyApi()` and the shared viewer) is a dev-only module entry in `src/modules.ts`, so it exists only on dev builds behind the lock screen; prod omits it. The editor now also passes `identity` so "Review & submit" knows the map. The proxy still needs the commit/merge/close routes (infra request in map-metadata STATE.md) before Accept/Reject work live.
+
 ## In progress
 - (nothing yet)
 
