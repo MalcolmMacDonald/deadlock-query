@@ -3,13 +3,13 @@ import { readFileSync, writeFileSync } from "node:fs"
 import { parseArgs } from "node:util"
 import { EXIT } from "./errors.ts"
 import { loadBundle } from "./occlusion.ts"
-import { DEFAULT_FOV, DEFAULT_RESOLUTION, gridPlan, parsePlan, PlanError, ringPlan, serializePlan, type PlanMeta, type ShotPlan } from "./plan.ts"
+import { DEFAULT_FOV, DEFAULT_RESOLUTION, gridPlanWithFloor, parsePlan, PlanError, ringPlan, serializePlan, type PlanMeta, type ShotPlan } from "./plan.ts"
 import { standoffPlan, type Occlusion, targetsFromAnnotations, targetsFromMetadata, type Extracted } from "./targets.ts"
 
 export const PLAN_USAGE = `dlq-shoot plan <generator> [options]   (prints the plan JSON, or writes it with --out)
   common     [--map <name>] [--build <gameBuildId>] [--bundle <dir>] [--fov ${DEFAULT_FOV}] [--resolution ${DEFAULT_RESOLUTION.width}x${DEFAULT_RESOLUTION.height}] [--show-hud] [--out <file>]
              --bundle takes the map name, build id and (for grid) the xy bounds from <dir>/manifest.json
-  grid       --z <height> --spacing <units> [--bounds minX,minY,maxX,maxY] [--yaws 4] [--pitch 0]
+  grid       (--z <height> | --above-floor <height> [--z <reference height>]) --spacing <units> [--bounds minX,minY,maxX,maxY] [--yaws 4] [--pitch 0]
   ring       --at x,y,z [--at x,y,z ...] [--yaws 8] [--pitch 0]
   from-file  <plan.json>   validate and rewrite in canonical form
   from-annotations  <annotations.json> [--layer <id>]   look at each point/label annotation from several sides
@@ -38,7 +38,7 @@ export const planMain = (argv: ReadonlyArray<string>, write: (text: string) => v
       options: {
         map: { type: "string" }, build: { type: "string" }, bundle: { type: "string" }, out: { type: "string" },
         fov: { type: "string" }, resolution: { type: "string" }, "show-hud": { type: "boolean" },
-        bounds: { type: "string" }, spacing: { type: "string" }, z: { type: "string" }, yaws: { type: "string" }, pitch: { type: "string" },
+        bounds: { type: "string" }, "above-floor": { type: "string" }, spacing: { type: "string" }, z: { type: "string" }, yaws: { type: "string" }, pitch: { type: "string" },
         at: { type: "string", multiple: true },
         layer: { type: "string" }, "all-status": { type: "boolean" }, "no-los": { type: "boolean" }, standoffs: { type: "string" }, distance: { type: "string" }, "eye-height": { type: "string" }, "bearing-offset": { type: "string" }
       }
@@ -65,9 +65,11 @@ export const planMain = (argv: ReadonlyArray<string>, write: (text: string) => v
       }
       let manifest: Manifest | undefined
       let occlusion: Occlusion | undefined
+      let floorAt: ReturnType<typeof loadBundle>["floorAt"]
       if (values.bundle) {
         const b = loadBundle(values.bundle)
         manifest = b.manifest
+        floorAt = b.floorAt
         if (extracted !== undefined && values["no-los"] !== true) {
           occlusion = b.occlusion
           if (occlusion === undefined) console.error(`! ${values.bundle} has no baked collision (run dlq-extract bake): lines of sight are not checked`)
@@ -103,10 +105,20 @@ export const planMain = (argv: ReadonlyArray<string>, write: (text: string) => v
       } else {
         const b = values.bounds ? nums(values.bounds, 4, "--bounds") : manifest ? [manifest.bounds.min[0], manifest.bounds.min[1], manifest.bounds.max[0], manifest.bounds.max[1]] : undefined
         if (!b) throw new PlanError(["grid needs --bounds minX,minY,maxX,maxY or --bundle <dir>"])
+        const aboveFloor = num(values["above-floor"], undefined, "above-floor")
         const spacing = num(values.spacing, undefined, "spacing")
-        const z = num(values.z, undefined, "z")
-        if (spacing === undefined || z === undefined) throw new PlanError(["grid needs --spacing <units> and --z <camera height>"])
-        plan = gridPlan(meta, { bounds: b as unknown as [number, number, number, number], spacing, z, ...(yaws !== undefined ? { yaws } : {}), ...(pitch !== undefined ? { pitch } : {}) })
+        let z = num(values.z, undefined, "z")
+        if (spacing === undefined) throw new PlanError(["grid needs --spacing <units> and --z <camera height> (or --above-floor <height>)"])
+        let floor: Parameters<typeof gridPlanWithFloor>[1]["aboveFloor"]
+        if (aboveFloor !== undefined) {
+          if (!floorAt) throw new PlanError(["--above-floor needs --bundle <dir> with a baked navmesh (run `dlq-extract bake`)"])
+          // Without --z, prefer the floor nearest the middle of the map's height range.
+          z ??= manifest ? (manifest.bounds.min[2] + manifest.bounds.max[2]) / 2 : 0
+          floor = { height: aboveFloor, reach: spacing, floorAt }
+        } else if (z === undefined) throw new PlanError(["grid needs --spacing <units> and --z <camera height> (or --above-floor <height>)"])
+        const r = gridPlanWithFloor(meta, { bounds: b as unknown as [number, number, number, number], spacing, z: z!, ...(floor ? { aboveFloor: floor } : {}), ...(yaws !== undefined ? { yaws } : {}), ...(pitch !== undefined ? { pitch } : {}) })
+        if (r.dropped > 0) console.error(`! dropped ${r.dropped} grid cells with no walkable floor within ${spacing} units`)
+        plan = r.plan
       }
     }
     const text = serializePlan(plan)
