@@ -7,7 +7,7 @@ import { QueryEngine, SelectionBus, ViewerService, type QueryResult } from "@dea
 import { runQuery } from "../app/engine.ts"
 import { monacoCompiler } from "../app/monacoCompiler.ts"
 import { createResultsTable, type ResultsTable } from "../results/resultsTable.ts"
-import { overlayFeatures, setResultOverlay } from "../app/viewerIntegration.ts"
+import { featureFocus, overlayFeatures, setResultOverlay } from "../app/viewerIntegration.ts"
 import { buildDocIndex, insertionFor, type DocIndex, type DocItem } from "../docs/catalog.ts"
 import { makeQueryEngine } from "../engine/engine.ts"
 import { makeFriendly } from "../engine/friendly.ts"
@@ -350,7 +350,7 @@ export const mountQueryEditor = async (container: HTMLElement, opts: QueryEditor
         }),
         (table = createResultsTable(doc, result, {
           selectedRows: new Set(selectedRowIds),
-          onRowSelect: (rowId: string) => applySelection([rowId], true)
+          onRowSelect: (rowId: string) => { applySelection([rowId], true); focusRow(rowId) }
         })).el
       )
     }
@@ -361,6 +361,15 @@ export const mountQueryEditor = async (container: HTMLElement, opts: QueryEditor
       table?.setSelected(new Set(ids))
       fire(viewer.highlight(ids.flatMap((id) => features.rowToFeatures.get(id) ?? [])))
       if (publish) fire(selection.select(ids))
+    }
+    /** Flies the map camera to a result row's first feature (a row clicked in the table; a map pick is already under the camera). */
+    const focusRow = (rowId: string) => {
+      const featureId = features.rowToFeatures.get(rowId)?.[0]
+      const sep = featureId?.lastIndexOf(":") ?? -1
+      if (featureId === undefined || sep < 0) return
+      const layer = features.layers.find((l) => l.id === featureId.slice(0, sep))
+      const at = featureFocus(layer?.features[Number(featureId.slice(sep + 1))])
+      if (at) fire(viewer.flyTo(at))
     }
     const pickFiber = new AbortController()
     void Effect.runPromise(

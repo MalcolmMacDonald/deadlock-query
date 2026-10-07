@@ -105,6 +105,8 @@ test.skipIf(!haveBrowser)("results drive the viewer overlay, and row ↔ pick �
   await page.click(`tr[data-row-id="${ids[1]}"]`)
   const sel1 = await page.evaluate(() => ({ highlight: (self as any).__qb.host.log.highlights.at(-1) }))
   expect(sel1.highlight).toEqual([featureId(1)])
+  // …and the camera flies to the row's point.
+  expect(await page.evaluate(() => (self as any).__qb.host.log.flights.length)).toBe(1)
   expect(await page.$$eval("tr.selected", (r) => r.map((x) => (x as HTMLElement).dataset.rowId))).toEqual([ids[1]])
 
   // Viewer pick → row selected.

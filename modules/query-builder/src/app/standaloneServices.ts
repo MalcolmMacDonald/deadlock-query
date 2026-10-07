@@ -23,13 +23,13 @@ const channel = <A>() => {
  */
 export const makeStandaloneServices = () => {
   const events = channel<ViewerEvent>()
-  const log = { overlays: new Map<string, ReadonlyArray<OverlayFeature>>(), highlights: [] as Array<ReadonlyArray<string>> }
+  const log = { overlays: new Map<string, ReadonlyArray<OverlayFeature>>(), highlights: [] as Array<ReadonlyArray<string>>, flights: [] as Array<readonly [number, number, number]> }
   let selected: ReadonlyArray<string> = []
   const viewer: ViewerServiceShape = {
     loadBundle: () => Effect.void,
     getCamera: Effect.succeed({ position: [0, 0, 0] as Vec3, target: [0, 0, 0] as Vec3 }),
     setCamera: () => Effect.void,
-    flyTo: () => Effect.void,
+    flyTo: (target) => Effect.sync(() => void log.flights.push(target)),
     setOverlay: (layerId, features) => Effect.sync(() => void log.overlays.set(layerId, features as ReadonlyArray<OverlayFeature>)),
     removeOverlay: (layerId) => Effect.sync(() => void log.overlays.delete(layerId)),
     highlight: (ids) => Effect.sync(() => void log.highlights.push(ids)),
