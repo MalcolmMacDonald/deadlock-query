@@ -73,7 +73,11 @@ export const CollisionRef = Schema.Struct({
   /** Per-file transform (physics GLB carries ~0.0254 scale + axis swap; see S2). */
   glbToWorld: Mat4S,
   /** Names of collision layers (InteractAs tags) present, e.g. solid, playerclip, window. */
-  layers: Schema.Array(Schema.String)
+  layers: Schema.Array(Schema.String),
+  /** The game's own nav faces (`maps/<map>.nav`), copied into the bundle when the map ships one. Absent on older bundles. */
+  walkableNav: Schema.optionalKey(Schema.String),
+  /** The game's nav flow map (`maps/<map>.navflowmap`, binary KV3): node-to-node connections used for off-mesh links. */
+  walkableFlowmap: Schema.optionalKey(Schema.String)
 })
 
 /** A file under the bundle directory, integrity-checked like a tile. */
@@ -115,10 +119,34 @@ export const BakedSampleGrid = Schema.Struct({
 })
 export type BakedSampleGrid = typeof BakedSampleGrid.Type
 
-/** Agent used for the navmesh, in Source units. */
+/** Agent used for the Recast navmesh, in Source units. */
 export const NavAgent = Schema.Struct({
   radius: Schema.Number, height: Schema.Number, climb: Schema.Number, slopeDegrees: Schema.Number
 })
+
+/** Where the navmesh polygons came from: the game's own nav faces, or Recast run over the collision soup. */
+export const NavSource = Schema.Literals(["game-nav", "recast"])
+export type NavSource = typeof NavSource.Type
+
+/**
+ * Stats of the game's nav faces after cleaning (weld, drop repeats, stitch T-junctions). Written as `walkable` on the
+ * navmesh record (`file` is the nav file, `flowFile` the flow map when links were taken from it) and, with the grid
+ * coverage counts, on `Baked`.
+ */
+export const WalkableStats = Schema.Struct({
+  file: Schema.String,
+  sha256: Schema.String,
+  /** Faces in the game's file. */
+  faces: Schema.Number,
+  /** Faces left after dropping repeats (same vertex set) and zero-area faces. */
+  polygons: Schema.Number,
+  duplicateFaces: Schema.Number,
+  degenerateFaces: Schema.Number,
+  vertices: Schema.Number,
+  /** Boundary edges split because another polygon's vertex lies on them (T-junctions). */
+  stitchedEdges: Schema.Number
+})
+export type WalkableStats = typeof WalkableStats.Type
 
 export const BakedNavmesh = Schema.Struct({
   ...BakedFile.fields,
@@ -126,8 +154,7 @@ export const BakedNavmesh = Schema.Struct({
   inputKey: Schema.String,
   polygons: Schema.Number,
   vertices: Schema.Number,
-  tiles: Schema.Number,
-  /** Border edges split so neighbouring Recast tiles share vertices. */
+  /** Border edges split so neighbouring tiles share vertices. */
   stitchedEdges: Schema.Number,
   components: Schema.Number,
   /** Polygons of the largest connected component / all polygons, 0..1. */
@@ -137,10 +164,23 @@ export const BakedNavmesh = Schema.Struct({
     dropped: Schema.Number,
     byKind: Schema.Record(Schema.String, Schema.Number)
   }),
-  agent: NavAgent,
-  recast: Schema.Struct({ cellSize: Schema.Number, cellHeight: Schema.Number, tileSize: Schema.Number }),
-  excludedLayers: Schema.Array(Schema.String),
-  inputTriangles: Schema.Number
+  /** Where the polygons came from. Absent on bakes made before the game nav was used (= `recast`). */
+  source: Schema.optionalKey(NavSource),
+  /** Components / largest share once off-mesh links count as connections. */
+  componentsWithLinks: Schema.optionalKey(Schema.Number),
+  largestComponentShareWithLinks: Schema.optionalKey(Schema.Number),
+  /** Game-nav stats and the flow map hull the links came from; present when `source` is `game-nav`. */
+  walkable: Schema.optionalKey(Schema.Struct({
+    ...WalkableStats.fields,
+    flowFile: Schema.optionalKey(Schema.String),
+    flowHull: Schema.optionalKey(Schema.Number)
+  })),
+  /** The fields below only apply to `recast`. A `game-nav` bake writes zeros / empty for them: treat them as absent. */
+  tiles: Schema.optionalKey(Schema.Number),
+  agent: Schema.optionalKey(NavAgent),
+  recast: Schema.optionalKey(Schema.Struct({ cellSize: Schema.Number, cellHeight: Schema.Number, tileSize: Schema.Number })),
+  excludedLayers: Schema.optionalKey(Schema.Array(Schema.String)),
+  inputTriangles: Schema.optionalKey(Schema.Number)
 })
 export type BakedNavmesh = typeof BakedNavmesh.Type
 
@@ -154,6 +194,18 @@ export const Baked = Schema.Struct({
   inputKey: Schema.String,
   bvh: BakedBvh,
   sampleGrid: BakedSampleGrid,
+  /** Where `floorHeight` came from: the game's nav faces or the topmost collision surface. Absent on older bakes (= `collision`). */
+  floorSource: Schema.optionalKey(Schema.Literals(["game-nav", "collision"])),
+  /** Game-nav floor stats and grid coverage; present when `floorSource` is `game-nav`. */
+  walkable: Schema.optionalKey(Schema.Struct({
+    ...WalkableStats.fields,
+    /** Triangles the nav faces were split into for the floor. */
+    triangles: Schema.Number,
+    coveredCells: Schema.Number,
+    totalCells: Schema.Number,
+    /** Cells with walkable surfaces on more than one level (`floorHeight` keeps the topmost). */
+    multiLevelCells: Schema.Number
+  })),
   navmesh: Schema.optionalKey(BakedNavmesh)
 })
 export type Baked = typeof Baked.Type

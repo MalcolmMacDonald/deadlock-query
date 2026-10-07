@@ -1,9 +1,9 @@
 # contracts — state
 
 - **Status:** M4 done (`MapMetadata`, `ScreenshotSet`, additive); `check:real` re-run on the real bundle still to do locally
-- **Version:** 0.5.1
+- **Version:** 0.6.0
 - **Current milestone:** M4 done; nothing queued (next: requests from other modules)
-- **Last updated:** 2026-10-06
+- **Last updated:** 2026-10-07
 
 ## Done
 - M0: package scaffold, `Space`, module/service type skeletons (SelectionBus, ViewerService, DevAuth) + mock layers, tests; root workspace (package.json, tsconfig.base.json, root CLAUDE.md). `bun run verify:all` green.
@@ -17,6 +17,7 @@
   - The first run flagged "fixture covers kind guardian but real data has none". That was an extractor bug (the marker is in `bossname`, not `subclass_name`); fixed in map-extractor, and the warning is gone with 6 guardians.
   - `check:real` does not look at `manifest.baked`, the `#lod<n>` tile ids or file sizes. Real shape for M3: `baked` has `bakeVersion`, `semanticsVersion`, `placeholder`, `inputKey`, `bvh{file,bytes,sha256,triangles,vertices,excludedLayers,skippedNodes}`, `sampleGrid{file,bytes,sha256,cellSize,nx,ny,origin,channels,params}` (333 x 385 cells of 64, channels floorHeight/interior/wallDistance). LODs are separate tiles with the same bounds (63 LOD0 + 63 `#lod1`, largest tile 4.2 MB). Both are still untyped or by convention; M3 should adopt them.
 
+- game-nav fields (2026-10-07, 0.6.0): `BakedNavmesh` Recast-only fields optional, plus `source`, `componentsWithLinks`, `largestComponentShareWithLinks`, `walkable`; `Baked.floorSource` / `walkable`; `CollisionRef.walkableNav` / `walkableFlowmap` (optional, the extractor does not write them yet). Closes the contracts request in map-extractor STATE.md ("from the game-nav bake, 0.8.0"). The shapes were checked against what `navmesh.ts` / `bake.ts` write; tested with a synthetic game-nav record, not against a real manifest (run `bun run check:real -- <bundle>` locally on a bundle re-baked with the game nav).
 - M3 (2026-10-06): typed `Manifest.baked` (`Baked`, `BakedBvh`, `BakedSampleGrid`, `BakedNavmesh`, `BakedFile`) matching what map-extractor writes; `Tile.lod`/`lodOf` plus `tileLod`/`tileBaseId`/`tilesAtLod` (legacy `#lod<n>` ids still read); pure `checkTiles`/`checkFiles` in `BundleCheck.ts`; `check:real` verifies baked files (existence, bytes, sha256, grid/navmesh sanity) and LOD tiles; fixture has one entity per `EntityKind`. Everything is additive under schemaVersion 1.0.0, see CHANGELOG. Verified in the cloud with unit tests and a synthetic baked + LOD bundle; **not run against the real dl_midtown bundle** (it lives on Malcolm's machine): run `bun run check:real -- <bundle>` locally and record the result here. Expected: pass, with warnings for placeholder semantics, the fixture lacking baked/LOD, and ids-only LODs. If navmesh counts are 0 (clip-lid navmesh, see map-extractor "Collision finding") `checkFiles` errors with "baked navmesh has no polygons"; that would be a real extractor finding, not a contract bug.
 
 - ViewerService.registerTool (2026-10-06, requested by map-viewer M5): `ExternalTool`, `ToolContext`, `NewAnnotation` moved into contracts as plain types; the `ViewerService` tag gained `registerTool(tool): Effect<() => void>` (optional first, required since 0.5.0) and `makeMockViewerServiceWithTools()` is a mock layer that records registrations. See CHANGELOG.
