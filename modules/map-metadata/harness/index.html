@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>map-metadata editor harness</title>
+<style>
+body{margin:0;display:grid;grid-template-columns:1fr 360px;height:100vh;background:#111;color:#eee;font:13px system-ui,sans-serif}
+#stage{position:relative}#toolbar{position:absolute;top:8px;left:8px;display:flex;gap:4px;flex-wrap:wrap;z-index:1}
+#toolbar button{font:inherit;padding:4px 8px}#toolbar button[aria-pressed=true]{background:#33415c;color:#fff}
+#hint{position:absolute;bottom:8px;left:8px;background:#000a;padding:4px 8px;border-radius:4px}
+canvas{width:100%;height:100%;display:block}
+</style></head>
+<body><div id="stage"><div id="toolbar" role="toolbar" aria-label="Tools"></div><canvas id="map" aria-label="Top-down mock map. Click to place points."></canvas><div id="hint" role="status"></div></div><div id="panel"></div>
+<script type="module" src="main.js"></script></body></html>

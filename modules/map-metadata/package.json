@@ -1,18 +1,23 @@
 {
   "name": "@deadlock-query/map-metadata",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./editor": "./src/editor/index.ts"
   },
   "scripts": {
     "typecheck": "tsc -p .",
     "test": "bun test",
     "metadata:validate": "bun scripts/validate.ts",
-    "verify": "bun run typecheck && bun run test"
+    "verify": "bun run typecheck && bun run test",
+    "dev:standalone": "bun harness/build.ts"
   },
   "dependencies": {
     "@deadlock-query/contracts": "workspace:*",
     "effect": "4.0.1"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.56.1"
   }
 }
