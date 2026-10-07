@@ -50,7 +50,7 @@ test("Array habits on a sequence are translated to the LINQ names", () => {
 })
 
 test("lane and position argument mistakes explain the accepted values", () => {
-  expect(advise('map.guardians.inLane("red")')).toContain('"yellow", "blue" or "purple"')
+  expect(advise('map.guardians.inLane("red")')).toContain('"yellow", "blue" or "green"')
   expect(advise("map.guardians.first()!.position.distanceTo(5)")).toContain("Expected a position")
 })
 

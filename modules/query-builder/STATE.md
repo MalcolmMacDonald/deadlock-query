@@ -3,7 +3,7 @@
 - **Status:** M7 done (real-data parts of M6 still deferred, see below)
 - **Version:** 0.0.0
 - **Current milestone:** all of PLAN.md §6 done except the real-data leftovers; see Next
-- **Last updated:** 2026-10-06
+- **Last updated:** 2026-10-07
 
 ## Done
 - **S1 spike** (`spike/`, `src/sandbox/`, `bench/s1.ts`, `test/worker.test.ts`). Run `bun run bench` (needs Chromium via Playwright; builds the spike with `Bun.build`, serves it, drives it headless).
@@ -133,6 +133,7 @@ Also verified: library-class member completions with TSDoc signature, string-lit
 - 2026-10-06 — M7: paging replaced the render cap instead of virtual scrolling. At most 500 rows are in the DOM, which keeps every row a real, focusable, labelled element (virtual scrolling would break row-by-row screen-reader and keyboard navigation) and removes the need for a scroll container hack; `LIMITS.maxRenderedRows` is gone. Filtering matches the displayed text (numbers rounded to 3 places, geometry as its JSON).
 - 2026-10-06 — The standalone viewer stub implements `registerTool` as a no-op (requested by the contracts thread; harmless while it is optional, required before contracts makes it required).
 - 2026-10-06 — Flaky `verify:all` fix: `@deadlock-query/query-library` is now a `devDependency` (`workspace:*`) only to give `bun run --filter` a build order. The app build and the e2e tests read `modules/query-library/dist`, which query-library's own `verify` deletes and rebuilds last; with no declared edge both ran at once on a cold checkout (no `dist` yet), so a test could see `dist` half-written ("query-library is not built") or two builds could delete each other's output. Nothing is imported from it (`check:deps` unchanged); the cost is that `verify:all` waits for query-library before query-builder starts.
+- 2026-10-07 — Lanes are Yellow, Blue and Green (Malcolm): the type-error advice for `inLane` now says `"yellow", "blue" or "green"`. The accepted values come from query-library's `Lane` type (renamed from `"purple"` in its PR), so completions and the docs panel follow the library build; gallery queries and snippets only use `"yellow"`.
 
 ## Open questions
 - (see PLAN.md §9)
