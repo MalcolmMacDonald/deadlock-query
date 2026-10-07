@@ -136,6 +136,21 @@ test("bake errors are reported, not thrown", async () => {
   expect(existsSync(join(dir, "baked"))).toBe(false)
 })
 
+test("interior channel comes from the bundle's interior volumes when present", async () => {
+  const dir = miniBundle()
+  // The lane floor at z 0 near x -2000, y 0: one box around it, one far away.
+  writeFileSync(join(dir, "collision/interior-volumes.json"), JSON.stringify({ version: 1, volumes: [
+    { id: "a", model: "m", interiorType: 0, origin: [-2000, 0, 0], angles: [0, 0, 0], localMin: [-200, -200, 0], localMax: [200, 200, 300] },
+    { id: "b", model: "m", interiorType: 1, origin: [9000, 9000, 0], angles: [0, 0, 0], localMin: [-10, -10, 0], localMax: [10, 10, 10] }
+  ] }))
+  const r = await bakeBundle(dir, { cellSize: 100 })
+  expect(r.errors).toEqual([])
+  expect((r.baked as unknown as { interiorSource: string }).interiorSource).toBe("volumes")
+  const grid = SampleGrid.deserialize(rd(join(dir, r.baked!.sampleGrid.file)))
+  expect(grid.get("interior", [-2000, 0])).toBe(1)
+  expect(grid.get("interior", [-1500, 0])).toBe(0)
+}, BAKE_TIMEOUT_MS)
+
 test("walkableLevels lists stacked floors top first and merges surfaces within the gap", async () => {
   const { Raycaster } = await import("@deadlock-query/spatial-core")
   const quad = (z: number) => [-10, -10, z, 10, -10, z, 10, 10, z, -10, 10, z]
