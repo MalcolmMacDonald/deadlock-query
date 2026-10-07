@@ -49,7 +49,15 @@ export interface LiteTile {
   readonly triangles: number
 }
 
-export interface LiteColorStats { readonly primitives: number; readonly painted: number; readonly textured: number; readonly unpainted: ReadonlyArray<string> }
+export interface LiteColorStats {
+  readonly primitives: number; readonly painted: number; readonly textured: number; readonly unpainted: ReadonlyArray<string>
+  /** Vertices whose colour came out white and were painted `fallback` instead (see `WHITE_FLOOR`). */
+  readonly whitened: number
+  /** Vertices whose colour exceeded 1 in some channel and were scaled back (hue kept). */
+  readonly overbright: number
+  /** The meshes with the most whitened vertices, `name (vertices)`, to trace them back to a material. */
+  readonly whiteMeshes: ReadonlyArray<string>
+}
 export interface LiteResult {
   readonly tiles: LiteTile[]; readonly keptTriangles: number; readonly totalTriangles: number; readonly textureBytes: number; readonly warnings: string[]
   /** Triangles of primitives that were split because one primitive would not fit a tile. */
@@ -71,6 +79,13 @@ interface G {
   images?: Array<{ uri?: string; name?: string }>
   samplers?: unknown[]
 }
+
+/**
+ * A baked colour with every channel at least this bright (linear) is dropped for the fallback grey. Real albedo never gets there (white
+ * paint is about 0.8), so a vertex that does is a material whose colour is not in the texture or tint: a vertex-colour material whose
+ * export carries no colours, an effect or sky card, a white placeholder. Drawn white they read as glowing blobs.
+ */
+export const WHITE_FLOOR = 0.97
 
 const COMP = { 5120: [1, Int8Array], 5121: [1, Uint8Array], 5122: [2, Int16Array], 5123: [2, Uint16Array], 5125: [4, Uint32Array], 5126: [4, Float32Array] } as const
 const NCOMP: Record<string, number> = { SCALAR: 1, VEC2: 2, VEC3: 3, VEC4: 4 }
@@ -344,8 +359,9 @@ export const buildLiteTiles = (gltfPath: string, outDir: string, opts: LiteOptio
     const colorMode = opts.colors !== undefined || kept.some((c) => c.hasColor)
     // Per-vertex colour: the material's tint times its texture sampled at the vertex's UV (mip level matched to the primitive's vertex
     // spacing in UV space), times the export's own vertex colour when it has one. Linear RGBA8, as glTF's COLOR_0.
-    const colorStats = { primitives: 0, painted: 0, textured: 0 }
+    const colorStats = { primitives: 0, painted: 0, textured: 0, whitened: 0, overbright: 0 }
     const unpainted = new Set<string>()
+    const whiteBy = new Map<string, number>()
     const rgb: [number, number, number] = [0, 0, 0]
     const paintVertices = (c: Cand, p: NonNullable<G["meshes"]>[number]["primitives"][number], srcOf: ReadonlyArray<number>, C: Uint8Array, vo: number) => {
       const n = srcOf.length
@@ -368,15 +384,21 @@ export const buildLiteTiles = (gltfPath: string, outDir: string, opts: LiteOptio
       }
       let src: { data: Float32Array | Uint32Array; comps: number } | undefined
       if (p.attributes["COLOR_0"] !== undefined) src = readAccessor(g, reader, p.attributes["COLOR_0"])
+      const fb = opts.colors?.fallback
+      let whitened = 0
       for (let i = 0; i < n; i++) {
         const v = srcOf[i]!
         let r = tint[0], gr = tint[1], b = tint[2]
         if (tex && uv) { sampleMips(tex, uv[v * 2]!, uv[v * 2 + 1]!, level, rgb); r *= rgb[0]; gr *= rgb[1]; b *= rgb[2] }
         // The export's own vertex colour multiplies in; its alpha is a blend weight for the game's layered shaders, not opacity, so it is dropped.
         if (src) { const k = src.comps; r *= src.data[v * k]!; gr *= src.data[v * k + 1]!; b *= src.data[v * k + 2]! }
+        const mx = Math.max(r, gr, b)
+        if (fb && Math.min(r, gr, b) >= WHITE_FLOOR) { r = fb[0]; gr = fb[1]; b = fb[2]; whitened++ }
+        else if (mx > 1) { r /= mx; gr /= mx; b /= mx; colorStats.overbright++ }
         const d = (vo + i) * 4
         C[d] = toByte(r); C[d + 1] = toByte(gr); C[d + 2] = toByte(b); C[d + 3] = 255
       }
+      if (whitened) { colorStats.whitened += whitened; whiteBy.set(meshName, (whiteBy.get(meshName) ?? 0) + whitened) }
     }
     const estimate = (c: Cand) => c.verts * (12 + 12 + 8 + (colorMode ? 4 : 0)) + c.tris * 3 * 4
     const splitCandidate = (c: Cand): Cand[] => {
@@ -607,7 +629,7 @@ export const buildLiteTiles = (gltfPath: string, outDir: string, opts: LiteOptio
     }
     return {
       tiles, keptTriangles: tileTris, totalTriangles: total, textureBytes, warnings, splitTriangles,
-      ...(colorMode ? { colors: { ...colorStats, unpainted: [...unpainted].sort() } } : {})
+      ...(colorMode ? { colors: { ...colorStats, unpainted: [...unpainted].sort(), whiteMeshes: [...whiteBy].sort((a, b) => b[1] - a[1]).slice(0, 20).map(([n, v]) => `${n} (${v})`) } } : {})
     }
   } finally {
     reader.close()
