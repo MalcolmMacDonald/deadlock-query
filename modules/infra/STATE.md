@@ -3,7 +3,7 @@
 - **Status:** M0–M4, M6 done; M5 code done (live needs PAT); M7 done in repo (merge queue ruleset, lockfile bot and prod rollback need Malcolm's settings/secret to go live)
 - **Version:** 0.0.0
 - **Current milestone:** none (see PLAN.md §6)
-- **Last updated:** 2026-10-06
+- **Last updated:** 2026-10-07
 
 ## Done
 - M0: root workspace, `new-module`, `verify:all`.
@@ -81,3 +81,6 @@
 
 ## Open questions
 - (see PLAN.md §9)
+
+## Data-pointer scope (2026-10-07)
+- `check:scope` now passes a PR whose only change is `data/current-build.json` (the pointer PR from `publish-data`) without an `[infra]` title/label. First real pointer PR (#130, branch `UpdateMap`, title "map updated") failed scope with `files outside modules/<id>/`. Test in `test/checks.test.ts`.
