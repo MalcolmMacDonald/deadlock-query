@@ -1,5 +1,5 @@
 import { Effect } from "effect"
-import { type MetadataRecord, type OverlayFeature, type Vec3, type ViewerService } from "@deadlock-query/contracts"
+import { type MetadataKind, type MetadataRecord, type OverlayFeature, type Vec3, type ViewerService } from "@deadlock-query/contracts"
 import type { ValidationContext } from "../context.ts"
 import type { Issue, ValidationReport } from "../issues.ts"
 import { KIND_IDS, kindDefinition } from "../kinds.ts"
@@ -32,6 +32,10 @@ export interface EditorController {
   readonly subscribe: (fn: (s: EditorState) => void) => () => void
   readonly setOptions: (patch: Partial<DrawOptions>) => void
   readonly select: (id: string | undefined) => void
+  /** Start a kind's drawing tool in the viewer (needs `ViewerService.activateTool`); false when the viewer cannot. */
+  readonly activate: (kind: MetadataKind) => boolean
+  /** Accepted records of the loaded build: drawn dimmed, and new drafts are checked against them (duplicates, overlaps). */
+  readonly setAccepted: (records: ReadonlyArray<MetadataRecord>) => void
   /** Edit fields of a draft; refused (with the reason) when the result would not match the schema. */
   readonly edit: (id: string, patch: Readonly<Record<string, unknown>>) => string | undefined
   readonly remove: (id: string) => void
@@ -80,13 +84,17 @@ const SELECTED_LAYER = "metadata.selected"
 export const createEditorController = ({ viewer, drafts, context }: EditorControllerOptions): EditorController => {
   let options = DEFAULT_OPTIONS
   let selectedId: string | undefined
+  let accepted: ReadonlyArray<MetadataRecord> = []
   let snapshot: EditorState
   const listeners = new Set<(s: EditorState) => void>()
   const run = (e: Effect.Effect<unknown>) => void Effect.runFork(e)
 
+  const withAccepted = (c: ValidationContext): ValidationContext =>
+    accepted.length === 0 ? c : { ...c, existing: [...(c.existing ?? []), ...accepted] }
+
   const compute = (): EditorState => {
     const records = drafts.list()
-    const report = validateRecords(records, context?.() ?? {})
+    const report = validateRecords(records, withAccepted(context?.() ?? {}))
     const by = new Map<string, Issue[]>()
     for (const i of report.issues) if (i.recordId !== undefined) (by.get(i.recordId) ?? by.set(i.recordId, []).get(i.recordId)!).push(i)
     if (selectedId !== undefined && !records.some((r) => r.id === selectedId)) selectedId = undefined
@@ -99,6 +107,12 @@ export const createEditorController = ({ viewer, drafts, context }: EditorContro
       const layer = layerOf(kind)
       if (of.length === 0) run(viewer.removeOverlay(layer))
       else run(viewer.setOverlay(layer, of.map((r) => featureOf(r, s.issuesById.get(r.id)?.length ?? 0)), { color: kindDefinition(kind).style.color, size: 10 }))
+    }
+    for (const kind of KIND_IDS) {
+      const of = accepted.filter((r) => r.kind === kind)
+      const layer = `metadata.accepted.${kind}`
+      if (of.length === 0) run(viewer.removeOverlay(layer))
+      else run(viewer.setOverlay(layer, of.map((r) => featureOf(r, 0)), { color: kindDefinition(kind).style.color + "99", size: 8 }))
     }
     const sel = s.records.find((r) => r.id === s.selectedId)
     if (sel) run(viewer.setOverlay(SELECTED_LAYER, [featureOf(sel, 0)], { color: "#ffffff", size: 14 }))
@@ -123,6 +137,12 @@ export const createEditorController = ({ viewer, drafts, context }: EditorContro
       const r = id === undefined ? undefined : drafts.get(id)
       if (r) run(viewer.flyTo(anchor(r), FOCUS_DISTANCE))
     },
+    activate: (kind) => {
+      if (!viewer.activateTool) return false
+      run(viewer.activateTool(kindDefinition(kind).tool.id))
+      return true
+    },
+    setAccepted: (records) => { accepted = records; update() },
     edit: (id, patch) => {
       const r = drafts.get(id)
       if (!r) return `no draft "${id}"`
@@ -141,6 +161,7 @@ export const createEditorController = ({ viewer, drafts, context }: EditorContro
       unsubscribe()
       for (const u of unregister) u()
       for (const k of KIND_IDS) run(viewer.removeOverlay(layerOf(k)))
+      for (const k of KIND_IDS) run(viewer.removeOverlay(`metadata.accepted.${k}`))
       run(viewer.removeOverlay(SELECTED_LAYER))
       listeners.clear()
     }

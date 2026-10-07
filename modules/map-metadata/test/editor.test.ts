@@ -161,3 +161,22 @@ test("every kind has a form and the form keys exist on a built record", async ()
   const r = applyPatch({ id: "a", kind: "creepCamp", status: "proposed", provenance: {}, position: [0, 0, 0] }, { name: "x" })
   expect("record" in r && r.record.name).toBe("x")
 })
+
+test("activate starts the kind's tool in the viewer; false when the viewer cannot", async () => {
+  const { controller, viewer } = await setup()
+  expect(controller.activate("creepCamp")).toBe(false)
+  const started: string[] = []
+  const c2 = createEditorController({ viewer: { ...viewer, registerTool: () => Effect.succeed(() => {}), activateTool: (id) => Effect.sync(() => void started.push(id)) }, drafts: await openDraftStore(memoryDraftStorage()) })
+  expect(c2.activate("navLink")).toBe(true)
+  expect(started).toEqual(["metadata.navLink"])
+})
+
+test("accepted records are drawn dimmed and new drafts are checked against them", async () => {
+  const { controller, tool, overlays } = await setup()
+  controller.setAccepted([{ id: "acc", kind: "creepCamp", status: "accepted", provenance: {}, position: [0, 0, 0] }])
+  expect(overlays.get("metadata.accepted.creepCamp")).toHaveLength(1)
+  const t = tool("metadata.creepCamp"); t.activate!(ctxFor().ctx); draw(t, [30, 0, 0])
+  expect(controller.state().report.issues.some((i) => i.code === "duplicate-nearby")).toBe(true)
+  controller.setAccepted([])
+  expect(overlays.has("metadata.accepted.creepCamp")).toBe(false)
+})

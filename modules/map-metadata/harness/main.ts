@@ -53,6 +53,8 @@ const viewer: (typeof ViewerService)["Service"] = {
   events: Stream.empty,
   captureImage: Effect.succeed(new Uint8Array()),
   highlight: () => Effect.void,
+  activateTool: (id) => Effect.sync(() => activate(tools.get(id))),
+  deactivateTool: () => Effect.sync(() => activate(undefined)),
   setOverlay: (id, features, style = {}) => Effect.sync(() => { overlays.set(id, { features: features as ReadonlyArray<OverlayFeature>, style }); redraw() }),
   removeOverlay: (id) => Effect.sync(() => { overlays.delete(id); redraw() }),
   registerTool: (tool) => Effect.sync(() => {

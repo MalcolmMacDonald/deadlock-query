@@ -1,8 +1,8 @@
 # map-metadata — state
 
-- **Status:** M0 and M1 done; M2 (real viewer integration) next
-- **Version:** 0.2.0
-- **Current milestone:** M1 complete
+- **Status:** M0, M1 done; M2 partly done (tool activation, accepted overlays); shell mount and collision probe left
+- **Version:** 0.3.0
+- **Current milestone:** M2 in progress
 - **Last updated:** 2026-10-07
 
 ## Done
@@ -22,15 +22,17 @@
   - `panel.ts`: `mountEditorPanel(root, controller)`: kind legend with hints, options, the drafts list with error/warning badges and Delete, an edit form for the selected draft, a checks list (click a problem to fly to it), Delete all. All user text goes in as text nodes. "Review & submit" is a disabled placeholder until M3.
   - Standalone harness: `bun run dev:standalone` serves `harness/` (canvas mock viewer, 1 px = 4 units) on :4173. Tests: 12 controller tests with `makeMockViewerServiceWithTools` and a Playwright test (skipped without Chromium) that draws a camp and a polygon, reloads and finds both.
 
+- M2 part (2026-10-07): kind buttons in the panel start the drawing tool through `ViewerService.activateTool` (falls back to a hint to pick it in the Tools panel when the viewer lacks it); `controller.setAccepted(records)` draws accepted records dimmed (`metadata.accepted.<kind>`) and adds them as `existing` for duplicate/overlap checks.
+
 ## In progress
 - (nothing)
 
 ## Next
+- M2 left: load `metadata.bundle.json` and call `setAccepted` (shell/library supplies the file); a `CollisionProbe` from the loaded bundle needs spatial-core, which this module may not import: request a probe from shell or contracts (see below).
 - M2: mount the panel in the real viewer, pass a `CollisionProbe` from the loaded bundle (and `bounds`, `existing` accepted records) as the controller's `context`, snap/Z fill is already done by the viewer's tool feed; overlays of accepted data from `metadata.bundle.json`.
 - Tune the default radii (camp 200, sacrifice 200, orb 100), `surfaceEpsilon` (24) and overlap tolerance (64) on the real dl_midtown data.
 
 ## Blockers / Requests to other modules
-- contracts (`ViewerService`): the panel cannot start a drawing tool, so a contributor must pick it in the viewer's Tools panel. Request: `activateTool(id)` (and optionally `deactivateTool`) on `ViewerService`. The editor will call it from the kind buttons once it exists.
 - shell: add the `metadata.editor` panel (`mountEditorPanel` + `createEditorController` from `@deadlock-query/map-metadata/editor`, storage `indexedDbDraftStorage(<gameBuildId>)`) to its module list; that is M2's integration work.
 - infra (root file, not editable from this module): NEXT.md row `screenshot-tool, map-metadata | Phase 3` can become `map-metadata | M1: editor panel (M0 done)`.
 

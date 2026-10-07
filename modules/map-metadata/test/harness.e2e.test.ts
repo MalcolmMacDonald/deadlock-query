@@ -28,9 +28,9 @@ test.skipIf(!haveBrowser)("drafts drawn in the harness persist across a reload",
   await page.evaluate(() => (self as any).__md.drafts.clear())
 
   const canvas = page.locator("#map")
-  await page.getByRole("button", { name: "Creep camp" }).click()
+  await page.locator("#toolbar").getByRole("button", { name: "Creep camp" }).click()
   await canvas.click({ position: { x: 300, y: 300 } })
-  await page.getByRole("button", { name: "Walkable region" }).click()
+  await page.locator("#toolbar").getByRole("button", { name: "Walkable region" }).click()
   for (const [x, y] of [[100, 100], [250, 100], [250, 200]] as const) await canvas.click({ position: { x, y } })
   await page.keyboard.press("Enter")
 
