@@ -1,3 +1,5 @@
+import { checkCancelled } from "./run.ts"
+
 /**
  * A lazy, re-iterable sequence with LINQ-style helpers. Pipelines do not materialise
  * intermediate results, so `pairs()` over large sets stays cheap until consumed.
@@ -23,7 +25,7 @@ export class Seq<T> implements Iterable<T> {
    */
   where(predicate: (item: T, index: number) => boolean): Seq<T> {
     const src = this.source
-    return this.make({ *[Symbol.iterator]() { let i = 0; for (const x of src) if (predicate(x, i++)) yield x } })
+    return this.make({ *[Symbol.iterator]() { let i = 0; for (const x of src) { checkCancelled(); if (predicate(x, i++)) yield x } } })
   }
 
   /**
@@ -33,7 +35,7 @@ export class Seq<T> implements Iterable<T> {
    */
   select<U>(f: (item: T, index: number) => U): Seq<U> {
     const src = this.source
-    return new Seq({ *[Symbol.iterator]() { let i = 0; for (const x of src) yield f(x, i++) } })
+    return new Seq({ *[Symbol.iterator]() { let i = 0; for (const x of src) { checkCancelled(); yield f(x, i++) } } })
   }
 
   /**
@@ -43,7 +45,7 @@ export class Seq<T> implements Iterable<T> {
    */
   selectMany<U>(f: (item: T, index: number) => Iterable<U>): Seq<U> {
     const src = this.source
-    return new Seq({ *[Symbol.iterator]() { let i = 0; for (const x of src) yield* f(x, i++) } })
+    return new Seq({ *[Symbol.iterator]() { let i = 0; for (const x of src) { checkCancelled(); yield* f(x, i++) } } })
   }
 
   /**
@@ -217,7 +219,7 @@ export class Seq<T> implements Iterable<T> {
     return new Seq({
       *[Symbol.iterator]() {
         const items = [...src]
-        for (let i = 0; i < items.length; i++) for (let j = i + 1; j < items.length; j++) yield [items[i] as T, items[j] as T] as const
+        for (let i = 0; i < items.length; i++) for (let j = i + 1; j < items.length; j++) { checkCancelled(); yield [items[i] as T, items[j] as T] as const }
       }
     })
   }
