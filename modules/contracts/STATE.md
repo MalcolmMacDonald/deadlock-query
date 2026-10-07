@@ -30,7 +30,7 @@
 
 - OverlayFeature.properties (2026-10-06, requested by map-viewer's selection inspector): optional free-form `properties` on every `OverlayFeature` variant; the inspector lists it. See CHANGELOG 0.5.1.
 
-- 2026-10-07 — `ViewerService.activateTool` / `deactivateTool` are required (map-viewer implements them since #152). `MockViewerService` has no-ops; `makeMockViewerServiceWithTools` tracks `activeTool()` and treats unknown ids as defects. Breaking for any other `ViewerService` implementation.
+- 2026-10-07 — `ViewerService.activateTool` / `deactivateTool` stay optional in the type (map-viewer implements them since #152) but both mocks now have them; making them required needs map-metadata `harness/main.ts` and query-builder `standaloneServices.ts` to add them first. `MockViewerService` has no-ops; `makeMockViewerServiceWithTools` tracks `activeTool()` and treats unknown ids as defects.
 
 ## In progress
 - Annotation schema (requested by map-viewer M3): added `Annotation`/`AnnotationDocument` (2026-10-06), see CHANGELOG. map-viewer can replace its local `Annotation` type (`src/annotations.ts`) with it for import/export and IndexedDB autosave; its local `id` is `a<N>`, which fits the non-empty string id.
