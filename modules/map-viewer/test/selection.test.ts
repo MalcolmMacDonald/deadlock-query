@@ -34,7 +34,7 @@ test("multi-select shows every selected annotation as highlighted", () => {
   const { c, a, b } = withThree()
   const seen: ReadonlyArray<string>[] = []
   c.attach({
-    setOverlay() {}, removeOverlay() {}, highlight: (ids) => seen.push(ids), setAppearance() {}, setDraft() {}, setHandles() {},
+    setOverlay() {}, removeOverlay() {}, highlight: (ids) => seen.push(ids), setAppearance() {}, setSurfaceVisible() {}, setDraft() {}, setHandles() {},
     getPose: () => c.getPose(), setPose() {}, capture: async () => new Uint8Array(), loadBundle: async () => {}
   })
   c.setSelection([a.id, b.id])

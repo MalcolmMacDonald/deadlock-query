@@ -3,6 +3,7 @@ import { describe, isHidden, isLocked } from "./annotations.ts"
 import { TOOL_IDS, type BuiltinToolId } from "./tools.ts"
 import type { PanelComponent } from "./ViewerPanel.ts"
 import type { ViewerController } from "./viewerService.ts"
+import { SURFACE_LABELS, type SurfaceKind } from "./surfaces.ts"
 
 export const VIEWER_LAYERS_PANEL_ID = "viewer.layers"
 export const VIEWER_TOOLS_PANEL_ID = "viewer.tools"
@@ -22,11 +23,34 @@ const el = <K extends keyof HTMLElementTagNameMap>(tag: K, css = "", props: Part
 
 const PANEL_CSS = "padding:8px;font:12px sans-serif;color:#d8dbe0;background:#1b1e24;height:100%;box-sizing:border-box;overflow:auto"
 
-/** `viewer.layers`: visibility, colour, opacity and draw order of every overlay layer. */
+/** `viewer.layers`: which map meshes show (render by default, collision on request), then visibility, colour, opacity and draw order of every overlay layer. */
 export const makeLayersPanel = (controller: ViewerController): PanelComponent => ({
   mount: (container) => {
     const root = el("div", PANEL_CSS)
     root.dataset.testid = "viewer-layers"
+    const surfacesBox = el("div", "display:flex;flex-direction:column;gap:4px;margin-bottom:10px")
+    surfacesBox.dataset.role = "surfaces"
+    surfacesBox.append(el("div", "font-weight:700", { textContent: "Map surfaces" }))
+    const surfaceBoxes = (["render", "collision"] as const).map((kind: SurfaceKind) => {
+      const label = el("label", "display:flex;align-items:center;gap:6px")
+      label.dataset.surface = kind
+      const box = el("input", "", { type: "checkbox" })
+      box.dataset.role = "surface-visible"
+      box.onchange = () => controller.surfaces.set(kind, box.checked)
+      const name = el("span", "flex:1", { textContent: SURFACE_LABELS[kind] })
+      label.append(box, name)
+      surfacesBox.appendChild(label)
+      return { kind, label, box, name }
+    })
+    const renderSurfaces = () => {
+      for (const s of controller.surfaces.list()) {
+        const r = surfaceBoxes.find((b) => b.kind === s.kind)!
+        r.box.checked = s.visible
+        r.box.disabled = !s.available
+        r.name.textContent = s.available ? s.label : `${s.label} (not in this map)`
+        r.label.style.opacity = s.available ? "1" : ".5"
+      }
+    }
     const list = el("div", "display:flex;flex-direction:column;gap:6px")
     const empty = el("div", "opacity:.6", { textContent: "No layers yet." })
     const groupsHeader = el("div", "display:flex;align-items:center;gap:6px;margin-top:12px;font-weight:700")
@@ -37,7 +61,7 @@ export const makeLayersPanel = (controller: ViewerController): PanelComponent =>
     groupsHeader.append(newGroup)
     const groups = el("div", "display:flex;flex-direction:column;gap:4px;margin-top:4px")
     groups.dataset.role = "doc-layers"
-    root.append(list, empty, groupsHeader, groups)
+    root.append(surfacesBox, list, empty, groupsHeader, groups)
     container.appendChild(root)
 
     interface Row { readonly row: HTMLElement; readonly visible: HTMLInputElement; readonly color: HTMLInputElement; readonly opacity: HTMLInputElement; readonly name: HTMLElement }
@@ -120,7 +144,9 @@ export const makeLayersPanel = (controller: ViewerController): PanelComponent =>
     }
     render()
     renderGroups()
+    renderSurfaces()
     const unsubs = [
+      controller.surfaces.subscribe(renderSurfaces),
       controller.layers.subscribe(render),
       controller.annotations.subscribe(renderGroups),
       controller.onSelectionChange(renderGroups)

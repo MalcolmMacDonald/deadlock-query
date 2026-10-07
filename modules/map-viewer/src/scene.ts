@@ -3,6 +3,7 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js"
 import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js"
 import { tilesAtLod, type Mat4 } from "@deadlock-query/contracts"
 import type { ViewerData } from "./ViewerPanel.ts"
+import type { SurfaceKind } from "./surfaces.ts"
 
 /** World (Z-up) -> Three (Y-up): (x,y,z) -> (x,z,-y), column-major. Mirrors contracts `Space.worldToThree`. */
 export const WORLD_TO_THREE: Mat4 = [1, 0, 0, 0, 0, 0, -1, 0, 0, 1, 0, 0, 0, 0, 0, 1]
@@ -37,6 +38,11 @@ export const surfaceMeshes = (root: THREE.Object3D): THREE.Mesh[] => {
   return out
 }
 
+/** Shows or hides the eagerly built render tiles / collision mesh under a `buildScene` root (they carry `userData.surface`). */
+export const setSurfaceVisible = (root: THREE.Object3D, kind: SurfaceKind, visible: boolean) => {
+  for (const c of root.children) if (c.userData.surface === kind) c.visible = visible
+}
+
 /** Builds the Three scene root (already in Three space) from loaded viewer data. Entities are overlay layers, not part of this scene. */
 export const buildScene = async (data: ViewerData): Promise<THREE.Group> => {
   const root = new THREE.Group()
@@ -50,6 +56,7 @@ export const buildScene = async (data: ViewerData): Promise<THREE.Group> => {
     const holder = new THREE.Group()
     holder.matrixAutoUpdate = false
     holder.matrix.copy(glbToThreeMatrix(data.manifest.coordinateSystem.glbToWorld))
+    holder.userData.surface = "render"
     holder.add(group)
     root.add(holder)
   }
@@ -65,6 +72,7 @@ export const buildScene = async (data: ViewerData): Promise<THREE.Group> => {
     const holder = new THREE.Group()
     holder.matrixAutoUpdate = false
     holder.matrix.copy(glbToThreeMatrix(data.manifest.collision.glbToWorld))
+    holder.userData.surface = "collision"
     holder.add(group)
     root.add(holder)
   }

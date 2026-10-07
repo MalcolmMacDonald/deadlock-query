@@ -149,7 +149,7 @@ test("controller: annotations become overlay layers, layers panel state replays 
     setOverlay: (id: string) => { log.push(`set:${id}`) }, removeOverlay: (id: string) => { log.push(`rm:${id}`) },
     highlight: (ids: ReadonlyArray<string>) => { log.push(`hl:${ids}`) },
     setAppearance: (id: string, a: { visible: boolean }) => { log.push(`ap:${id}:${a.visible}`) },
-    setDraft: () => {}, setHandles: () => {}, getPose: () => ({ target: [0, 0, 0] as Vec3, yaw: 0, pitch: 0, distance: 1 }),
+    setDraft: () => {}, setSurfaceVisible: () => {}, setHandles: () => {}, getPose: () => ({ target: [0, 0, 0] as Vec3, yaw: 0, pitch: 0, distance: 1 }),
     setPose: () => {}, capture: async () => new Uint8Array(), loadBundle: async () => {}
   })
   c.tools.setTool("point")
