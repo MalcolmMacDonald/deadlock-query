@@ -37,6 +37,8 @@
 
 - 2026-10-07 — Metadata editor mounted: `src/metadata.tsx` registers `metadata.editor` ("Metadata", lazy like the query editor) from `@deadlock-query/map-metadata/editor` over the shared `ViewerService`, with drafts in IndexedDB per `<map>:<build>` (`openDraftStore(indexedDbDraftStorage(...))`). Its first `metadata.*` panel makes the Review preset available (map, tools, layers, inspector and the editor); the Query preset leaves `metadata.*` panels closed rather than splitting them below the map. `module.json` now depends on map-metadata. Not done (map-metadata M2): a `CollisionProbe`, bounds and accepted records as the controller's `context`.
 
+- 2026-10-07 — Metadata editor context: `src/metadataContext.ts` (`loadMetadataSupport`) reads the published manifest, builds a `CollisionProbe` from `baked/collision.bvh` with spatial-core's `Raycaster` (`groundZ` = first hit of a downward ray; `insideSolid` is conservative, odd crossings up and down on slightly tilted rays so an open mesh cannot flag good points) and loads `metadata.bundle.json` beside the manifest (accepted records only; 404 = none). `src/metadata.tsx` passes bounds, the probe and the accepted records as the controller's `context` / `setAccepted`; each missing piece degrades the editor's checks. `module.json` / `package.json` now depend on spatial-core. Checked the probe on the real dl_midtown BVH (ground under the map origin at z 1536, 3 ms). No `metadata.bundle.json` is published yet, so accepted records are empty until the data pipeline ships one.
+
 ## In progress
 - (nothing yet)
 

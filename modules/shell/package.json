@@ -15,6 +15,7 @@
     "@deadlock-query/map-metadata": "workspace:*",
     "@deadlock-query/map-viewer": "workspace:*",
     "@deadlock-query/query-builder": "workspace:*",
+    "@deadlock-query/spatial-core": "workspace:*",
     "dockview": "^4.2.0",
     "effect": "4.0.1",
     "monaco-editor": "^0.52.2",

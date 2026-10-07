@@ -4,6 +4,8 @@ import type { IDockviewPanelProps } from "dockview"
 import { useEffect, useRef } from "react"
 import { LazyPanel } from "./LazyPanel.tsx"
 import { loadQueryBundle } from "./editor.tsx"
+import { loadMetadataSupport } from "./metadataContext.ts"
+import { BUNDLE_MANIFEST_URL } from "./viewer.ts"
 
 type Viewer = (typeof ViewerService)["Service"]
 let resolveViewer!: (v: Viewer) => void
@@ -20,7 +22,15 @@ const mountMetadata = (container: HTMLElement): (() => void) => {
     .then(async ([md, viewer, { manifest }]) => {
       const drafts = await md.openDraftStore(md.indexedDbDraftStorage(`${manifest.mapName}:${manifest.gameBuildId}`))
       if (cancelled) return
-      const controller = md.createEditorController({ viewer, drafts })
+      // Collision checks and accepted records come from the published bundle; without them the editor runs degraded.
+      const support = await loadMetadataSupport(BUNDLE_MANIFEST_URL).catch(() => undefined)
+      if (cancelled) return
+      const context = () => ({
+        expect: { mapName: manifest.mapName, gameBuildId: manifest.gameBuildId },
+        ...(support ? { bounds: support.manifest.bounds, ...(support.collision ? { collision: support.collision } : {}), existing: support.accepted } : {}),
+      })
+      const controller = md.createEditorController({ viewer, drafts, context })
+      if (support) controller.setAccepted(support.accepted)
       const panel = md.mountEditorPanel(container, controller)
       dispose = () => { panel.dispose(); controller.dispose() }
     })
