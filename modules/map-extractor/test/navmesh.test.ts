@@ -8,7 +8,7 @@ import { NavMesh } from "@deadlock-query/spatial-core"
 import { bakeBundle } from "../src/bake.ts"
 import { inspectBundle } from "../src/inspect.ts"
 import {
-  bakeNavmesh, entityLinks, navmeshObj, nearTest, polygonComponents, snapLinks, stitchTileBorders, toNavMeshData, weldVertices,
+  bakeNavmesh, entityLinks, islandLinks, navmeshObj, nearTest, polygonComponents, snapLinks, stitchTileBorders, toNavMeshData, weldVertices,
   type PolygonSoup
 } from "../src/navmesh.ts"
 
@@ -195,4 +195,20 @@ test("navmesh bake error paths", async () => {
   const tall = await bakeNavmesh(dir, { agent: { height: 100000 }, qaDir: false })
   expect(tall.ok).toBe(false)
   expect(tall.errors.join(" ")).toMatch(/no polygons|Recast failed/)
+})
+
+test("islandLinks joins a small nearby fragment to the main piece and leaves far or high ones alone", () => {
+  const quad = (x: number, y: number, z: number, s = 100) => [[x, y, z], [x + s, y, z], [x + s, y + s, z], [x, y + s, z]]
+  const verts: number[] = [], polys: number[][] = [], labels: number[] = []
+  const add = (corners: number[][], label: number) => { const b = verts.length / 3; for (const c of corners) verts.push(...c); polys.push([b, b + 1, b + 2, b + 3]); labels.push(label) }
+  // main piece: a 30 x 30 grid of quads (900 polygons, over the island limit)
+  for (let i = 0; i < 30; i++) for (let j = 0; j < 30; j++) add(quad(i * 100, j * 100, 0), 0)
+  add(quad(3050, 0, 0), 1) // island 50 units from the main piece's east edge
+  add(quad(0, 3500, 0), 2) // island 500 units away
+  add(quad(0, -300, 300), 3) // 100 units off horizontally but 300 up
+  const links = islandLinks({ vertices: Float64Array.from(verts), polys }, Int32Array.from(labels))
+  expect(links.length).toBe(1)
+  expect(links[0]).toMatchObject({ kind: "navConnection", bidirectional: true })
+  expect(links[0]!.from[0]).toBeCloseTo(3100, 0)
+  expect(links[0]!.to[0]).toBeCloseTo(2950, 0)
 })
