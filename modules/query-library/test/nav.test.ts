@@ -31,10 +31,10 @@ describe("travel time/distance on a hand-computed grid navmesh", () => {
     expect(vec(0, 0, 0).travelTimeTo(vec(0, 0, 0 + 5000))).toBe(Infinity)
     expect(vec(0, 0, 0).travelDistanceTo(vec(90000, 0, 0))).toBe(Infinity)
   })
-  test("floating points up to 900 units above the mesh snap to it (real-map orbs hover up to ~855)", () => {
+  test("floating points up to 1500 units above the mesh snap to it (orbs hover 1,000+ above their platforms)", () => {
     const a = vec(-3750, -3750, 0)
-    expect(a.travelDistanceTo(vec(-2750, -3750, 800))).toBeCloseTo(1000, 3)
-    expect(a.travelDistanceTo(vec(-2750, -3750, 1000))).toBe(Infinity)
+    expect(a.travelDistanceTo(vec(-2750, -3750, 1400))).toBeCloseTo(1000, 3)
+    expect(a.travelDistanceTo(vec(-2750, -3750, 1600))).toBe(Infinity)
   })
   test("withinTravelTime (headline query 1) matches the hand model and is deterministic", () => {
     const yellow = map.guardians.inLane("yellow")

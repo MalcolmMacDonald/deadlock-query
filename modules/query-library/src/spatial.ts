@@ -68,7 +68,7 @@ export interface NavInput {
    * `{ zipline: meters(15), navConnection: heroSpeed, mantle: heroSpeed / 2 }`; a kind set to 0 is not travelled.
    */
   readonly linkSpeeds?: Readonly<Record<string, number>>
-  /** Max distance from a point to the mesh before it counts as off-mesh (unreachable). Default 900 units (floating pickups on the real map sit up to ~855 above the mesh; points are snapped to the nearest mesh point in 3D). */
+  /** Max distance from a point to the mesh before it counts as off-mesh (unreachable). Default 1500 units: floating pickups hover up to 1,000+ units above their platforms; points snap to the nearest mesh point in 3D. */
   readonly maxSnap?: number
 }
 
