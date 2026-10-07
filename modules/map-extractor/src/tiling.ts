@@ -6,7 +6,7 @@ import { Manifest, decodeVersioned } from "@deadlock-query/contracts"
 import { Document, Logger, NodeIO } from "@gltf-transform/core"
 import { EXTMeshoptCompression, KHRMeshQuantization } from "@gltf-transform/extensions"
 import { cloneDocument, meshopt, prune, simplify, weld } from "@gltf-transform/functions"
-import { MeshoptEncoder, MeshoptSimplifier } from "meshoptimizer"
+import { MeshoptDecoder, MeshoptEncoder, MeshoptSimplifier } from "meshoptimizer"
 
 /**
  * M3: turns the lite render tiles into streamable tiles. Every tile `<id>` gets a compressed LOD0 (same file, rewritten
@@ -63,7 +63,12 @@ const removeEmptyDirs = (dir: string, stop: string) => {
   }
 }
 
-/** Compress (and optionally simplify) the tiles of a lite bundle in place, rewriting `manifest.json`. */
+/**
+ * Compress (and optionally simplify) the tiles of a lite bundle in place, rewriting `manifest.json`.
+ * Safe to run again on a bundle whose tile files are already compressed: `extract` rewrites `manifest.json` from scratch
+ * (no LODs, hashes of the untiled files) even when its render stage is cached, so the next `tile` reads LOD0 files it
+ * wrote itself (hence the decoder).
+ */
 export const tileBundle = async (dir: string, opts: TileOptions = {}): Promise<TileReport> => {
   const lods = Math.max(1, opts.lods ?? 2)
   const ratio = opts.lodRatio ?? 0.25
@@ -84,8 +89,8 @@ export const tileBundle = async (dir: string, opts: TileOptions = {}): Promise<T
   if (manifest.tiles.some((t) => isLodTile(t.id))) return { ...empty, errors: ["bundle is already tiled (found #lod entries); re-run `extract --tier lite --force` first"] }
   if (manifest.tiles.some((t) => !t.file.endsWith(".glb"))) return { ...empty, errors: ["only .glb render tiles can be compressed"] }
 
-  await Promise.all([MeshoptEncoder.ready, MeshoptSimplifier.ready])
-  const io = new NodeIO().setLogger(new Logger(Logger.Verbosity.WARN)).registerExtensions([EXTMeshoptCompression, KHRMeshQuantization]).registerDependencies({ "meshopt.encoder": MeshoptEncoder })
+  await Promise.all([MeshoptEncoder.ready, MeshoptDecoder.ready, MeshoptSimplifier.ready])
+  const io = new NodeIO().setLogger(new Logger(Logger.Verbosity.WARN)).registerExtensions([EXTMeshoptCompression, KHRMeshQuantization]).registerDependencies({ "meshopt.encoder": MeshoptEncoder, "meshopt.decoder": MeshoptDecoder })
 
   const outTiles: Manifest["tiles"][number][] = []
   let bytesBefore = 0, bytesAfter = 0, removedTextureBytes = 0
