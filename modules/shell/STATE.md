@@ -35,6 +35,8 @@
 
 - 2026-10-07 — UX pass (real-bundle walkthrough): the Map panel now shows a "Loading map…" cover until the published bundle loads (it used to flash the mini-map fixture for several seconds, then swap), and the Query preset gives the inspector a fixed 240 px (`INSPECTOR_HEIGHT`, new `initialHeight` on `PresetPanel`) so the editor's results table has room instead of ~3 rows. Saved layouts are untouched; "Reset layout" picks up the new default.
 
+- 2026-10-07 — Metadata editor mounted: `src/metadata.tsx` registers `metadata.editor` ("Metadata", lazy like the query editor) from `@deadlock-query/map-metadata/editor` over the shared `ViewerService`, with drafts in IndexedDB per `<map>:<build>` (`openDraftStore(indexedDbDraftStorage(...))`). Its first `metadata.*` panel makes the Review preset available (map, tools, layers, inspector and the editor); the Query preset leaves `metadata.*` panels closed rather than splitting them below the map. `module.json` now depends on map-metadata. Not done (map-metadata M2): a `CollisionProbe`, bounds and accepted records as the controller's `context`.
+
 ## In progress
 - (nothing yet)
 

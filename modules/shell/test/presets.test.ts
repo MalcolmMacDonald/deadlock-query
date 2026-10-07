@@ -66,3 +66,7 @@ test("reopened panels go to their default placement", () => {
   expect(placementFor("float")).toEqual({ floating: true })
   expect(placementFor("center")).toEqual({})
 })
+
+test("Query leaves metadata.* panels for the Review preset instead of splitting them below the map", () => {
+  expect(queryPreset([...all, def("metadata.editor", "right")]).map((p) => p.id)).not.toContain("metadata.editor")
+})
