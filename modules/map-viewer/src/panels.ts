@@ -236,13 +236,15 @@ export const makeToolsPanel = (controller: ViewerController): PanelComponent => 
     })
 
     const HINTS: Record<BuiltinToolId, string> = {
-      select: "Click an annotation to select it (Shift/Ctrl-click adds or removes, Ctrl+A selects all); drag a blue handle to move a vertex, double-click an edge to add one, Delete removes the vertex (or the annotation); F frames the selection.",
+      select: "Click to select, Shift-click to add. F frames the selection.",
       point: "Click the map to drop a point.",
       label: "Click the map, then type the label text.",
       polyline: "Click to add vertices; double-click or Enter to finish, Esc to cancel.",
       polygon: "Click to add vertices; double-click or Enter to close, Esc to cancel.",
       measure: "Click two points to measure."
     }
+    /** Fuller help for the Select tool, shown as the hint's tooltip so the panel itself stays short. */
+    const SELECT_DETAILS = "Click an annotation to select it (Shift/Ctrl-click adds or removes, Ctrl+A selects all); drag a blue handle to move a vertex, double-click an edge to add one, Delete removes the vertex (or the annotation); F frames the selection."
     const render = () => {
       const tool = controller.tools.tool
       const registered = controller.tools.registered
@@ -261,6 +263,7 @@ export const makeToolsPanel = (controller: ViewerController): PanelComponent => 
       hint.textContent = ext
         ? status ? `${baseHint} ${status}`.trim() : baseHint
         : controller.tools.pending ? `${baseHint} (${controller.tools.pending} placed)` : baseHint
+      hint.title = !ext && tool === "select" ? SELECT_DETAILS : ""
       undo.disabled = !controller.annotations.canUndo
       redo.disabled = !controller.annotations.canRedo
       finish.disabled = ext ? ext.finish === undefined : controller.tools.pending === 0

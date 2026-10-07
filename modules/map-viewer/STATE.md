@@ -47,6 +47,8 @@
 
 - 2026-10-07 — M7 (keyboard-only camera): with the canvas focused, arrows pan (Map) or turn the view (Orbit about the target, Fly about the eye), `+`/`-` zoom (Map/Orbit), Shift triples the step (`keyboardStep` in `src/camera.ts`, pure and unit-tested). The canvas has `role="application"` and an `aria-label` listing the keys, and a focus ring that shows for keyboard focus only (`:focus-visible`). Remaining M7: touch (pinch/two-finger), theming, docs.
 
+- 2026-10-07 — Tools panel help: the Select hint is one line ("Click to select, Shift-click to add. F frames the selection.") and the full description (handles, edge insert, Delete, Ctrl+A) is its tooltip, so the hint no longer takes a third of the narrow sidebar.
+
 ## In progress
 - (nothing)
 
