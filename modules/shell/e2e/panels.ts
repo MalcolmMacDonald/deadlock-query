@@ -33,7 +33,22 @@ try {
   await page.getByText("1 selected").waitFor({ timeout: 10000 })
   const text = await inspector.innerText()
   if (!text.includes("annotation") || !text.includes("points[0]")) throw new Error(`inspector does not list the selected annotation: ${text}`)
-  console.log("e2e ok: tools, layers and inspector panels mounted and share the map's controller")
+  // Surface toggles: render shows by default; collision is unavailable in the fixture and stays off.
+  const surface = (kind: string) => page.evaluate((k) => (globalThis as any).__viewerController.surfaces.list().find((s: any) => s.kind === k), kind)
+  if ((await surface("render"))?.visible !== true) throw new Error("render surface should be visible by default")
+  if ((await surface("collision"))?.visible !== false) throw new Error("collision surface should be hidden by default")
+  const renderBox = page.locator('[data-testid="viewer-layers"] [data-surface="render"] input[data-role="surface-visible"]')
+  await renderBox.uncheck()
+  if ((await surface("render"))?.visible !== false) throw new Error("unticking render should hide it")
+  await renderBox.check()
+  if ((await surface("render"))?.visible !== true) throw new Error("ticking render should show it")
+  // F frames the selection: the camera pose changes while the selected annotation is focused.
+  const pose = () => page.evaluate(() => JSON.stringify((globalThis as any).__viewerController.getPose()))
+  const before = await pose()
+  await canvas.focus()
+  await page.keyboard.press("f")
+  await page.waitForFunction((b) => JSON.stringify((globalThis as any).__viewerController.getPose()) !== b, before, { timeout: 5000 })
+  console.log("e2e ok: tools, layers, surface toggles, F focus and inspector panels mounted and share the map's controller")
 } finally {
   await browser.close()
   server.kill()
