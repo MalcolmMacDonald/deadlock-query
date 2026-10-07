@@ -43,3 +43,14 @@ test("issue link prefills title, label and the JSON, and falls back to 'attach' 
   expect(big.inlined).toBe(false)
   expect(new URL(big.url).searchParams.get("body")).toContain("metadata-submission-sub-1.json")
 })
+
+import { postSubmission } from "../src/index.ts"
+test("postSubmission maps worker answers to messages and never throws", async () => {
+  const ok = await postSubmission("{}", { url: "u", turnstileToken: "t", fetch: (async () => Response.json({ id: "a", url: "https://x/1" }, { status: 201 })) as unknown as typeof fetch })
+  expect(ok).toEqual({ ok: true, id: "a", url: "https://x/1" })
+  const limited = await postSubmission("{}", { url: "u", turnstileToken: "t", fetch: (async () => Response.json({ error: { code: "rate-limited", message: "x" } }, { status: 429 })) as unknown as typeof fetch })
+  expect(limited).toMatchObject({ ok: false, status: 429 })
+  expect(!limited.ok && limited.message).toContain("download fallback")
+  const down = await postSubmission("{}", { url: "u", turnstileToken: "t", fetch: (async () => { throw new Error("net") }) as unknown as typeof fetch })
+  expect(down).toMatchObject({ ok: false, status: 0 })
+})
