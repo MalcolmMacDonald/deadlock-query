@@ -10,9 +10,13 @@ export interface ScopeOptions {
 const moduleOf = (f: string): string | undefined => /^modules\/([^/]+)\//.exec(f)?.[1]
 const isSemantics = (f: string) => /^modules\/spatial-core\/src\/semantics\//.test(f)
 
+/** The map-data pointer: a PR that only bumps it (the publish-data flow) needs no module or infra label. */
+export const DATA_POINTER = "data/current-build.json"
+
 /** Every changed file must belong to exactly one module (or bun.lock). */
 export const checkScope = (files: ReadonlyArray<string>, opts: ScopeOptions = {}): string[] => {
   const errors: string[] = []
+  const pointerOnly = files.length === 1 && files[0] === DATA_POINTER
   const mods = new Set<string>()
   const stray: string[] = []
   for (const f of files) {
@@ -20,7 +24,7 @@ export const checkScope = (files: ReadonlyArray<string>, opts: ScopeOptions = {}
     if (m) mods.add(m)
     else if (f !== "bun.lock") stray.push(f)
   }
-  if (!opts.infra) {
+  if (!opts.infra && !pointerOnly) {
     if (mods.size > 1) errors.push(`change touches multiple modules: ${[...mods].sort().join(", ")}`)
     if (stray.length) errors.push(`files outside modules/<id>/: ${stray.join(", ")}`)
   }
