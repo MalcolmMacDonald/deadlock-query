@@ -96,7 +96,7 @@
     },
     "modules/query-library": {
       "name": "@deadlock-query/query-library",
-      "version": "0.4.0",
+      "version": "0.5.0",
       "devDependencies": {
         "@deadlock-query/contracts": "workspace:*",
         "@deadlock-query/spatial-core": "workspace:*",
