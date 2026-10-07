@@ -54,11 +54,8 @@
 
 - 2026-10-07 — M7 (docs): `README.md` lists the camera, keyboard, touch and annotation controls. M7 checklist is complete (labels, theming, touch, keyboard-only use, docs); real-hardware perf checks remain under Next.
 
-- 2026-10-07 — Accessibility: the Layers panel's visibility checkbox, colour and opacity inputs are named after their layer (`aria-label`; `title` alone failed axe `label-title-only`), so the shell's `e2e/a11y.ts` passes again.
-
-- 2026-10-07 — Inspector: every field value is a flat button that copies the value on click or Enter (title "Copy value", "Copied" for 1.5 s); the whole-selection "Copy JSON" stays. Not unit-tested (the inspector tests run without a DOM) and not yet exercised in a browser.
-
-- Box-select (2026-10-07): Alt + left-drag with the select tool draws a rectangle and picks every point feature inside it (entities, tags, query-result points; not annotations). Shift/Ctrl/Cmd adds to the current picks. `pickInRect` (overlays.ts), `ViewerController.selectFeatures(ids, additive)`; the picks are the same highlight list the inspector and map-metadata tagging read. Plain drags still pan/orbit (Shift-drag still pans). Not yet checked in a real browser on the published bundle.
+- Simpler Layers panel (2026-10-07): four one-click presets (All, Map only, Entities, Tagging), layers grouped (Map entities, Tags and metadata, Annotations, Query results and other) with a master checkbox per group (mixed state shown) and an on/total count; colour, opacity and order are behind a "Colour, opacity and order" checkbox (off by default). `layerGroupOf` groups by id prefix (`entities.`, `metadata.`, `ann.`), `LAYER_PRESETS` is data. Row ids and `data-role`s unchanged. The smoke e2e already fails on main at the label-text check (line 479, headless fonts), so the later surface checks were not run here.
+- Request (shell, map-metadata tagging): box-select (drag a rectangle to pick all entities inside) is still missing; tags from map-metadata already show up under "Tags and metadata".
 
 ## In progress
 - (nothing)
