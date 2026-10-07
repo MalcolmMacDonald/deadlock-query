@@ -44,23 +44,32 @@ export const buildMips = (rgba: Uint8Array, w: number, h: number, maxSize = 128)
     const y0 = Math.floor((y * h) / size), y1 = Math.max(y0 + 1, Math.floor(((y + 1) * h) / size))
     for (let x = 0; x < size; x++) {
       const x0 = Math.floor((x * w) / size), x1 = Math.max(x0 + 1, Math.floor(((x + 1) * w) / size))
-      let r = 0, g = 0, b = 0, a = 0, n = 0
+      // Fully transparent texels are padding (often black): they stay out of the colour average unless nothing else is there.
+      let r = 0, g = 0, b = 0, a = 0, n = 0, r0 = 0, g0 = 0, b0 = 0, n0 = 0
       for (let yy = y0; yy < y1; yy++) for (let xx = x0; xx < x1; xx++) {
         const o = (yy * w + xx) * 4
-        r += srgbToLinear(rgba[o]!); g += srgbToLinear(rgba[o + 1]!); b += srgbToLinear(rgba[o + 2]!); a += rgba[o + 3]!; n++
+        const tr = srgbToLinear(rgba[o]!), tg = srgbToLinear(rgba[o + 1]!), tb = srgbToLinear(rgba[o + 2]!)
+        a += rgba[o + 3]!; n0++; r0 += tr; g0 += tg; b0 += tb
+        if (rgba[o + 3]! > 0) { r += tr; g += tg; b += tb; n++ }
       }
+      if (n === 0) { r = r0; g = g0; b = b0; n = n0 }
       const d = (y * size + x) * 4
-      level0[d] = linearToSrgb8(r / n); level0[d + 1] = linearToSrgb8(g / n); level0[d + 2] = linearToSrgb8(b / n); level0[d + 3] = Math.round(a / n)
+      level0[d] = linearToSrgb8(r / n); level0[d + 1] = linearToSrgb8(g / n); level0[d + 2] = linearToSrgb8(b / n); level0[d + 3] = Math.round(a / n0)
     }
   }
   const levels: Uint8Array[] = [level0]
   for (let s = size; s > 1; s >>= 1) {
     const src = levels[levels.length - 1]!, half = s >> 1, dst = new Uint8Array(half * half * 4)
     for (let y = 0; y < half; y++) for (let x = 0; x < half; x++) {
+      let live = 0
+      for (let k = 0; k < 4; k++) if (src[(((y * 2 + (k >> 1)) * s) + x * 2 + (k & 1)) * 4 + 3]! > 0) live++
       for (let c = 0; c < 3; c++) {
         let sum = 0
-        for (let k = 0; k < 4; k++) sum += srgbToLinear(src[(((y * 2 + (k >> 1)) * s) + x * 2 + (k & 1)) * 4 + c]!)
-        dst[(y * half + x) * 4 + c] = linearToSrgb8(sum / 4)
+        for (let k = 0; k < 4; k++) {
+          const o = (((y * 2 + (k >> 1)) * s) + x * 2 + (k & 1)) * 4
+          if (live === 0 || src[o + 3]! > 0) sum += srgbToLinear(src[o + c]!)
+        }
+        dst[(y * half + x) * 4 + c] = linearToSrgb8(sum / (live === 0 ? 4 : live))
       }
       let a = 0
       for (let k = 0; k < 4; k++) a += src[(((y * 2 + (k >> 1)) * s) + x * 2 + (k & 1)) * 4 + 3]!

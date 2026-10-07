@@ -175,7 +175,7 @@ export const buildPaints = async (o: PaintOptions): Promise<{ provider: ColorPro
   const textures = new Map<string, MipChain | null>()
   const wanted = [...new Set([...material.values()].flatMap((m) => (m.texture ? [m.texture] : [])))].sort()
   await pool(wanted, conc, async (vtex) => {
-    const key = createHash("sha1").update(`${vtex}|${o.maxTexture ?? 128}`).digest("hex").slice(0, 16)
+    const key = createHash("sha1").update(`${vtex}|${o.maxTexture ?? 128}|alpha-pad-1`).digest("hex").slice(0, 16)
     const cache = join(o.workDir, "mips", `${key}.mip`)
     if (existsSync(cache)) { const m = unpackMips(readFileSync(cache)); if (m) { textures.set(vtex, m); return } }
     const png = join(o.workDir, "tex", `${key}.png`)
