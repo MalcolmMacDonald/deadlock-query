@@ -1,11 +1,12 @@
 # query-library — state
 
 - **Status:** M0 + M1 + M2 + M3 + M4 + M5 + M6 done
-- **Version:** 0.3.0 (0.2.0 -> 0.3.0: `Lane` `"purple"` renamed `"green"`)
+- **Version:** 0.3.1 (0.3.0 -> 0.3.1: default `maxSnap` 200 -> 900; 0.2.0 -> 0.3.0: `Lane` `"purple"` renamed `"green"`)
 - **Current milestone:** M7
-- **Last updated:** 2026-10-07
+- **Last updated:** 2026-10-07 (real navmesh pass)
 
 ## Done
+- Real-bundle pass (2026-10-07, `data-25761866`): ran queries 1 and 2 on the published bundle (collision BVH + `navmesh.bin`). Query 2 (586 orb pairs more than 1.5x crow-flies) takes ~2.2 s here (target < 30 s); query 1 over all guardians took ~0.1 s. Finding: the 36 `healingOrb` entities are `citadel_pickup_floating_health`, floating up to ~855 units above the mesh, so the 200-unit `maxSnap` made every orb unreachable and query 1 return nothing. Default `maxSnap` is now 900 (proposal for Malcolm; override via `nav.maxSnap`). Result: 15 of 36 orbs reachable from a patron (query 1: 5 orbs within 10 s of a guardian); 11 orbs snap to disconnected mesh islands and 10 more snap to pieces that are not connected to the patron's component. Their routes need ziplines/links: the navmesh has no `zipline` links (only `jumpPad` and `navConnection`), so zipline entities are not yet nav links. 42 of 102 base/lane/camp/orb entities were unreachable from a patron before this change, 27 after (all orbs and 6 camps on islands). Guardians, walkers, patrons snap within 2-6 units. Golden numbers live in `test/realBundle.test.ts`, which runs only when `DL_BUNDLE_DIR` points at the extracted release (the full bundle is too big to commit); the plateau/grid fixtures stay the CI goldens. Query 3 on the real map is not run: it needs owner semantics (`visibleFrom` requires them), still placeholders.
 - M0: scaffold; `bun run build` emits `dist/index.js` (worker-safe ESM), per-file `.d.ts` (extensionless imports for Monaco), `apiCatalog.json`, `package.json` with `apiVersion`.
 - M1: `MapContext.fromBundle({manifest, entities})` with typed collections (`guardians`, `walkers`, `patrons`, `healingOrbs`, `creepCamps`, `ziplines`, `ofKind`, `entities`); `Vec3` (`distanceTo`, `crowFliesTo`); `EntityList` (`inLane`, `onTeam`, `within`, `closest`, `highGround` (absolute z placeholder)); lazy `Seq`/`OrderedSeq` LINQ helpers; `meters`/`units`/`vec`.
 - Slice-1 query test: guardian -> nearest healing orb reproduces `expected/guardian-orb-distance.json` on the mini-map fixture.
@@ -27,7 +28,7 @@
 
 ## Next
 - M7: perf pass, cancellation/progress everywhere, `ctx.parallel` design, budgets in this file.
-- Open from earlier milestones: query 2 on the real map in < 30 s (needs the real bake; spatial-core now has the `nearestPoint` index); golden results for queries 1-3 on the real bundle; owner semantics (spatial-core M2) are not in yet, so query 3 stays provisional.
+- Open from earlier milestones: golden results for query 3 on the real bundle (needs owner semantics); zipline links in the navmesh (map-extractor/map-metadata) so island orbs and camps become reachable; owner semantics (spatial-core M2) are not in yet, so query 3 stays provisional.
 - Not verified on real metadata: the map-metadata module has not produced a `metadata.bundle.json` yet, so merging is tested on contracts-built bundles only. Real data is local-only.
 
 ## Blockers / Requests to other modules
