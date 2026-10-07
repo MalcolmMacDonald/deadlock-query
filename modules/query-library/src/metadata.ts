@@ -1,6 +1,6 @@
 import { MapEntity, type EntityKind } from "./entities.ts"
 import { Vec3 } from "./Vec3.ts"
-import { UNITS_PER_METER } from "./units.ts"
+import { linkSpeedsOf } from "./nav.ts"
 import type { NavInput, SpatialInput } from "./spatial.ts"
 
 /** Who submitted and who reviewed a metadata record (self-declared, unverified). @category Metadata */
@@ -121,7 +121,7 @@ export const mergeMetadata = (
   const nav = spatial?.nav
   const mesh = nav?.mesh as (NavInput["mesh"] & Partial<OverridableNavMeshLike>) | undefined
   const overridable = mesh && typeof mesh.withOverrides === "function" && typeof mesh.centroid === "function" && typeof mesh.polyCount === "number"
-  const linkSpeeds = nav?.linkSpeeds ?? { zipline: 15 * UNITS_PER_METER }
+  const linkSpeeds = linkSpeedsOf(nav ?? {})
 
   for (const r of metadata.records) {
     if (r.status !== "accepted") continue
@@ -157,7 +157,7 @@ export const mergeMetadata = (
       }
       case "navLink": {
         if (!overridable) { done(r, false, nav ? "the navmesh does not support overrides (needs withOverrides/centroid/polyCount)" : "no navmesh loaded"); break }
-        if (!(r.linkKind in linkSpeeds)) { done(r, false, `no travel speed for link kind "${r.linkKind}"; set nav.linkSpeeds.${r.linkKind}`); break }
+        if (!(linkSpeeds[r.linkKind]! > 0)) { done(r, false, `no travel speed for link kind "${r.linkKind}"; set nav.linkSpeeds.${r.linkKind}`); break }
         links.push({ from: r.from, to: r.to, kind: r.linkKind, bidirectional: r.bidirectional })
         done(r, true, r.cost === undefined ? undefined : "cost is ignored: link time is length / speed of its kind")
         break

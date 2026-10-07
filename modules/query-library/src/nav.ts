@@ -21,7 +21,20 @@ const need = (what: string): NavInput => {
   return nav
 }
 
-const timeModel = (nav: NavInput): MovementModelLike => ({ speed: nav.heroSpeed ?? 7 * UNITS_PER_METER, linkSpeeds: nav.linkSpeeds ?? { zipline: 15 * UNITS_PER_METER } })
+/**
+ * Link speeds in force: the defaults under whatever `nav.linkSpeeds` sets (a kind set to 0 is switched off).
+ * `navConnection` links come from the game's own nav (jumps, drops and climbs it lets a walker make), so they default to
+ * the walking speed; without an entry on-foot routes cannot use them (34 of 115 base/lane/camp entities are otherwise
+ * unreachable from a patron on the real map).
+ * @internal
+ */
+export const linkSpeedsOf = (nav: Pick<NavInput, "heroSpeed" | "linkSpeeds">): Readonly<Record<string, number>> => ({
+  zipline: 15 * UNITS_PER_METER,
+  navConnection: nav.heroSpeed ?? 7 * UNITS_PER_METER,
+  ...nav.linkSpeeds
+})
+
+const timeModel = (nav: NavInput): MovementModelLike => ({ speed: nav.heroSpeed ?? 7 * UNITS_PER_METER, linkSpeeds: linkSpeedsOf(nav) })
 /** Unit speeds everywhere: cost is path length in Source units. */
 const distanceModel = (nav: NavInput): MovementModelLike => ({ speed: 1, linkSpeeds: Object.fromEntries(Object.keys(timeModel(nav).linkSpeeds ?? {}).map((k) => [k, 1])) })
 const snap = (nav: NavInput): number => nav.maxSnap ?? 200

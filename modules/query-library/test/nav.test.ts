@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, test } from "bun:test"
 import { buildMiniMap } from "@deadlock-query/contracts"
-import { MapContext, seconds, vec } from "../src/index.ts"
+import { NavMesh } from "@deadlock-query/spatial-core"
+import { MapContext, UNITS_PER_METER, seconds, vec, type NavMeshLike, type RaycasterLike } from "../src/index.ts"
 
-import { S, SPEED, buildNavMap as build, floor, manhattan } from "./navFixture.ts"
+import { S, SPEED, buildNavMap as build, floor, grid, manhattan } from "./navFixture.ts"
 
 const mini = buildMiniMap()
 
@@ -54,6 +55,27 @@ describe("travel time/distance on a hand-computed grid navmesh", () => {
     expect(z.points[0]!.equals(a)).toBe(true)
     expect(z.points.at(-1)!.equals(b)).toBe(true)
     expect(a.travelTimeTo(b)).toBeCloseTo(z.time, 3) // active backend is the zipline map
+  })
+  test("navConnection links (the game's own nav) are walkable at hero speed by default", () => {
+    const a = vec(-3750, -3750, 0), b = vec(3750, 3750, 0)
+    const link = { from: [-3750, -3750, 0] as [number, number, number], to: [3750, 3750, 0] as [number, number, number], kind: "navConnection" }
+    const nav = build([link]) // fixture sets linkSpeeds { zipline } only: navConnection comes from the defaults
+    expect(a.travelTimeTo(b)).toBeCloseTo((7500 * Math.SQRT2) / SPEED, 3)
+    expect(a.travelDistanceTo(b)).toBeCloseTo(7500 * Math.SQRT2, 3)
+    expect(nav.nav.path(a, b)!.time).toBeLessThan(14000 / SPEED)
+  })
+  test("link speeds merge over the defaults; 0 switches a kind off", () => {
+    const nav = (linkSpeeds?: Record<string, number>, heroSpeed?: number) =>
+      MapContext.fromBundle({ ...mini, spatial: { raycaster: floor as RaycasterLike, nav: { mesh: NavMesh.fromPolygons(grid(), [{ from: [-3750, -3750, 0], to: [3750, 3750, 0], kind: "navConnection" }]) as NavMeshLike, ...(heroSpeed ? { heroSpeed } : {}), ...(linkSpeeds ? { linkSpeeds } : {}) } } })
+    const a = vec(-3750, -3750, 0), b = vec(3750, 3750, 0)
+    nav()
+    expect(a.travelTimeTo(b)).toBeCloseTo((7500 * Math.SQRT2) / (7 * UNITS_PER_METER), 3)
+    nav({ zipline: 1 }, 1000) // an explicit map without navConnection keeps its default (hero speed)
+    expect(a.travelTimeTo(b)).toBeCloseTo((7500 * Math.SQRT2) / 1000, 3)
+    nav({ navConnection: 2500 })
+    expect(a.travelTimeTo(b)).toBeCloseTo((7500 * Math.SQRT2) / 2500, 3)
+    nav({ navConnection: 0 }, 1000) // switched off: walk the long way
+    expect(a.travelTimeTo(b)).toBeCloseTo(14000 / 1000, 3)
   })
   test("timeFrom caches and takes the quickest source", () => {
     const t = map.nav.timeFrom([vec(-3750, -3750, 0), vec(3750, 3750, 0)])
