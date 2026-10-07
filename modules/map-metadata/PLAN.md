@@ -23,7 +23,7 @@ Handles **user-submitted map metadata** — walkable regions, neutral creep camp
 **Authoring flow**: user opens editor → chooses kind → draws using viewer tools (snap to collision surface; Z auto-filled from raycast) → local draft persists in IndexedDB → "Review & submit" runs validation → submit.
 - **Validation** (shared by editor, worker and review): schema; geometry (simple polygon, ≥ 3 vertices, area limits, within bounds, points on a surface within ε); semantic (camp not inside solid, duplicates within radius r of an existing accepted camp, overlapping walkable regions flagged); `gameBuildId` equals loaded bundle; size limits.
 
-**Submission transport (D11)**: primary = Cloudflare Worker (`submit-worker/`): verifies Turnstile token, rate limits per IP, re-validates with the same Effect Schema/validators (imported package), creates a branch + PR via a GitHub App/bot token (`data/submissions/<id>.json` — never touches `data/metadata/`). Fallback (no backend): "Download submission" JSON + prefilled GitHub issue link instructing to paste/attach. Both produce the same `Submission` document. No user accounts: provenance is a display name + optional GitHub handle (self-declared, marked unverified).
+**Submission transport (D11)**: primary = Cloudflare Worker (`submit-worker/`): rate limits per IP and globally (no human check: nothing for the contributor to solve), re-validates with the same Effect Schema/validators (imported package), creates a branch + PR via a GitHub App/bot token (`data/submissions/<id>.json` — never touches `data/metadata/`). Fallback (no backend): "Download submission" JSON + prefilled GitHub issue link instructing to paste/attach. Both produce the same `Submission` document. No user accounts: provenance is a display name + optional GitHub handle (self-declared, marked unverified).
 
 **Review flow (dev deployment only)**: calls GitHub only through the `DevAuth` proxy (the token never reaches the browser; D9). Queue = open PRs labelled `metadata-submission` (via GitHub API). Selecting one overlays proposed geometry on the map in a diff colour against accepted data, shows validation report, and per-feature accept/reject toggles with comment. **Accept** commits accepted records into `data/metadata/<buildId>/…` on the PR branch (status `accepted`, reviewer, date) and merges; **Reject** closes the PR with a reason comment. Everything is auditable in git. Bulk operations: accept all valid, reject all invalid.
 
@@ -31,7 +31,7 @@ Handles **user-submitted map metadata** — walkable regions, neutral creep camp
 
 **Publish**: `metadata:merge` produces `metadata.bundle.json` (deterministic ordering, schema-validated, hash), copied by shell into the Pages artifact; library loads it through its `Data` layer.
 
-**Anti-abuse**: size cap, per-IP + global rate limits, Turnstile, content validation, admin-only merge, no HTML/markdown rendered from user strings (text only).
+**Anti-abuse**: size cap, per-IP + global rate limits, content validation, admin-only merge, no HTML/markdown rendered from user strings (text only).
 
 ## 6. Milestones
 **Phasing:** Phase 3 — starts after Slice 1 and the spatial/nav work. Its role (D4): metadata supplies facts that cannot be derived (creep camps, Sinner's Sacrifice, healing-orb spawns if missing from the map entities) and **overrides** to the auto-generated navmesh (no-go/blocked regions, extra links such as ziplines, walkable corrections). It is no longer on the critical path of navigation queries.
@@ -42,7 +42,7 @@ Handles **user-submitted map metadata** — walkable regions, neutral creep camp
 | M1 | `metadata.editor` panel + kind tools via a mock `ViewerService` + IndexedDB drafts | Standalone harness: draw camp point & walkable polygon, reload, drafts persist |
 | M2 | Integration with real viewer tools (snap to surface, Z fill) + overlays of accepted data | E2E in shell e2e (owned by shell; module provides test scenarios) |
 | M3 | Submission document + download/issue fallback | Produces schema-valid `Submission`; issue link opens prefilled |
-| M4 | `submit-worker` (Turnstile, rate-limit, PR creation) with local `wrangler dev` tests and mocked GitHub API | Contract tests: valid → PR created; invalid/over-limit → 4xx |
+| M4 | `submit-worker` (rate-limit, PR creation) with local `wrangler dev` tests and mocked GitHub API | Contract tests: valid → PR created; invalid/over-limit → 4xx |
 | M5 | `metadata.review` (dev-only): queue, diff overlay, per-feature accept/reject, merge/close via GitHub API | Integration test against a sandbox repo (opt-in) + mocked API in CI |
 | M6 | `metadata:merge` publish bundle + `metadata:rebase` for new builds | Golden tests; stale detection demo |
 | M7 | History/audit panel, bulk actions, polish, docs for contributors | Contributor guide in `docs/` inside the module |

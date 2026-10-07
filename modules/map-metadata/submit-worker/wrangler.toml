@@ -16,6 +16,6 @@ ALLOWED_ORIGIN = "https://malcolmmacdonald.github.io,https://deadlock-query-dev.
 binding = "RATE"
 id = "f9b45de3f1844a62b55a62360d1d4eb6"
 
-# Secrets (never in this file): `bunx wrangler secret put TURNSTILE_SECRET` and `... GITHUB_TOKEN`
+# Secrets (never in this file): `bunx wrangler secret put GITHUB_TOKEN`
 # GITHUB_TOKEN: fine-grained token limited to this repo with Contents + Pull requests write; it cannot push to main
 # when the ruleset requires PRs.
