@@ -37,7 +37,7 @@ const VENTS = `
 ====0====
 classname  "citadel_trigger_interior"
 origin  [ 100, 200, 0 ]
-interior_type  1
+interior_type  "1"
 model  resource_name:"maps/dl_midtown/entities/in_a.vmdl"
 hammeruniqueid  "5"
 ====1====

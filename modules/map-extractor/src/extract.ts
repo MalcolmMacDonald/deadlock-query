@@ -173,7 +173,7 @@ export const extract = async (o: ExtractOptions): Promise<ExtractResult> => {
           const box = boxes.get(model)
           if (!box) continue
           const it = entity.properties["interior_type"]
-          volumes.push({ id: entity.id, model, interiorType: typeof it === "number" ? it : undefined, origin: entity.position, angles: entity.rotation ?? [0, 0, 0], localMin: box.min, localMax: box.max })
+          volumes.push({ id: entity.id, model, interiorType: Number.isFinite(Number(it)) && it !== "" && it !== undefined ? Number(it) : undefined, origin: entity.position, angles: entity.rotation ?? [0, 0, 0], localMin: box.min, localMax: box.max })
         }
         if (volumes.length < interiorEntities.length) warnings.push(`interior: ${interiorEntities.length - volumes.length} of ${interiorEntities.length} volume models could not be exported`)
         writeFileSync(interiorOut, JSON.stringify({ version: 1, volumes }))
