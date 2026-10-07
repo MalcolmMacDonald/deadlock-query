@@ -72,6 +72,7 @@
 - 2026-10-06 — M4: the lock screen gates the whole app (not individual panels), matching the dev site's server-side middleware; the client check is a UX layer, not the security boundary. Dev-only is a shell-side flag on the module list because contracts' `ModuleDefinition` has no such field (module.json carries `devOnly` for tooling).
 
 - 2026-10-06 — M5: About is a floating dockview panel rather than a modal so it follows the layout/palette conventions; shortcuts use Alt-based chords to stay clear of browser bindings (all are also palette commands). axe-core was added as a dev dependency instead of Lighthouse (far lighter, same rule engine) for an automated a11y gate.
+- 2026-10-07 — e2e `panels.ts` now also covers the render/collision surface toggles (collision is unavailable in the fixture, so only render is flipped) and F-to-focus.
 
 ## Open questions
 - (see PLAN.md §9)
