@@ -104,6 +104,8 @@ Also verified: library-class member completions with TSDoc signature, string-lit
 
 - 2026-10-07 — Parameter-name inlay hints are on, for literal arguments only (`inLane(lane: "yellow")`; TS `includeInlayParameterNameHints: "literals"`, so lambdas and named variables stay uncluttered). Covered by an e2e test that the hint text shows in the editor. Widening to all arguments or return types is a one-line change in `QueryEditorPanel.ts` if it reads better on real queries.
 
+- 2026-10-07 — Library 0.5 run context: `progress`, `ctx`, `withRun` and `QueryCancelled` reach the editor typings and the worker automatically (the prelude/globals follow the library's exports; nothing to add by hand). The worker now runs each query under `withRun({ onProgress })`, so `progress(f, label)` / `ctx.progress(f)` posts throttled `progress` messages (`SandboxRunner.onProgress`) and the panel shows `running… 40% step 2` next to the status. Cancel is still terminate-based (a query runs synchronously, so a flag would not be seen), which also covers library loops. A `QueryCancelled` thrown by the query's own `withRun` comes back as a cancelled / timed-out run: "Query stopped: query exceeded its time budget." instead of a generic error; the Cancel button shows status "cancelled". e2e: progress text appears; a `withRun({ maxMillis })` loop stops cleanly. Not done: a determinate progress bar (the text percentage only), and the library's `shouldCancel` hook is not wired (no SharedArrayBuffer flag; needs cross-origin isolation).
+
 ## In progress
 - (nothing)
 

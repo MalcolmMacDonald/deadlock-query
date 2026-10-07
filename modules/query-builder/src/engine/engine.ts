@@ -62,7 +62,8 @@ export const makeQueryEngine = (deps: { compiler: Compiler; runner: Runner; frie
                 const out = await deps.runner.run(js, { timeoutMs: opts?.timeoutMs ?? DEFAULT_TIMEOUT_MS })
                 if (!out.ok) {
                   const message =
-                    out.reason === "timeout" ? `Query timed out after ${(opts?.timeoutMs ?? DEFAULT_TIMEOUT_MS) / 1000}s and was stopped.${deps.friendly ? " Narrow the input first (`where`, `take`) or use a coarser `sample.grid(spacing)`." : ""}`
+                    out.reason === "timeout" && out.message !== "timeout" ? `Query stopped: ${out.message}.` // the query's own withRun budget
+                    : out.reason === "timeout" ? `Query timed out after ${(opts?.timeoutMs ?? DEFAULT_TIMEOUT_MS) / 1000}s and was stopped.${deps.friendly ? " Narrow the input first (`where`, `take`) or use a coarser `sample.grid(spacing)`." : ""}`
                     : out.reason === "cancelled" ? "Query cancelled."
                     : deps.friendly ? deps.friendly.runtime(out.message) : out.message
                   throw new QueryFailed(message, out.reason)
