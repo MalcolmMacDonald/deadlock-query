@@ -70,3 +70,13 @@ test("reopened panels go to their default placement", () => {
 test("Query leaves metadata.* panels for the Review preset instead of splitting them below the map", () => {
   expect(queryPreset([...all, def("metadata.editor", "right")]).map((p) => p.id)).not.toContain("metadata.editor")
 })
+
+test("Compact (narrow screens): the map on top, the editor below it, every other panel an inactive tab of the editor's group", () => {
+  const p = queryPreset([...all, def("viewer.inspector", "right")], true)
+  expect(p.map((x) => x.id)).toEqual(["viewer.main", "query.editor", "viewer.tools", "viewer.layers", "viewer.inspector"])
+  expect(p[1]!.position).toEqual({ referencePanel: "viewer.main", direction: "below" })
+  for (const tab of p.slice(2)) {
+    expect(tab.position).toEqual({ referencePanel: "query.editor", direction: "within" })
+    expect(tab.inactive).toBe(true)
+  }
+})

@@ -1,5 +1,12 @@
 # contracts changelog
 
+## 0.7.0 — open requests (additive, schemaVersion stays 1.0.0)
+- `ViewerService.captureImageWith?(opts: CaptureOptions)` (`{ scale?, transparent? }`); `captureImage` is unchanged.
+- `SelectionBus.changes?`: stream of the new selection after each `select`; `MockSelectionBus` implements it.
+- `MapDataService.bakedBytes?(file)` for files named by `manifest.baked`; the mini-map mock fails (no baked data).
+- `NavLinkKind` gains `"mantle"` (map-extractor emits it).
+- Already shipped earlier: `Tile.lod`/`lodOf` (0.3), optional Recast fields and `source` on `BakedNavmesh` (0.6.0).
+
 ## 0.6.0 — game-nav navmesh and floor (additive, schemaVersion stays 1.0.0)
 - `BakedNavmesh`: the Recast-only fields `tiles`, `agent`, `recast`, `excludedLayers` and `inputTriangles` are now optional (a navmesh taken from the game's own `.nav` has none; the extractor writes zeros / empty for them, which readers should treat as absent). New optional `source` (`"game-nav" | "recast"`, absent = `recast`), `componentsWithLinks`, `largestComponentShareWithLinks` (components once links count as connections) and `walkable` (`WalkableStats` plus `flowFile` / `flowHull`).
 - `Baked` gains optional `floorSource` (`"game-nav" | "collision"`, absent = `collision`) and `walkable` (`WalkableStats` plus `triangles`, `coveredCells`, `totalCells`, `multiLevelCells`).

@@ -48,13 +48,15 @@ export interface MovementModelLike {
 
 /** The slice of spatial-core's `NavMesh` this library uses (structural). @category Navigation */
 export interface NavMeshLike {
-  findPath(from: readonly [number, number, number], to: readonly [number, number, number], model: MovementModelLike): { readonly points: ReadonlyArray<readonly [number, number, number]>; readonly cost: number } | null
-  distanceField(sources: readonly (readonly [number, number, number])[], model: MovementModelLike): { costAt(p: readonly [number, number, number], maxSnap?: number): number }
+  findPath(from: readonly [number, number, number], to: readonly [number, number, number], model: MovementModelLike, opts?: { radius?: number }): { readonly points: ReadonlyArray<readonly [number, number, number]>; readonly cost: number } | null
+  /** Optional: straight segment stays on the mesh (spatial-core `NavMesh.walkable`). */
+  walkable?(a: readonly [number, number, number], b: readonly [number, number, number]): boolean
+  distanceField(sources: readonly (readonly [number, number, number])[], model: MovementModelLike, opts?: { signal?: AbortSignal }): { costAt(p: readonly [number, number, number], maxSnap?: number): number; readonly costs?: ArrayLike<number> }
 }
 
 /**
  * Navigation backend: a spatial-core `NavMesh` plus the travel model.
- * Defaults (hero speed 7 m/s, zipline 15 m/s, `navConnection` at the hero speed) are proposals for the owner to confirm.
+ * Defaults (hero speed 7 m/s, zipline 15 m/s, `navConnection` at the hero speed, `mantle` at half of it) are proposals for the owner to confirm.
  * @category Navigation
  */
 export interface NavInput {
@@ -63,10 +65,10 @@ export interface NavInput {
   readonly heroSpeed?: number
   /**
    * Off-mesh link speeds by kind, Source units per second, merged over the defaults
-   * `{ zipline: meters(15), navConnection: heroSpeed }`; a kind set to 0 is not travelled.
+   * `{ zipline: meters(15), navConnection: heroSpeed, mantle: heroSpeed / 2 }`; a kind set to 0 is not travelled.
    */
   readonly linkSpeeds?: Readonly<Record<string, number>>
-  /** Max distance from a point to the mesh before it counts as off-mesh (unreachable). Default 200 units. */
+  /** Max distance from a point to the mesh before it counts as off-mesh (unreachable). Default 1500 units: floating pickups hover up to 1,000+ units above their platforms; points snap to the nearest mesh point in 3D. */
   readonly maxSnap?: number
 }
 

@@ -11,7 +11,7 @@
     },
     "modules/contracts": {
       "name": "@deadlock-query/contracts",
-      "version": "0.6.0",
+      "version": "0.7.0",
       "dependencies": {
         "effect": "4.0.1",
       },
@@ -22,6 +22,20 @@
       "dependencies": {
         "@deadlock-query/contracts": "workspace:*",
         "effect": "4.0.1",
+      },
+    },
+    "modules/kanban": {
+      "name": "@deadlock-query/kanban",
+      "version": "0.1.0",
+      "dependencies": {
+        "@deadlock-query/contracts": "workspace:*",
+        "effect": "4.0.1",
+        "react": "^18.3.1",
+        "react-dom": "^18.3.1",
+      },
+      "devDependencies": {
+        "@types/react": "^18.3.12",
+        "@types/react-dom": "^18.3.1",
       },
     },
     "modules/map-extractor": {
@@ -44,7 +58,7 @@
     },
     "modules/map-metadata": {
       "name": "@deadlock-query/map-metadata",
-      "version": "1.0.0-rc.1",
+      "version": "1.0.0-rc.2",
       "dependencies": {
         "@deadlock-query/contracts": "workspace:*",
         "effect": "4.0.1",
@@ -82,7 +96,7 @@
     },
     "modules/query-library": {
       "name": "@deadlock-query/query-library",
-      "version": "0.3.0",
+      "version": "0.5.0",
       "devDependencies": {
         "@deadlock-query/contracts": "workspace:*",
         "@deadlock-query/spatial-core": "workspace:*",
@@ -184,6 +198,8 @@
     "@deadlock-query/contracts": ["@deadlock-query/contracts@workspace:modules/contracts"],
 
     "@deadlock-query/infra": ["@deadlock-query/infra@workspace:modules/infra"],
+
+    "@deadlock-query/kanban": ["@deadlock-query/kanban@workspace:modules/kanban"],
 
     "@deadlock-query/map-extractor": ["@deadlock-query/map-extractor@workspace:modules/map-extractor"],
 

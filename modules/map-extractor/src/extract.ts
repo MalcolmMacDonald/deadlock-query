@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto"
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs"
 import { basename, join } from "node:path"
-import { SCHEMA_VERSION, type Aabb, type EntitiesFile, type Manifest, type Mat4, IDENTITY_MAT4, transformPoint } from "@deadlock-query/contracts"
+import { SCHEMA_VERSION, type Vec3, type Aabb, type EntitiesFile, type Manifest, type Mat4, IDENTITY_MAT4, transformPoint } from "@deadlock-query/contracts"
 import { ExportFailed } from "./errors.ts"
 import { gltfInfo, readGltfJson, type GltfInfo } from "./gltfInfo.ts"
 import { invertAffine } from "./mat4.ts"
@@ -9,6 +9,7 @@ import { args, firstExceptionLine, lastRunOutput, run, type S2VRunner } from "./
 import { buildLiteTiles, liteReady, type LiteOptions } from "./liteRender.ts"
 import { buildPaints } from "./materials.ts"
 import { toEntities, parseVents } from "./vents.ts"
+import { INTERIOR_VOLUMES_FILE, interiorModels, localBox, type InteriorVolume } from "./interior.ts"
 import { WALKABLE_FLOW_FILE, WALKABLE_NAV_FILE } from "./walkable.ts"
 
 /** Unchanged by the `nav` stage on purpose: adding it must not invalidate the cached multi-GB render stages. */
@@ -145,6 +146,44 @@ export const extract = async (o: ExtractOptions): Promise<ExtractResult> => {
     warnings.push(`nav: no walkable nav file exported (${e.stderr}); bake will fall back to the collision surface`)
   }
 
+  // Interior volumes: the physics of each `citadel_trigger_interior` entity's own model, as boxes (see interior.ts). Best effort:
+  // a model that will not export is skipped with a warning and bake falls back to the collision-based `interior`.
+  const interiorOut = join(dir, INTERIOR_VOLUMES_FILE)
+  const interiorEntities = interiorModels(toEntities(parseVents(readFileSync(entitiesRaw, "utf8"))))
+  if (interiorEntities.length > 0) {
+    try {
+      await stage(o, dir, "interior", [interiorOut], async () => {
+        const volumes: InteriorVolume[] = []
+        const boxes = new Map<string, { min: Vec3; max: Vec3 } | null>()
+        for (const { entity, model } of interiorEntities) {
+          if (!boxes.has(model)) {
+            const tmp = join(work, "interior", createHash("sha1").update(model).digest("hex").slice(0, 12))
+            rmSync(tmp, { recursive: true, force: true }); mkdirSync(tmp, { recursive: true })
+            try {
+              await run(o.runner, "interior", args.entityModel(o.vpk, model, join(tmp, "m")))
+              const glb = findPhysicsGlb(tmp)
+              const info = glb ? gltfInfo(readGltfJson(glb)) : undefined
+              boxes.set(model, info ? (localBox(info, fileGlbToWorld(info).matrix) ?? null) : null)
+            } catch (e) {
+              if (!(e instanceof ExportFailed)) throw e
+              boxes.set(model, null)
+            }
+            rmSync(tmp, { recursive: true, force: true })
+          }
+          const box = boxes.get(model)
+          if (!box) continue
+          const it = entity.properties["interior_type"]
+          volumes.push({ id: entity.id, model, interiorType: Number.isFinite(Number(it)) && it !== "" && it !== undefined ? Number(it) : undefined, origin: entity.position, angles: entity.rotation ?? [0, 0, 0], localMin: box.min, localMax: box.max })
+        }
+        if (volumes.length < interiorEntities.length) warnings.push(`interior: ${interiorEntities.length - volumes.length} of ${interiorEntities.length} volume models could not be exported`)
+        writeFileSync(interiorOut, JSON.stringify({ version: 1, volumes }))
+      })
+    } catch (e) {
+      if (!(e instanceof ExportFailed)) throw e
+      warnings.push(`interior: no volumes exported (${e.stderr}); bake keeps the collision-based interior`)
+    }
+  }
+
   const tiles: Manifest["tiles"][number][] = []
   let renderInfo: GltfInfo | undefined
   let renderMatrix: Mat4 = IDENTITY_MAT4
@@ -172,11 +211,18 @@ export const extract = async (o: ExtractOptions): Promise<ExtractResult> => {
     const fullGltf = join(work, "render-full", "n0.gltf")
     const liteDir = join(dir, "render")
     const manifestTiles = join(work, "lite-tiles.json")
-    const liteKey = `render-lite-${createHash("sha256").update(JSON.stringify({ ...o.lite, log: undefined, materials: o.materials === true, colors: o.gameVpk !== undefined && o.colors !== false, colorRev: 2 })).digest("hex").slice(0, 8)}`
+    const liteKey = `render-lite-${createHash("sha256").update(JSON.stringify({ ...o.lite, log: undefined, materials: o.materials === true, colors: o.gameVpk !== undefined && o.colors !== false, colorRev: 3 })).digest("hex").slice(0, 8)}`
     await stage(o, dir, liteKey, [manifestTiles], async () => {
       if (o.force || !existsSync(fullGltf)) {
         rmSync(join(work, "render-full"), { recursive: true, force: true }); mkdirSync(join(work, "render-full"), { recursive: true })
         await run(o.runner, "render", args.render(o.vpk, o.map, fullGltf, o.materials))
+        // The CLI can exit 0 without writing n0.gltf (disk full, or the hang/early exit noted in `args.render`): say so here, not as a
+        // bare ENOENT from the first read of the file further down.
+        if (!existsSync(fullGltf)) {
+          const last = lastRunOutput.get("render")
+          const cause = last && firstExceptionLine(last)
+          throw new ExportFailed({ stage: "render", stderr: `expected output missing: n0.gltf${cause ? `; tool reported: ${cause} (check free disk space)` : ""}` })
+        }
       }
       mkdirSync(liteDir, { recursive: true }) // an empty dir can vanish during the multi-minute export
       for (const f of readdirSync(liteDir)) rmSync(join(liteDir, f), { recursive: true, force: true })

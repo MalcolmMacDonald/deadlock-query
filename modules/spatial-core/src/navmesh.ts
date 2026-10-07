@@ -72,6 +72,15 @@ class Heap {
 
 const dist = (a: Vec3, b: Vec3) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2])
 
+/** Moves both ends of a portal edge toward each other by `r`, never past the middle. */
+const insetPortal = (a: Vec3, b: Vec3, r: number): [Vec3, Vec3] => {
+  const len = dist(a, b)
+  if (len < 1e-6) return [a, b]
+  const t = Math.min(r, len / 2 - 1e-3 * len) / len
+  const lerp = (u: Vec3, v: Vec3): Vec3 => [u[0] + (v[0] - u[0]) * t, u[1] + (v[1] - u[1]) * t, u[2] + (v[2] - u[2]) * t]
+  return [lerp(a, b), lerp(b, a)]
+}
+
 type Edge = { to: number; a: number; b: number } // shared edge vertex indices
 type LinkEdge = { to: number; kind: string; len: number; from3: Vec3; to3: Vec3 }
 
@@ -125,6 +134,9 @@ export class NavMesh {
   /** Same mesh with blocked polygons, extra links and cost multipliers applied. */
   withOverrides(o: NavOverrides): NavMesh { return new NavMesh(this.data, this.srcLinks, o) }
 
+  /** Source off-mesh links (without `withOverrides` additions). */
+  get sourceLinks(): readonly NavLink[] { return this.srcLinks }
+
   centroid(poly: number): Vec3 { const c = this.centroids; return [c[poly * 3]!, c[poly * 3 + 1]!, c[poly * 3 + 2]!] }
 
   private nearestPoly(p: Vec3): number { return this.nearestPoint(p)?.poly ?? -1 }
@@ -176,9 +188,11 @@ export class NavMesh {
 
   /**
    * A* over polygons. `points` are funnel-smoothed by default; `smooth: false` gives from → shared-edge
-   * midpoints → to. Smoothing ignores agent radius (corners sit on polygon vertices).
+   * midpoints → to. `radius` (default 0) keeps funnel corners that far from the portal ends (polygon vertices, which
+   * is where walls are), clamped so a gap narrower than `2 * radius` still passes at its middle; it only changes
+   * `points`, never `polys` or `cost`.
    */
-  findPath(from: Vec3, to: Vec3, model: MovementModel, opts?: { signal?: AbortSignal; smooth?: boolean }): NavPath | null {
+  findPath(from: Vec3, to: Vec3, model: MovementModel, opts?: { signal?: AbortSignal; smooth?: boolean; radius?: number }): NavPath | null {
     if (opts?.signal?.aborted) throw new DOMException("aborted", "AbortError")
     const a = this.nearestPoly(from), b = this.nearestPoly(to)
     if (a < 0 || b < 0 || this.blocked[a] || this.blocked[b]) return null
@@ -199,8 +213,24 @@ export class NavMesh {
     const polys: number[] = []
     for (let p = b; p >= 0; p = prev[p]!) polys.push(p)
     polys.reverse()
-    const points = opts?.smooth === false ? this.midpointRoute(from, to, polys, via) : this.funnelRoute(from, to, polys, via)
+    const points = opts?.smooth === false ? this.midpointRoute(from, to, polys, via) : this.funnelRoute(from, to, polys, via, opts?.radius ?? 0)
     return { points, polys, cost: g[b]! }
+  }
+
+  /**
+   * True when the straight segment a→b stays on the mesh: sampled every `step` units (default 32), each sample must be
+   * within `tol` (default 24) of the mesh in 3D. Cheap approximation of "can walk it in a line"; polygons are not
+   * required to be connected, so it also holds across a thin gap smaller than `tol`.
+   */
+  walkable(a: Vec3, b: Vec3, opts: { step?: number; tol?: number } = {}): boolean {
+    const step = opts.step ?? 32, tol = opts.tol ?? 24
+    const n = Math.max(1, Math.ceil(dist(a, b) / step))
+    for (let i = 0; i <= n; i++) {
+      const t = i / n
+      const n2 = this.nearestPoint([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t], { maxDist: tol })
+      if (!n2 || this.blocked[n2.poly]) return false
+    }
+    return true
   }
 
   private edgeMidpoint(a: number, b: number): Vec3 {
@@ -223,7 +253,7 @@ export class NavMesh {
   }
 
   /** Funnel each stretch of polygons between off-mesh links; a link contributes its two end points. */
-  private funnelRoute(from: Vec3, to: Vec3, polys: readonly number[], via: readonly (LinkEdge | undefined)[]): Vec3[] {
+  private funnelRoute(from: Vec3, to: Vec3, polys: readonly number[], via: readonly (LinkEdge | undefined)[], radius = 0): Vec3[] {
     const V = this.data.vertices
     const out: Vec3[] = []
     let start = from, portals: Portal[] = []
@@ -239,7 +269,8 @@ export class NavMesh {
       const A: Vec3 = [V[e.a * 3]!, V[e.a * 3 + 1]!, V[e.a * 3 + 2]!], B: Vec3 = [V[e.b * 3]!, V[e.b * 3 + 1]!, V[e.b * 3 + 2]!]
       // Left of the travel direction (centroid → edge midpoint) is counter-clockwise in XY.
       const side = (m[0] - c[0]) * (A[1] - c[1]) - (m[1] - c[1]) * (A[0] - c[0])
-      portals.push(side > 0 ? [A, B] : [B, A])
+      const [pa, pb] = radius > 0 ? insetPortal(A, B, radius) : [A, B]
+      portals.push(side > 0 ? [pa, pb] : [pb, pa])
     }
     out.push(...funnelPath(start, to, portals))
     return out.filter((p, i) => i === 0 || p[0] !== out[i - 1]![0] || p[1] !== out[i - 1]![1] || p[2] !== out[i - 1]![2])

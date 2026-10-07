@@ -1,6 +1,7 @@
 import { Vec3 } from "./Vec3.ts"
 import { UNITS_PER_METER } from "./units.ts"
 import { requireSpatial } from "./active.ts"
+import { activeSignal, checkCancelled } from "./run.ts"
 import type { MovementModelLike, NavInput } from "./spatial.ts"
 
 /**
@@ -10,8 +11,15 @@ import type { MovementModelLike, NavInput } from "./spatial.ts"
  */
 export const seconds = (n: number): number => n
 
-type Field = { costAt(p: readonly [number, number, number], maxSnap?: number): number }
+type Field = { costAt(p: readonly [number, number, number], maxSnap?: number): number; readonly costs?: ArrayLike<number> }
+/** Floating pickups hover far above their platforms (up to ~855 units on the published bundle, over 1,000 on newer extractor builds), so the default must cover them: 200 left every orb unreachable, 900 left 14 on a newer build. */
+const DEFAULT_MAX_SNAP = 1500
 const MAX_FIELDS = 256
+/** Cache budget in bytes of per-polygon costs: a real-map field is ~0.7 MB (85k polygons), so 256 entries would be ~175 MB. */
+const MAX_FIELD_BYTES = 96 * 1024 * 1024
+const MIN_FIELDS = 8
+const bytesOf = (f: Field): number => (f.costs?.length ?? 0) * 8
+let fieldBytes = 0
 const fields = new Map<string, Field>()
 let fieldsFor: NavInput | undefined
 
@@ -25,29 +33,39 @@ const need = (what: string): NavInput => {
  * Link speeds in force: the defaults under whatever `nav.linkSpeeds` sets (a kind set to 0 is switched off).
  * `navConnection` links come from the game's own nav (jumps, drops and climbs it lets a walker make), so they default to
  * the walking speed; without an entry on-foot routes cannot use them (34 of 115 base/lane/camp entities are otherwise
- * unreachable from a patron on the real map).
+ * unreachable from a patron on the real map). `mantle` links (upward climbs that mirror the one-way drops) default to
+ * half the walking speed; a bundle without any `mantle` links is unaffected, since an unused kind costs nothing.
  * @internal
  */
 export const linkSpeedsOf = (nav: Pick<NavInput, "heroSpeed" | "linkSpeeds">): Readonly<Record<string, number>> => ({
   zipline: 15 * UNITS_PER_METER,
   navConnection: nav.heroSpeed ?? 7 * UNITS_PER_METER,
+  mantle: (nav.heroSpeed ?? 7 * UNITS_PER_METER) / 2,
   ...nav.linkSpeeds
 })
 
 const timeModel = (nav: NavInput): MovementModelLike => ({ speed: nav.heroSpeed ?? 7 * UNITS_PER_METER, linkSpeeds: linkSpeedsOf(nav) })
 /** Unit speeds everywhere: cost is path length in Source units. */
 const distanceModel = (nav: NavInput): MovementModelLike => ({ speed: 1, linkSpeeds: Object.fromEntries(Object.keys(timeModel(nav).linkSpeeds ?? {}).map((k) => [k, 1])) })
-const snap = (nav: NavInput): number => nav.maxSnap ?? 200
+const snap = (nav: NavInput): number => nav.maxSnap ?? DEFAULT_MAX_SNAP
 
 /** Distance fields are memoised per (model, source set); cleared when a new nav backend is active. */
 const fieldFor = (nav: NavInput, mode: "time" | "distance", sources: ReadonlyArray<Vec3>): Field => {
-  if (fieldsFor !== nav) { fields.clear(); fieldsFor = nav }
+  if (fieldsFor !== nav) { fields.clear(); fieldBytes = 0; fieldsFor = nav }
   const key = `${mode}|${sources.map((s) => `${s.x},${s.y},${s.z}`).join(";")}`
   const hit = fields.get(key)
   if (hit) { fields.delete(key); fields.set(key, hit); return hit }
-  const f = nav.mesh.distanceField(sources.map((s) => s.toArray()), mode === "time" ? timeModel(nav) : distanceModel(nav))
-  if (fields.size >= MAX_FIELDS) fields.delete(fields.keys().next().value!)
-  fields.set(key, f)
+  checkCancelled(true)
+  const signal = activeSignal()
+  const f = nav.mesh.distanceField(sources.map((s) => s.toArray()), mode === "time" ? timeModel(nav) : distanceModel(nav), signal ? { signal } : undefined)
+  checkCancelled(true)
+  const add = bytesOf(f)
+  while (fields.size >= MAX_FIELDS || (fields.size >= MIN_FIELDS && fieldBytes + add > MAX_FIELD_BYTES)) {
+    const oldest = fields.keys().next().value!
+    fieldBytes -= bytesOf(fields.get(oldest)!)
+    fields.delete(oldest)
+  }
+  fields.set(key, f); fieldBytes += add
   return f
 }
 
@@ -81,14 +99,26 @@ export interface NavRoute {
  */
 export class NavApi {
   /**
-   * Quickest route between two points, or `undefined` when unreachable. One A* search.
+   * Quickest route between two points, or `undefined` when unreachable. One A* search. `radius` (Source units) keeps
+   * the waypoints that far from wall corners; the route and `time` are unchanged.
    * @example map.nav.path(vec(0, 0, 0), vec(1000, 0, 0))?.time
    * @category Navigation
    */
-  path(from: Vec3, to: Vec3): NavRoute | undefined {
+  path(from: Vec3, to: Vec3, opts: { radius?: number } = {}): NavRoute | undefined {
     const nav = need("nav.path()")
-    const r = nav.mesh.findPath(from.toArray(), to.toArray(), timeModel(nav))
+    const r = nav.mesh.findPath(from.toArray(), to.toArray(), timeModel(nav), opts.radius ? { radius: opts.radius } : undefined)
     return r ? { points: r.points.map((p) => new Vec3(p[0], p[1], p[2])), time: r.cost } : undefined
+  }
+
+  /**
+   * True when the straight segment between two points stays on the walkable mesh (sampled; ignores off-mesh links).
+   * @example map.nav.walkable(map.guardians.first()!.position, map.patrons.first()!.position)
+   * @category Navigation
+   */
+  walkable(a: Vec3, b: Vec3): boolean {
+    const nav = need("nav.walkable()")
+    if (!nav.mesh.walkable) throw new Error("nav.walkable() needs a navmesh with a walkable() method (spatial-core NavMesh)")
+    return nav.mesh.walkable(a.toArray(), b.toArray())
   }
 
   /**

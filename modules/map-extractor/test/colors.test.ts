@@ -55,3 +55,10 @@ test("decodePng handles RGB, RGBA and 16-bit grey", () => {
   const grey = decodePng(encode({ width: 1, height: 1, data: new Uint16Array([0x8000]), channels: 1, depth: 16 }))
   expect([...grey.data]).toEqual([128, 128, 128, 255])
 })
+
+test("transparent padding texels stay out of the mip average", () => {
+  const m = buildMips(rgbaOf(4, 4, (x) => (x < 2 ? [200, 100, 50, 255] : [0, 0, 0, 0])), 4, 4)
+  const mean = meanColor(m)
+  expect(mean[0]).toBeCloseTo(srgbToLinear(200), 1)
+  expect(buildMips(rgbaOf(2, 2, () => [0, 0, 0, 0]), 2, 2).levels[1]![0]).toBe(0)
+})

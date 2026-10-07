@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import { makeResult } from "@deadlock-query/contracts"
-import { COLUMN_COLORS, columnLayerId, overlayFeatures, rowLabel, rowProperties } from "../src/app/viewerIntegration.ts"
+import { COLUMN_COLORS, columnLayerId, featureFocus, overlayFeatures, rowLabel, rowProperties } from "../src/app/viewerIntegration.ts"
 
 const result = makeResult(
   [{ name: "g", type: "string" }, { name: "g.pos", type: "point" }, { name: "orb", type: "string" }, { name: "orb.pos", type: "point" }, { name: "d", type: "number" }],
@@ -40,4 +40,35 @@ test("features carry the row's other columns as properties for the inspector", (
   expect(layers[0]!.features.map((f) => f.properties)).toEqual([{ g: "guardian-1", orb: "orb-9", d: 12.3456 }, { g: "guardian-2", orb: "orb-8", d: 3 }])
   // The orb point of row 1 shares the row's properties with the guardian point of the same row.
   expect(layers[1]!.features[0]!.properties).toBe(layers[0]!.features[0]!.properties)
+})
+
+test("featureFocus aims at a point, the centre of a line, and nothing for no feature", () => {
+  expect(featureFocus({ type: "point", at: [1, 2, 3] })).toEqual([1, 2, 3])
+  expect(featureFocus({ type: "segment", points: [[0, 0, 0], [2, 4, 6]] })).toEqual([1, 2, 3])
+  expect(featureFocus(undefined)).toBeUndefined()
+})
+
+test("a `color` string column and a `size` number column style the map, one layer per distinct look", () => {
+  const r = makeResult(
+    [{ name: "p", type: "point" }, { name: "color", type: "string" }, { name: "size", type: "number" }],
+    [[[0, 0, 0], "red", 4], [[1, 0, 0], "blue", 4], [[2, 0, 0], "red", 4]],
+    ["a", "b", "c"]
+  )
+  const { layers, featureToRow } = overlayFeatures(r, "q")
+  expect(layers.map((l) => [l.id, l.style, l.features.length])).toEqual([
+    ["q", { color: "red", size: 4 }, 2],
+    ["q@1", { color: "blue", size: 4 }, 1]
+  ])
+  expect(featureToRow.get("q@1:0")).toBe("b")
+  expect(featureToRow.get("q:1")).toBe("c")
+})
+
+test("too many distinct looks are ignored rather than creating dozens of layers", () => {
+  const rows = Array.from({ length: 20 }, (_, i) => [[i, 0, 0], `#${i.toString(16).padStart(6, "0")}`])
+  const r = makeResult([{ name: "p", type: "point" }, { name: "color", type: "string" }], rows, rows.map((_, i) => String(i)))
+  expect(overlayFeatures(r, "q").layers.map((l) => l.id)).toEqual(["q"])
+})
+
+test("a result with no style columns keeps one default-coloured layer", () => {
+  expect(overlayFeatures(result, "q").layers[0]!.style).toEqual({ color: COLUMN_COLORS[0]! })
 })

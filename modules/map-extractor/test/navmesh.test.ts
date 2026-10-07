@@ -8,7 +8,7 @@ import { NavMesh } from "@deadlock-query/spatial-core"
 import { bakeBundle } from "../src/bake.ts"
 import { inspectBundle } from "../src/inspect.ts"
 import {
-  bakeNavmesh, entityLinks, navmeshObj, polygonComponents, snapLinks, stitchTileBorders, toNavMeshData, weldVertices,
+  bakeNavmesh, entityLinks, islandLinks, mantleLinks, navmeshObj, nearTest, polygonComponents, snapLinks, stitchTileBorders, toNavMeshData, weldVertices,
   type PolygonSoup
 } from "../src/navmesh.ts"
 
@@ -94,12 +94,21 @@ test("entityLinks resolves zipline and jump pad targets and ignores dangling one
   ])
   expect(links).toEqual([
     { from: [0, 100, 0], to: [0, 900, 300], kind: "jumpPad", bidirectional: false },
-    { from: [0, 0, 500], to: [1000, 0, 500], kind: "zipline", bidirectional: true }
+    { from: [0, 0, 500], to: [500, 0, 600], kind: "zipline", bidirectional: true },
+    { from: [500, 0, 600], to: [1000, 0, 500], kind: "zipline", bidirectional: true }
   ])
   const v = Float64Array.from([0, 0, 480, 1000, 0, 480, 0, 100, 0])
   const s = snapLinks(links, v, 100)
-  expect(s.kept.length).toBe(1) // the jump pad's landing is 900 units from any vertex
-  expect(s.dropped).toBe(1)
+  expect(s.kept.length).toBe(0) // the middle node is 120 up: each segment loses an end, and the jump pad's landing is 900 units away
+  expect(s.dropped).toBe(3)
+})
+
+test("entityLinks chains only the zipline stops that can be boarded", () => {
+  const z = (id: string, i: number, p: [number, number, number]): Entity => ({ id, class: "x", kind: "zipline", position: p, properties: { path_uniqueid: "p", path_index: i } })
+  const v = Float64Array.from([0, 0, 480, 1000, 0, 480])
+  const links = entityLinks([z("a", 0, [0, 0, 500]), z("b", 1, [500, 0, 3000]), z("c", 2, [1000, 0, 500])], nearTest(v, 100))
+  expect(links).toEqual([{ from: [0, 0, 500], to: [1000, 0, 500], kind: "zipline", bidirectional: true }])
+  expect(snapLinks(links, v, 100).kept.length).toBe(1)
 })
 
 // ---- Recast on the contracts mini-map -------------------------------------------------------------------------------
@@ -186,4 +195,28 @@ test("navmesh bake error paths", async () => {
   const tall = await bakeNavmesh(dir, { agent: { height: 100000 }, qaDir: false })
   expect(tall.ok).toBe(false)
   expect(tall.errors.join(" ")).toMatch(/no polygons|Recast failed/)
+})
+
+test("mantleLinks mirrors one-way drops upward as a separate, optional link kind", () => {
+  const drop = { from: [0, 0, 500], to: [100, 0, 100], kind: "navConnection", bidirectional: false } as const
+  const small = { from: [0, 0, 120], to: [100, 0, 100], kind: "navConnection", bidirectional: false } as const
+  const rope = { from: [0, 0, 500], to: [100, 0, 0], kind: "zipline", bidirectional: true } as const
+  const m = mantleLinks([drop, small, rope])
+  expect(m).toEqual([{ from: [100, 0, 100], to: [0, 0, 500], kind: "mantle", bidirectional: false }])
+})
+
+test("islandLinks joins a small nearby fragment to the main piece and leaves far or high ones alone", () => {
+  const quad = (x: number, y: number, z: number, s = 100) => [[x, y, z], [x + s, y, z], [x + s, y + s, z], [x, y + s, z]]
+  const verts: number[] = [], polys: number[][] = [], labels: number[] = []
+  const add = (corners: number[][], label: number) => { const b = verts.length / 3; for (const c of corners) verts.push(...c); polys.push([b, b + 1, b + 2, b + 3]); labels.push(label) }
+  // main piece: a 30 x 30 grid of quads (900 polygons, over the island limit)
+  for (let i = 0; i < 30; i++) for (let j = 0; j < 30; j++) add(quad(i * 100, j * 100, 0), 0)
+  add(quad(3050, 0, 0), 1) // island 50 units from the main piece's east edge
+  add(quad(0, 3500, 0), 2) // island 500 units away
+  add(quad(0, -300, 300), 3) // 100 units off horizontally but 300 up
+  const links = islandLinks({ vertices: Float64Array.from(verts), polys }, Int32Array.from(labels))
+  expect(links.length).toBe(1)
+  expect(links[0]).toMatchObject({ kind: "navConnection", bidirectional: true })
+  expect(links[0]!.from[0]).toBeCloseTo(3100, 0)
+  expect(links[0]!.to[0]).toBeCloseTo(2950, 0)
 })

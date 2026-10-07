@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, test } from "bun:test"
 import { buildMiniMap } from "@deadlock-query/contracts"
 import { NavMesh } from "@deadlock-query/spatial-core"
+import { linkSpeedsOf } from "../src/nav.ts"
 import { MapContext, UNITS_PER_METER, seconds, vec, type NavMeshLike, type RaycasterLike } from "../src/index.ts"
 
 import { S, SPEED, buildNavMap as build, floor, grid, manhattan } from "./navFixture.ts"
@@ -29,6 +30,11 @@ describe("travel time/distance on a hand-computed grid navmesh", () => {
   test("points far off the mesh are unreachable", () => {
     expect(vec(0, 0, 0).travelTimeTo(vec(0, 0, 0 + 5000))).toBe(Infinity)
     expect(vec(0, 0, 0).travelDistanceTo(vec(90000, 0, 0))).toBe(Infinity)
+  })
+  test("floating points up to 1500 units above the mesh snap to it (orbs hover 1,000+ above their platforms)", () => {
+    const a = vec(-3750, -3750, 0)
+    expect(a.travelDistanceTo(vec(-2750, -3750, 1400))).toBeCloseTo(1000, 3)
+    expect(a.travelDistanceTo(vec(-2750, -3750, 1600))).toBe(Infinity)
   })
   test("withinTravelTime (headline query 1) matches the hand model and is deterministic", () => {
     const yellow = map.guardians.inLane("yellow")
@@ -85,4 +91,51 @@ describe("travel time/distance on a hand-computed grid navmesh", () => {
     MapContext.fromBundle({ ...mini, spatial: { raycaster: floor } })
     expect(() => vec(0, 0, 0).travelTimeTo(vec(1, 1, 0))).toThrow(/navmesh/)
   })
+})
+
+test("distance-field cache is bounded by bytes, not only by entry count", () => {
+  // 20 fields of 2M polygons (16 MB each) cannot all stay cached; the newest ones must.
+  let calls = 0
+  const costs = new Float64Array(2_000_000)
+  const mesh: NavMeshLike = {
+    findPath: () => null,
+    distanceField: () => { calls++; return { costAt: () => 1, costs } }
+  }
+  const m = MapContext.fromBundle({ ...mini, spatial: { raycaster: floor as RaycasterLike, nav: { mesh } } })
+  const a = Array.from({ length: 20 }, (_, i) => vec(i * 10, 0, 0))
+  for (const p of a) p.travelTimeTo(vec(0, 0, 0))
+  expect(calls).toBe(20)
+  a[19]!.travelTimeTo(vec(5, 5, 0)) // newest is still cached
+  expect(calls).toBe(20)
+  a[0]!.travelTimeTo(vec(5, 5, 0)) // oldest was evicted by the byte budget
+  expect(calls).toBe(21)
+  void m
+})
+
+test("line of sight uses collision only; walkable follows the navmesh; path takes a radius", () => {
+  const a = vec(-3750, -3750, 0), b = vec(3750, 3750, 0)
+  expect(a.hasLineOfSightTo(b)).toBe(true) // open floor: the ray stays above z=0
+  expect(a.hasLineOfSightTo(vec(3750, 3750, -200), { targetHeight: 0 })).toBe(false) // target under the floor
+  expect(map.healingOrbs.withLineOfSightTo(map.guardians).count()).toBe(map.healingOrbs.count())
+  expect(map.nav.walkable(a, b)).toBe(true)
+  expect(map.nav.walkable(a, vec(3750, 90000, 0))).toBe(false)
+  const plain = map.nav.path(a, b)!, wide = map.nav.path(a, b, { radius: 100 })!
+  expect(wide.time).toBe(plain.time)
+})
+
+test("mantle links default to half the walking speed and can be overridden or switched off", () => {
+  expect(linkSpeedsOf({ heroSpeed: 500 }).mantle).toBe(250)
+  expect(linkSpeedsOf({}).mantle).toBe(3.5 * UNITS_PER_METER)
+  expect(linkSpeedsOf({ heroSpeed: 500, linkSpeeds: { mantle: 0 } }).mantle).toBe(0)
+  expect(linkSpeedsOf({ heroSpeed: 500, linkSpeeds: { zipline: 1 } }).mantle).toBe(250) // an explicit map keeps the default
+  const a = vec(-3750, -3750, 0), b = vec(3750, 3750, 0)
+  const link = { from: [-3750, -3750, 0] as [number, number, number], to: [3750, 3750, 0] as [number, number, number], kind: "mantle" }
+  const time = (linkSpeeds?: Record<string, number>) => {
+    MapContext.fromBundle({ ...mini, spatial: { raycaster: floor as RaycasterLike, nav: { mesh: NavMesh.fromPolygons(grid(), [link]) as NavMeshLike, heroSpeed: SPEED, ...(linkSpeeds ? { linkSpeeds } : {}) } } })
+    return a.travelTimeTo(b)
+  }
+  const len = Math.hypot(7500, 7500)
+  expect(time()).toBeCloseTo(14000 / SPEED, 3) // at half speed the diagonal (42 s) loses to the 28 s walk
+  expect(time({ mantle: SPEED * 4 })).toBeCloseTo(len / (SPEED * 4), 3)
+  expect(time({ mantle: 0 })).toBeCloseTo(14000 / SPEED, 3)
 })

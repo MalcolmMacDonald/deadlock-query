@@ -1,4 +1,4 @@
-import { Effect, Stream } from "effect"
+import { Effect, Queue, Stream } from "effect"
 import type { OverlayFeature, ViewerEvent, Vec3 } from "@deadlock-query/contracts"
 import type { SelectionBusShape, ViewerServiceShape } from "../panel/QueryEditorPanel.ts"
 
@@ -23,13 +23,13 @@ const channel = <A>() => {
  */
 export const makeStandaloneServices = () => {
   const events = channel<ViewerEvent>()
-  const log = { overlays: new Map<string, ReadonlyArray<OverlayFeature>>(), highlights: [] as Array<ReadonlyArray<string>> }
+  const log = { overlays: new Map<string, ReadonlyArray<OverlayFeature>>(), highlights: [] as Array<ReadonlyArray<string>>, flights: [] as Array<readonly [number, number, number]> }
   let selected: ReadonlyArray<string> = []
   const viewer: ViewerServiceShape = {
     loadBundle: () => Effect.void,
     getCamera: Effect.succeed({ position: [0, 0, 0] as Vec3, target: [0, 0, 0] as Vec3 }),
     setCamera: () => Effect.void,
-    flyTo: () => Effect.void,
+    flyTo: (target) => Effect.sync(() => void log.flights.push(target)),
     setOverlay: (layerId, features) => Effect.sync(() => void log.overlays.set(layerId, features as ReadonlyArray<OverlayFeature>)),
     removeOverlay: (layerId) => Effect.sync(() => void log.overlays.delete(layerId)),
     highlight: (ids) => Effect.sync(() => void log.highlights.push(ids)),
@@ -37,9 +37,15 @@ export const makeStandaloneServices = () => {
     captureImage: Effect.succeed(new Uint8Array()),
     registerTool: () => Effect.succeed(() => {})
   }
+  const subs = new Set<(v: ReadonlyArray<string>) => void>()
+  const set = (ids: ReadonlyArray<string>) => { selected = ids; subs.forEach((f) => f(ids)) }
   const selection: SelectionBusShape = {
-    select: (ids) => Effect.sync(() => void (selected = ids)),
-    current: Effect.sync(() => selected)
+    select: (ids) => Effect.sync(() => set(ids)),
+    current: Effect.sync(() => selected),
+    changes: Stream.callback<ReadonlyArray<string>>((q) => Effect.acquireRelease(
+      Effect.sync(() => { const f = (v: ReadonlyArray<string>) => void Queue.offerUnsafe(q, v); subs.add(f); return f }),
+      (f) => Effect.sync(() => void subs.delete(f))
+    ))
   }
-  return { viewer, selection, log, emitPick: (id: string) => events.push({ _tag: "pick", id }), setSelected: (ids: ReadonlyArray<string>) => { selected = ids } }
+  return { viewer, selection, log, emitPick: (id: string) => events.push({ _tag: "pick", id }), setSelected: set }
 }

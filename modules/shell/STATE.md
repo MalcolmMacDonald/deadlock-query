@@ -1,8 +1,8 @@
 # shell — state
 
-- **Status:** M5 done except a Lighthouse run (axe audit is clean); M4 done (dev-only modules, lock screen, live DevAuth); M3 done; M2 done except swapping the fixture for the published bundle (viewer + embedded query editor wired to the shared viewer/selection; rows overlay and highlight on the map, map picks select rows)
+- **Status:** M5 done (Lighthouse accessibility 100, axe clean); M4 done (dev-only modules, lock screen, live DevAuth); M3 done; M2 done except swapping the fixture for the published bundle (viewer + embedded query editor wired to the shared viewer/selection; rows overlay and highlight on the map, map picks select rows)
 - **Version:** 0.1.1
-- **Current milestone:** M5 complete (see Next for the Lighthouse number); M2 fixture swap waits on a published bundle
+- **Current milestone:** M5 complete; M2 fixture swap waits on a published bundle
 - **Last updated:** 2026-10-06
 
 ## Done
@@ -43,11 +43,19 @@
 
 - 2026-10-07 — History panel: `metadata.history` ("Metadata history", public) shows map-metadata's `mountHistoryPanel` over every record of `metadata.bundle.json` (`loadMetadataSupport` now also returns all records, not just accepted ones); clicking a record flies the camera to its position. Empty until a bundle is published.
 
+- 2026-10-07 — UX round two: the About panel is now "Help & About" in the header: a four-step getting-started list and the keyboard shortcuts (from the `SHORTCUTS` registry, so it cannot drift), plus build info. It is focusable (`tabIndex`) so axe accepts its scrolling. `e2e/a11y.ts` currently fails on main for another reason: the viewer Layers panel has unlabelled row controls (`label-title-only`); that is map-viewer's to fix.
+
+- 2026-10-07 — Narrow screens: below 700 px the default layout (first load and "Reset layout"/presets) is the map on top with the editor below it and Tools/Layers/Inspector as tabs of the editor's group (`compact` flag of the presets; `inactive` keeps the editor in front), and the header is tighter. Checked in Chromium at 390x800 on the real bundle. A layout saved on a wide screen is kept as is.
+
+- 2026-10-07 — Lighthouse run (v12, headless Chromium, `vite preview` of the production build, no published data bundle): **accessibility 100**, best practices 96 (only a console error from the absent `./data` bundle and missing source maps). The >= 90 acceptance is met; the run was done by hand (`CHROME_PATH=... npx lighthouse http://localhost:4173/ --only-categories=accessibility,best-practices`), Lighthouse is not a dependency. Re-run against the deployed dev site once a real bundle is published.
+- 2026-10-07 — Keyboard resizing: Alt+Shift+Arrow Right/Left/Down/Up widen, narrow, heighten and shorten the active panel's group by 40 px (`resizeActiveGroup` in `src/dock.ts`, palette commands "Make active panel group wider" etc., listed in Help & About). `e2e/polish.ts` presses the shortcuts and checks the width changes (the e2e run could not be completed in the cloud container: it already timed out waiting for the Query tab before this change).
+
+- Tag panel mount (2026-10-07): `metadata.editor` now builds a tag source from the map (`ViewerController.highlightedIds` -> `entityForFeature` -> `{ id, position, label }`, `onHighlightChange`) and passes `createTagController` to `mountEditorPanel`, so clicked entities can be tagged from the Metadata panel. Box-select and "tag these rows" are still open (map-viewer / query-builder).
+
 ## In progress
 - (nothing yet)
 
 ## Next
-- M5 leftover: a real Lighthouse accessibility run (acceptance is >= 90). It is not installed here; the axe-core audit (same engine) is clean on the dock, About, toast and palette in both themes, so the score should be high, but it is unmeasured. Also no keyboard way to resize groups yet.
 - M2 (remaining): swap the fixture for the published MapBundle once Malcolm publishes a real one.
 - M3 leftovers: share links are uncompressed (a default layout is a few KB); compress if links get unwieldy. Review preset has nothing to show until map-metadata ships a `metadata.*` panel.
 - Infra follow-up: ship `library.json` without the standalone editor app (it is only published for that file now).
@@ -72,6 +80,7 @@
 - 2026-10-06 — M4: the lock screen gates the whole app (not individual panels), matching the dev site's server-side middleware; the client check is a UX layer, not the security boundary. Dev-only is a shell-side flag on the module list because contracts' `ModuleDefinition` has no such field (module.json carries `devOnly` for tooling).
 
 - 2026-10-06 — M5: About is a floating dockview panel rather than a modal so it follows the layout/palette conventions; shortcuts use Alt-based chords to stay clear of browser bindings (all are also palette commands). axe-core was added as a dev dependency instead of Lighthouse (far lighter, same rule engine) for an automated a11y gate.
+- 2026-10-07 — e2e `panels.ts` now also covers the render/collision surface toggles (collision is unavailable in the fixture, so only render is flipped) and F-to-focus.
 
 ## Open questions
 - (see PLAN.md §9)

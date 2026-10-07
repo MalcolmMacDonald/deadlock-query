@@ -176,6 +176,10 @@ export const makeLayersPanel = (controller: ViewerController): PanelComponent =>
       for (const l of layers) {
         const r = rows.get(l.id)!
         r.name.textContent = l.label
+        // `title` alone is not an accessible name for axe; name each control after its layer.
+        r.visible.setAttribute("aria-label", `Show ${l.label}`)
+        r.color.setAttribute("aria-label", `${l.label} colour`)
+        r.opacity.setAttribute("aria-label", `${l.label} opacity`)
         r.name.title = l.id
         r.visible.checked = l.visible
         r.opacity.value = String(l.opacity)

@@ -8,8 +8,6 @@ export interface Counters {
 }
 
 export interface Env {
-  /** Turnstile secret key. */
-  readonly TURNSTILE_SECRET: string
   /** Token that may create branches, files and PRs in `GITHUB_REPO` (fine-grained PAT or GitHub App installation token). */
   readonly GITHUB_TOKEN: string
   /** `owner/name`. */
@@ -53,13 +51,6 @@ const hit = async (env: Env, key: string, limit: number, ttl: number): Promise<b
   if (n >= limit) return false
   await env.RATE.put(key, String(n + 1), { expirationTtl: ttl }).catch(() => undefined)
   return true
-}
-
-const verifyTurnstile = async (token: string, ip: string | undefined, env: Env, deps: Deps): Promise<boolean> => {
-  const body = new URLSearchParams({ secret: env.TURNSTILE_SECRET, response: token, ...(ip ? { remoteip: ip } : {}) })
-  const res = await deps.fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", { method: "POST", body }).catch(() => undefined)
-  if (!res?.ok) return false
-  return ((await res.json().catch(() => ({}))) as { success?: boolean }).success === true
 }
 
 /** A fence longer than any backtick run in `text`, so user text cannot close it. */
@@ -111,8 +102,8 @@ export const createSubmissionPr = async (s: Submission, text: string, env: Env, 
 }
 
 /**
- * `POST /submit` with a `Submission` JSON body and a Turnstile token in `X-Turnstile-Token`. Checks, in order: method,
- * size, rate limits, Turnstile, JSON + schema + validators (degraded mode: no collision on the server), id safety. Then it
+ * `POST /submit` with a `Submission` JSON body. No user interaction is needed (no human check). Checks, in order: method,
+ * size, per-IP and global rate limits, JSON + schema + validators (degraded mode: no collision on the server), id safety. Then it
  * opens a PR. Errors never echo submitted text beyond validator messages.
  */
 /** The request's `Origin` if the comma-separated allow list has it, else `undefined`. */
@@ -127,7 +118,7 @@ export const handleRequest = async (req: Request, envIn: Env, deps: Deps = { fet
   const { ALLOWED_ORIGIN: _list, ...rest } = envIn
   const env: Env = matched ? { ...rest, ALLOWED_ORIGIN: matched } : rest
   const url = new URL(req.url)
-  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: env.ALLOWED_ORIGIN ? { "access-control-allow-origin": env.ALLOWED_ORIGIN, "access-control-allow-methods": "POST", "access-control-allow-headers": "content-type, x-turnstile-token", "access-control-max-age": "600" } : {} })
+  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: env.ALLOWED_ORIGIN ? { "access-control-allow-origin": env.ALLOWED_ORIGIN, "access-control-allow-methods": "POST", "access-control-allow-headers": "content-type", "access-control-max-age": "600" } : {} })
   if (url.pathname !== "/submit") return fail(404, "not-found", "Not found", env)
   if (req.method !== "POST") return fail(405, "method", "Use POST", env, {}, { allow: "POST" })
 
@@ -139,9 +130,6 @@ export const handleRequest = async (req: Request, envIn: Env, deps: Deps = { fet
   const daily = Number(env.GLOBAL_PER_DAY ?? DEFAULT_GLOBAL_PER_DAY)
   if (!(await hit(env, `ip:${ip ?? "unknown"}`, hourly, 3600)) || !(await hit(env, "global", daily, 86400)))
     return fail(429, "rate-limited", "Too many submissions, try again later", env, {}, { "retry-after": "3600" })
-
-  const token = req.headers.get("x-turnstile-token")
-  if (!token || !(await verifyTurnstile(token, ip, env, deps))) return fail(403, "turnstile", "The human check failed, reload and try again", env)
 
   const text = await req.text()
   if (new TextEncoder().encode(text).length > MAX_BYTES.submission) return fail(413, "too-large", `Submissions are limited to ${MAX_BYTES.submission} bytes`, env)

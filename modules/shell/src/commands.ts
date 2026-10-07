@@ -20,6 +20,7 @@ export interface CommandActions {
   readonly focusPrevious: () => void
   readonly closeActive: () => void
   readonly toggleMaximize: () => void
+  readonly resize: (direction: "wider" | "narrower" | "taller" | "shorter") => void
   readonly moveToNextGroup: () => void
   readonly split: (direction: "right" | "bottom") => void
   readonly toggleTheme: () => void
@@ -41,6 +42,10 @@ export const buildCommands = (
     { id: "panel:previous", title: "Focus previous panel", group: "Panels", run: actions.focusPrevious },
     { id: "panel:close-active", title: "Close active panel", group: "Panels", run: actions.closeActive },
     { id: "panel:maximize-active", title: "Maximize or restore active panel", group: "Panels", run: actions.toggleMaximize },
+    { id: "panel:wider", title: "Make active panel group wider", group: "Panels", run: () => actions.resize("wider") },
+    { id: "panel:narrower", title: "Make active panel group narrower", group: "Panels", run: () => actions.resize("narrower") },
+    { id: "panel:taller", title: "Make active panel group taller", group: "Panels", run: () => actions.resize("taller") },
+    { id: "panel:shorter", title: "Make active panel group shorter", group: "Panels", run: () => actions.resize("shorter") },
     { id: "panel:move-next-group", title: "Move active panel to the next group", group: "Panels", run: actions.moveToNextGroup },
     { id: "panel:split-right", title: "Split active panel to the right", group: "Panels", run: () => actions.split("right") },
     { id: "panel:split-below", title: "Split active panel below", group: "Panels", run: () => actions.split("bottom") },

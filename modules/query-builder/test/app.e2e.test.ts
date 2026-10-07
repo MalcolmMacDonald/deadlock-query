@@ -54,7 +54,7 @@ test.skipIf(!haveBrowser)("slice-1 query runs against the mini-map and renders t
 }).toArray()`)
   await page.click("#run")
   await page.waitForSelector("[data-testid=results-table] tbody tr", { timeout: 20_000 })
-  const rows = await page.$$eval("[data-testid=results-table] tbody tr", (trs) => trs.map((tr) => Array.from((tr as HTMLTableRowElement).cells).map((c) => c.textContent ?? "")))
+  const rows = await page.$$eval("[data-testid=results-table] tbody tr", (trs) => trs.map((tr) => Array.from((tr as HTMLTableRowElement).cells).map((c) => (c as HTMLElement).dataset.entityId ?? c.textContent ?? "")))
   expect(rows.map((r) => [r[0], r[2], r[3]])).toEqual(mini.expectedGuardianOrbDistance.rows.map((r) => [String(r[0]), String(r[2]), String(r[3])]))
   expect(await page.textContent("[data-testid=stats]")).toMatch(new RegExp(`${mini.expectedGuardianOrbDistance.rows.length} rows`))
   expect(errors).toEqual([])
@@ -96,7 +96,9 @@ test.skipIf(!haveBrowser)("results drive the viewer overlay, and row ↔ pick �
   const ids = mini.expectedGuardianOrbDistance.rows.map((_, i) => String(i))
   const overlay = await page.evaluate(() => (self as any).__qb.host.log.overlays.get("query-result")?.map((f: any) => f.label))
   // Labels name the thing (the guardian id in column c1), not the row/column plumbing.
-  const names = await page.$$eval("[data-testid=results-table] tbody tr", (rs) => rs.map((r) => r.querySelector("td")?.textContent))
+  const names = await page.$$eval("[data-testid=results-table] tbody tr", (rs) => rs.map((r) => (r.querySelector("td") as HTMLElement | null)?.dataset.entityId ?? r.querySelector("td")?.textContent))
+  // Entity ids read as "<kind> #<id suffix>" in the table, with the full id as the tooltip.
+  expect(await page.$eval("[data-testid=results-table] tbody tr td", (td) => [td.textContent, td.getAttribute("title")])).toEqual(["guardian #guardian-1-2 · yellow", "guardian-1-2"])
   expect(overlay).toEqual(names)
   // Feature ids are the viewer's own `<layer>:<index>`.
   const featureId = (i: number) => `query-result:${i}`
@@ -105,6 +107,8 @@ test.skipIf(!haveBrowser)("results drive the viewer overlay, and row ↔ pick �
   await page.click(`tr[data-row-id="${ids[1]}"]`)
   const sel1 = await page.evaluate(() => ({ highlight: (self as any).__qb.host.log.highlights.at(-1) }))
   expect(sel1.highlight).toEqual([featureId(1)])
+  // …and the camera flies to the row's point.
+  expect(await page.evaluate(() => (self as any).__qb.host.log.flights.length)).toBe(1)
   expect(await page.$$eval("tr.selected", (r) => r.map((x) => (x as HTMLElement).dataset.rowId))).toEqual([ids[1]])
 
   // Viewer pick → row selected.
@@ -115,10 +119,17 @@ test.skipIf(!haveBrowser)("results drive the viewer overlay, and row ↔ pick �
   await page.evaluate((id) => (self as any).__qb.host.setSelected([id]), ids[0])
   await page.waitForFunction((id) => document.querySelector("tr.selected")?.getAttribute("data-row-id") === id, ids[0], { timeout: 5_000 })
 
+  // Pin keeps the layer on the map when the next run clears the live one; Unpin all removes it.
+  await page.click("[data-testid=pin]")
+  const pinnedIds = () => page.evaluate(() => [...(self as any).__qb.host.log.overlays.keys()].filter((k: string) => k.includes("-pin")))
+  expect((await pinnedIds()).length).toBe(1)
   // A result without geometry clears the overlay.
   await setSource(page, "map.guardians.count()")
   await page.click("#run")
   await page.waitForFunction(() => !(self as any).__qb.host.log.overlays.has("query-result"))
+  expect((await pinnedIds()).length).toBe(1)
+  await page.click("[data-testid=unpin]")
+  await page.waitForFunction(() => ![...(self as any).__qb.host.log.overlays.keys()].some((k: string) => k.includes("-pin")))
   expect(errors).toEqual([])
   await page.close()
 }, 90_000)
@@ -131,7 +142,7 @@ test.skipIf(!haveBrowser)("docs panel searches the catalog and inserts at the cu
   await setSource(page, "map.healingOrbs")
   await page.evaluate(() => { const e = (self as any).__qb.editor; e.setPosition(e.getModel().getFullModelRange().getEndPosition()) })
   await page.click("[data-testid=toggle-docs]")
-  expect(await page.$$eval("[data-testid=doc-item]", (r) => r.length)).toBeGreaterThan(80)
+  expect(await page.$$eval("[data-testid=doc-item]", (r) => r.length)).toBeGreaterThan(40)
   await page.fill("[data-testid=docs-search]", "withinTravel")
   await page.waitForFunction(() => document.querySelector("[data-testid=doc-item]")?.textContent === "EntityList.withinTravelTime")
   await page.click("[data-testid=doc-item]")
@@ -544,3 +555,37 @@ test.skipIf(!haveBrowser)("every control has an accessible name, ids are unique,
   expect(errors).toEqual([])
   await page.close()
 }, 60_000)
+
+test.skipIf(!haveBrowser)("parameter-name inlay hints appear next to literal arguments", async () => {
+  const { page, errors } = await open()
+  await setSource(page, 'map.guardians.inLane("yellow").toArray()')
+  // Monaco renders a hint as an inline decoration whose text is the parameter name; its position is the editor model's.
+  await page.waitForFunction(() => /lane\s*:/.test(document.querySelector(".monaco-editor .view-lines")?.textContent ?? "") || document.querySelector(".monaco-editor [class*='inlayHint'], .monaco-editor .dyn-rule") !== null, undefined, { timeout: 30_000 })
+  const text = await page.$eval(".monaco-editor .view-lines", (el) => el.textContent ?? "")
+  expect(text.replace(/ /g, " ")).toMatch(/lane:\s*"yellow"/)
+  expect(errors).toEqual([])
+  await page.close()
+}, 60_000)
+
+test.skipIf(!haveBrowser)("progress() shows in the status while a query runs, and a query's own time budget stops it cleanly", async () => {
+  const { page, errors } = await open()
+  await page.evaluate(() => {
+    const seen: string[] = []
+    ;(self as any).__statusSeen = seen
+    new MutationObserver(() => seen.push(document.querySelector("#status")?.textContent ?? "")).observe(document.querySelector("#status")!, { childList: true, characterData: true, subtree: true })
+  })
+  await setSource(page, 'for (let i = 0; i < 5; i++) { progress((i + 1) / 5, "step " + (i + 1)); const t = Date.now(); while (Date.now() - t < 120) {} }\n5')
+  await page.click("#run")
+  await page.waitForSelector("[data-testid=results-table] tbody tr, [data-testid=error]", { timeout: 20_000 })
+  expect(await page.$("[data-testid=error]") ? await page.textContent("[data-testid=error]") : "").toBe("")
+  const seen: string[] = await page.evaluate(() => (self as any).__statusSeen)
+  expect(seen.some((s) => /running… \d+% step \d/.test(s))).toBe(true)
+  expect(await page.textContent("#status")).toBe("done")
+
+  await setSource(page, "withRun({ maxMillis: 60 }, () => { for (;;) progress(0) })")
+  await page.click("#run")
+  await page.waitForSelector("[data-testid=error]", { timeout: 20_000 })
+  expect(await page.textContent("[data-testid=error]")).toContain("time budget")
+  expect(errors).toEqual([])
+  await page.close()
+}, 90_000)

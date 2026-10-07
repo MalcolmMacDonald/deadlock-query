@@ -13,6 +13,8 @@ export class SandboxRunner {
   private readyWaiters: Array<() => void> = []
   private isReady = false
   private active: { runId: number; settle: (o: RunOutcome) => void } | undefined
+  /** Called with `progress(f)` reports of the running query (fraction 0..1). Set by the panel; one listener. */
+  onProgress: ((fraction: number, label?: string) => void) | undefined
 
   constructor(private readonly doc: Document, prelude = "") {
     const nonce = crypto.randomUUID().replaceAll("-", "")
@@ -34,8 +36,9 @@ export class SandboxRunner {
       this.readyWaiters.splice(0).forEach((f) => f())
     } else if (this.active && m.runId === this.active.runId) {
       const { settle } = this.active
+      if (m.type === "progress") { this.onProgress?.(m.fraction, m.label); return }
       if (m.type === "result") settle({ ok: true, value: m.value, ms: m.ms, ...(m.totalRows === undefined ? {} : { totalRows: m.totalRows }), ...(m.provisional ? { provisional: true } : {}) })
-      else if (m.type === "error") settle({ ok: false, reason: "error", message: m.message })
+      else if (m.type === "error") settle({ ok: false, reason: m.cancelled ?? "error", message: m.message })
     }
   }
 

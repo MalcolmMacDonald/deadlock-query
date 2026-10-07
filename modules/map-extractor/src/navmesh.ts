@@ -20,7 +20,7 @@ import { WALKABLE_FLOW_FILE, WALKABLE_NAV_FILE, loadWalkable, type WalkableStats
  * Recast (`source: "game-nav"`): `world_physics` holds only clip volumes, so Recast over it describes clip lids, not the walkable map.
  */
 
-export const NAVMESH_BAKE_VERSION = "1.0.0"
+export const NAVMESH_BAKE_VERSION = "1.3.0"
 
 /** Source units. Provisional: these are Source-engine defaults, not measured from Deadlock heroes. */
 export interface NavAgent { readonly radius: number; readonly height: number; readonly climb: number; readonly slopeDegrees: number }
@@ -245,18 +245,21 @@ export const navmeshObj = (soup: PolygonSoup, component: Int32Array): string => 
 // Links from entities
 // ---------------------------------------------------------------------------------------------------------------------
 
+/** Zipline stops may hang this far (Source units) above the navmesh: real nodes sit well above the street (47 of 129 are over 256 away). */
+const ZIPLINE_SNAP = 640
+
 const str = (v: unknown): string | undefined => (typeof v === "string" && v.length > 0 ? v : undefined)
 
 /**
  * Candidate off-mesh links, from the real dl_midtown entity lump (build 25738777):
  *   - ziplines: `citadel_zipline_path_node`s share a `path_uniqueid` and are ordered by `path_index`. The nodes hang in the air,
- *     so only each path's first and last node become one link (a rider can get on and off at the ends), bidirectional unless the
- *     first node has `one_way`;
+ *     so with `canBoard` only the nodes near the navmesh count as stops, and consecutive stops of a path (by `path_index`) are
+ *     linked, bidirectional unless the first node has `one_way` (without `canBoard` every node is a stop);
  *   - jump pads: `trigger_catapult` whose `target` names an `info_target_server_only` landing point (one way; `launchTarget` is
  *     accepted as an alias).
  * Entities without a resolvable target produce no link.
  */
-export const entityLinks = (entities: ReadonlyArray<Entity>): NavLink[] => {
+export const entityLinks = (entities: ReadonlyArray<Entity>, canBoard?: (p: readonly [number, number, number]) => boolean): NavLink[] => {
   const byName = new Map<string, Entity>()
   for (const e of entities) { const n = str(e.properties["targetname"]); if (n && !byName.has(n)) byName.set(n, e) }
   const out: NavLink[] = []
@@ -274,21 +277,24 @@ export const entityLinks = (entities: ReadonlyArray<Entity>): NavLink[] => {
   for (const nodes of paths.values()) {
     if (nodes.length < 2) continue
     nodes.sort((a, b) => idx(a) - idx(b))
-    const first = nodes[0]!, last = nodes[nodes.length - 1]!
-    out.push({ from: first.position, to: last.position, kind: "zipline", bidirectional: !(str(first.properties["one_way"]) === "1" || first.properties["one_way"] === true) })
+    const oneWay = str(nodes[0]!.properties["one_way"]) === "1" || nodes[0]!.properties["one_way"] === true
+    // Nodes that hang too high to step on or off are skipped, and the rest are chained in order, so a path whose middle is
+    // in the air still joins the ground stops at both ends (and any stop in between).
+    const stops = canBoard ? nodes.filter((n) => canBoard(n.position)) : nodes
+    for (let i = 0; i + 1 < stops.length; i++) out.push({ from: stops[i]!.position, to: stops[i + 1]!.position, kind: "zipline", bidirectional: !oneWay })
   }
   return out
 }
 
-/** Keeps links whose both endpoints lie within `maxSnap` of some navmesh vertex (uniform xy grid, no polygon tests). */
-export const snapLinks = (links: ReadonlyArray<NavLink>, vertices: Float64Array, maxSnap: number): { kept: NavLink[]; dropped: number } => {
+/** Predicate: is a point within `maxSnap` of some navmesh vertex (uniform xy grid, no polygon tests). */
+export const nearTest = (vertices: Float64Array, maxSnap: number): ((p: readonly [number, number, number]) => boolean) => {
   const cell = Math.max(maxSnap, 1)
   const grid = new Map<string, number[]>()
   for (let i = 0; i < vertices.length; i += 3) {
     const key = `${Math.floor(vertices[i]! / cell)},${Math.floor(vertices[i + 1]! / cell)}`
     const l = grid.get(key) ?? []; l.push(i); grid.set(key, l)
   }
-  const near = (p: readonly [number, number, number]) => {
+  return (p) => {
     const cx = Math.floor(p[0] / cell), cy = Math.floor(p[1] / cell)
     for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) {
       for (const i of grid.get(`${cx + dx},${cy + dy}`) ?? []) {
@@ -297,6 +303,11 @@ export const snapLinks = (links: ReadonlyArray<NavLink>, vertices: Float64Array,
     }
     return false
   }
+}
+
+/** Keeps links whose both endpoints lie within `maxSnap` of some navmesh vertex. */
+export const snapLinks = (links: ReadonlyArray<NavLink>, vertices: Float64Array, maxSnap: number): { kept: NavLink[]; dropped: number } => {
+  const near = nearTest(vertices, maxSnap)
   const kept = links.filter((l) => near(l.from) && near(l.to))
   return { kept, dropped: links.length - kept.length }
 }
@@ -422,8 +433,8 @@ export const bakeNavmesh = async (dir: string, o: NavmeshOptions = {}): Promise<
   const largestComponentShare = sizes[0]! / soup.polys.length
   o.log?.(`navmesh: ${built.tiles} tiles -> ${soup.polys.length} polygons, ${stitched} border edges stitched, ${sizes.length} components (largest ${(largestComponentShare * 100).toFixed(1)}%)`)
 
-  const candidates = entityLinks(entities)
-  const { kept, dropped } = snapLinks(candidates, soup.vertices, maxLinkSnap)
+  const candidates = entityLinks(entities, nearTest(soup.vertices, Math.max(maxLinkSnap, ZIPLINE_SNAP)))
+  const { kept, dropped } = snapLinks(candidates, soup.vertices, Math.max(maxLinkSnap, ZIPLINE_SNAP))
   const byKind: Record<string, number> = {}
   for (const l of kept) byKind[l.kind] = (byKind[l.kind] ?? 0) + 1
   if (dropped > 0) warnings.push(`${dropped} off-mesh links dropped: an endpoint is more than ${maxLinkSnap} units from the navmesh`)
@@ -458,8 +469,8 @@ export const bakeNavmesh = async (dir: string, o: NavmeshOptions = {}): Promise<
 // Game nav source
 // ---------------------------------------------------------------------------------------------------------------------
 
-/** Connected components counting `links` as connections between the polygons nearest their endpoints (union-find over the base components). */
-const componentsWithLinks = (soup: PolygonSoup, base: Int32Array, nm: NavMesh, links: ReadonlyArray<NavLink>): number[] => {
+/** Root label per polygon: shared-edge components joined further wherever a link connects the polygons nearest its endpoints. */
+const labelsWithLinks = (base: Int32Array, nm: NavMesh, links: ReadonlyArray<NavLink>): Int32Array => {
   const parent = Int32Array.from({ length: base.length }, (_, i) => i)
   const find = (i: number): number => { while (parent[i] !== i) { parent[i] = parent[parent[i]!]!; i = parent[i]! } return i }
   const union = (a: number, b: number) => { const ra = find(a), rb = find(b); if (ra !== rb) parent[ra] = rb }
@@ -470,10 +481,78 @@ const componentsWithLinks = (soup: PolygonSoup, base: Int32Array, nm: NavMesh, l
     const a = nm.nearestPoint(l.from)?.poly, b = nm.nearestPoint(l.to)?.poly
     if (a !== undefined && b !== undefined) union(a, b)
   }
+  return Int32Array.from(base, (_, p) => find(p))
+}
+
+/** Connected components counting `links` as connections between the polygons nearest their endpoints (sizes, largest first). */
+const componentsWithLinks = (soup: PolygonSoup, base: Int32Array, nm: NavMesh, links: ReadonlyArray<NavLink>): number[] => {
+  const labels = labelsWithLinks(base, nm, links)
   const sizes = new Map<number, number>()
-  for (let p = 0; p < soup.polys.length; p++) { const r = find(p); sizes.set(r, (sizes.get(r) ?? 0) + 1) }
+  for (let p = 0; p < soup.polys.length; p++) sizes.set(labels[p]!, (sizes.get(labels[p]!) ?? 0) + 1)
   return [...sizes.values()].sort((a, b) => b - a)
 }
+
+/** Islands of at most this many polygons (after links) are candidates for stitching to the main mesh. */
+export const ISLAND_MAX_POLYS = 400
+/** An island is joined to the nearest larger piece within this 3D distance (Source units) and at most `ISLAND_MAX_DZ` apart in height. */
+export const ISLAND_SNAP = 200
+export const ISLAND_MAX_DZ = 96
+
+/**
+ * Small fragments of the game nav that touch nothing (gaps at thresholds, doorways, props) get one bidirectional `navConnection`
+ * link to the nearest polygon of a larger piece, when that is close in 3D and at about the same height. Fragments with nothing
+ * near enough (rooftop platforms, high ledges) are left alone: they need a real traversal link (zipline, rope, jump), not a guess.
+ */
+export const islandLinks = (soup: PolygonSoup, labels: Int32Array): NavLink[] => {
+  const n = soup.polys.length
+  const c = new Float64Array(n * 3)
+  soup.polys.forEach((poly, i) => {
+    for (const v of poly) for (let k = 0; k < 3; k++) c[i * 3 + k]! += soup.vertices[v * 3 + k]! / poly.length
+  })
+  const sizes = new Map<number, number>()
+  for (let p = 0; p < n; p++) sizes.set(labels[p]!, (sizes.get(labels[p]!) ?? 0) + 1)
+  const cell = ISLAND_SNAP
+  const grid = new Map<string, number[]>()
+  const key = (x: number, y: number) => `${Math.floor(x / cell)},${Math.floor(y / cell)}`
+  for (let p = 0; p < n; p++) {
+    if (sizes.get(labels[p]!)! <= ISLAND_MAX_POLYS) continue
+    const k = key(c[p * 3]!, c[p * 3 + 1]!)
+    ;(grid.get(k) ?? grid.set(k, []).get(k)!).push(p)
+  }
+  const best = new Map<number, { d: number; a: number; b: number }>()
+  for (let p = 0; p < n; p++) {
+    const lab = labels[p]!
+    if (sizes.get(lab)! > ISLAND_MAX_POLYS) continue
+    const x = c[p * 3]!, y = c[p * 3 + 1]!, z = c[p * 3 + 2]!
+    for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) {
+      for (const q of grid.get(`${Math.floor(x / cell) + dx},${Math.floor(y / cell) + dy}`) ?? []) {
+        if (Math.abs(c[q * 3 + 2]! - z) > ISLAND_MAX_DZ) continue
+        const d = Math.hypot(c[q * 3]! - x, c[q * 3 + 1]! - y, c[q * 3 + 2]! - z)
+        if (d <= ISLAND_SNAP && d < (best.get(lab)?.d ?? Infinity)) best.set(lab, { d, a: p, b: q })
+      }
+    }
+  }
+  return [...best.values()].map(({ a, b }) => ({
+    from: [c[a * 3]!, c[a * 3 + 1]!, c[a * 3 + 2]!] as const, to: [c[b * 3]!, c[b * 3 + 1]!, c[b * 3 + 2]!] as const, kind: "navConnection", bidirectional: true
+  }))
+}
+
+/**
+ * Upward traversals mirrored from the game's one-way drops (`navConnection` flow links). The game's flow map only lists ways
+ * down, so rooftop and ledge platforms (orbs, camps) have no way up in the graph although players jump and mantle onto them.
+ * Each drop of at least `MANTLE_MIN_DROP` and at most `MANTLE_MAX_RISE` units gets a one-way reverse link of kind `mantle`.
+ * It is a separate kind on purpose: a query's `linkSpeeds` sets what climbing costs (give `mantle` a speed well under walking
+ * speed, e.g. half of it) and leaves it out to forbid climbing. Set `MANTLE_LINKS` to false to stop emitting them.
+ */
+export const MANTLE_LINKS = true
+export const MANTLE_MIN_DROP = 48
+export const MANTLE_MAX_RISE = 1600
+export const MANTLE_KIND = "mantle"
+
+export const mantleLinks = (links: ReadonlyArray<NavLink>): NavLink[] =>
+  !MANTLE_LINKS ? [] : links
+    .filter((l) => l.kind === "navConnection" && l.bidirectional !== true && l.from[2] - l.to[2] >= MANTLE_MIN_DROP && l.from[2] - l.to[2] <= MANTLE_MAX_RISE)
+    .map((l) => ({ from: l.to, to: l.from, kind: MANTLE_KIND, bidirectional: false }))
 
 /** Navmesh from the game's own nav faces (+ entity links and the `.navflowmap` connections that polygon adjacency lacks). */
 const bakeGameNavmesh = async (
@@ -508,8 +587,8 @@ const bakeGameNavmesh = async (
   const largestComponentShare = sizes[0]! / soup.polys.length
   o.log?.(`navmesh: ${stats.faces} faces -> ${soup.polys.length} polygons (${stats.duplicateFaces} repeated faces dropped, ${stats.stitchedEdges} T-junction edges stitched), ${sizes.length} components (largest ${(largestComponentShare * 100).toFixed(1)}%)`)
 
-  const entityCandidates = entityLinks(entities)
-  const { kept: entityKept, dropped } = snapLinks(entityCandidates, soup.vertices, maxLinkSnap)
+  const entityCandidates = entityLinks(entities, nearTest(soup.vertices, Math.max(maxLinkSnap, ZIPLINE_SNAP)))
+  const { kept: entityKept, dropped } = snapLinks(entityCandidates, soup.vertices, Math.max(maxLinkSnap, ZIPLINE_SNAP))
   if (dropped > 0) warnings.push(`${dropped} entity off-mesh links dropped: an endpoint is more than ${maxLinkSnap} units from the navmesh`)
   let flowKept: NavLink[] = []
   if (hasFlow) {
@@ -525,7 +604,11 @@ const bakeGameNavmesh = async (
       warnings.push(`navflowmap unreadable, no flow connections: ${e instanceof Error ? e.message : String(e)}`)
     }
   } else warnings.push(`no ${WALKABLE_FLOW_FILE}: the mesh has no game-provided jump/drop connections`)
-  const links = [...entityKept, ...flowKept]
+  const mantles = mantleLinks(flowKept)
+  const linked = [...entityKept, ...flowKept, ...mantles]
+  const stitches = islandLinks(soup, labelsWithLinks(component, NavMesh.fromPolygons(toNavMeshData(soup), linked), linked))
+  if (stitches.length > 0) o.log?.(`navmesh: ${stitches.length} small islands stitched to the nearest larger piece`)
+  const links = [...linked, ...stitches]
   const byKind: Record<string, number> = {}
   for (const l of links) byKind[l.kind] = (byKind[l.kind] ?? 0) + 1
 

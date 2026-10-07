@@ -12,6 +12,7 @@ export const addPreset = (api: DockviewApi, preset: ReadonlyArray<PresetPanel>):
       ...(p.position ? { position: p.position } : {}),
       ...(p.initialWidth ? { initialWidth: p.initialWidth } : {}),
       ...(p.initialHeight ? { initialHeight: p.initialHeight } : {}),
+      ...(p.inactive ? { inactive: true } : {}),
     })
 }
 
@@ -79,5 +80,21 @@ export const splitActive = (api: DockviewApi, direction: "right" | "bottom"): bo
   const p = api.activePanel
   if (!p || p.group.panels.length < 2) return false
   p.api.moveTo({ group: p.group, position: direction })
+  return true
+}
+
+export type ResizeDirection = "wider" | "narrower" | "taller" | "shorter"
+
+/** Pixels moved per keyboard resize step. */
+export const RESIZE_STEP = 40
+
+/** Grows or shrinks the active panel's group by one step along one axis; the neighbouring group gives or takes the space. */
+export const resizeActiveGroup = (api: DockviewApi, direction: ResizeDirection): boolean => {
+  const p = api.activePanel
+  if (!p || api.groups.length < 2) return false
+  const g = p.group.api
+  const sign = direction === "wider" || direction === "taller" ? 1 : -1
+  if (direction === "wider" || direction === "narrower") g.setSize({ width: Math.max(RESIZE_STEP, g.width + sign * RESIZE_STEP) })
+  else g.setSize({ height: Math.max(RESIZE_STEP, g.height + sign * RESIZE_STEP) })
   return true
 }

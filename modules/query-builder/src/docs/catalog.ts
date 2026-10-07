@@ -44,12 +44,30 @@ export interface DocIndex {
   readonly byName: ReadonlyMap<string, ReadonlyArray<DocItem>>
 }
 
+/**
+ * What the docs panel, search and hover links show: the few exports a query author reaches for.
+ * An explicit allowlist, so new library exports stay out of the docs until added here. The editor's
+ * autocomplete and type checking still use the full .d.ts and are unaffected.
+ */
+export const DOC_ALLOWLIST: ReadonlyArray<string> = [
+  "MapContext", "EntityList", "MapEntity", "Seq", "Vec3", "vec", "seconds", "meters", "Lane", "NavApi", "SampleApi",
+]
+
+/** Members of allowlisted classes that are plumbing, not query vocabulary. */
+export const DOC_HIDDEN_MEMBERS: ReadonlySet<string> = new Set([
+  "MapContext.fromBundle", "MapContext.provisional", "MapContext.metadata", "MapContext.entities", "EntityList.fromSource",
+  "MapEntity.className", "MapEntity.properties", "MapEntity.source", "MapEntity.provenance", "MapEntity.laneNumber",
+])
+
 export const buildDocIndex = (catalog: ApiCatalog): DocIndex => {
   const items: DocItem[] = []
+  const allowed = new Set(DOC_ALLOWLIST)
   for (const e of catalog.entries) {
+    if (!allowed.has(e.name)) continue
     const category = e.category ?? "Other"
     items.push({ id: e.name, name: e.name, kind: e.kind, signature: e.signature, summary: e.summary, category, examples: e.examples })
     for (const m of e.members) {
+      if (DOC_HIDDEN_MEMBERS.has(`${e.name}.${m.name}`)) continue
       items.push({ id: `${e.name}.${m.name}`, name: m.name, owner: e.name, kind: m.kind, signature: m.signature, summary: m.summary, category: m.category ?? category, examples: m.examples })
     }
   }

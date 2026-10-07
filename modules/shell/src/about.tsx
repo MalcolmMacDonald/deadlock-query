@@ -1,6 +1,7 @@
 import { Effect, Layer } from "effect"
 import { MapDataService, MockMapDataService, type ModuleDefinition } from "@deadlock-query/contracts"
-import { useEffect, useState } from "react"
+import { Fragment, useEffect, useState } from "react"
+import { PALETTE_TOGGLE, SHORTCUTS, shortcutLabel } from "./shortcuts.ts"
 import { buildInfo } from "./buildInfo.ts"
 import { LIBRARY_URL } from "./editor.tsx"
 import { BUNDLE_MANIFEST_URL } from "./viewer.ts"
@@ -36,6 +37,18 @@ export const loadAboutData = async (fetchFn: typeof fetch = fetch, base: string 
   return { mapSource: manifest.source, mapName: manifest.mapName, gameBuildId: manifest.gameBuildId, libraryApiVersion: library }
 }
 
+const SHORTCUT_TEXT: Record<string, string> = {
+  [PALETTE_TOGGLE]: "Open the command palette (every panel, preset and action)",
+  "panel:next": "Focus the next panel",
+  "panel:previous": "Focus the previous panel",
+  "panel:close-active": "Close the active panel",
+  "panel:maximize-active": "Maximize or restore the active panel",
+  "panel:wider": "Widen the active panel group",
+  "panel:narrower": "Narrow the active panel group",
+  "panel:taller": "Make the active panel group taller",
+  "panel:shorter": "Make the active panel group shorter",
+}
+
 const AboutPanel = () => {
   const [data, setData] = useState<AboutData>()
   useEffect(() => {
@@ -44,8 +57,21 @@ const AboutPanel = () => {
     return () => { live = false }
   }, [])
   return (
-    <section className="about" aria-labelledby="about-title" data-testid="about-panel">
+    <section className="about" tabIndex={0} aria-labelledby="about-title" data-testid="about-panel">
       <h2 id="about-title" style={{ marginTop: 0 }}>About Deadlock Query</h2>
+      <h3>Getting started</h3>
+      <ol data-testid="about-start">
+        <li>Write a query in the editor on the right and press Ctrl+Enter; the results appear as points on the map.</li>
+        <li>Click a result row to fly to it; click a point on the map to see its details in the Inspector.</li>
+        <li>Open Docs or Gallery in the editor for the query API and ready-made examples.</li>
+        <li>The header presets (Query, Explore, Review) rearrange the panels; Reset layout restores the default.</li>
+      </ol>
+      <h3>Keyboard shortcuts</h3>
+      <dl data-testid="about-shortcuts">
+        {SHORTCUTS.map((s) => (<Fragment key={s.command}><dt><kbd>{shortcutLabel(s)}</kbd></dt><dd>{SHORTCUT_TEXT[s.command] ?? s.command}</dd></Fragment>))}
+        <dt><kbd>F</kbd></dt><dd>On the map: frame the selection</dd>
+      </dl>
+      <h3>Build</h3>
       <dl>
         <dt>Build</dt><dd data-testid="about-sha"><code>{buildInfo.gitSha}</code> ({buildInfo.target})</dd>
         <dt>Built at</dt><dd>{buildInfo.builtAt}</dd>

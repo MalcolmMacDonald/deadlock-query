@@ -6,7 +6,7 @@ import { frameBounds, frameEntities, type CameraMode } from "./camera.ts"
 import { FOV_DEG, ViewerControls } from "./controls.ts"
 import { buildScene, glbToThreeMatrix, makeColoredTerrainMaterial, makeTerrainMaterial, setSurfaceVisible, surfaceMeshes } from "./scene.ts"
 import { declutterLabels } from "./labels.ts"
-import { OverlayScene, parseFeatureId, pickFeature } from "./overlays.ts"
+import { OverlayScene, parseFeatureId, pickFeature, pickInRect } from "./overlays.ts"
 import { MAX_CAPTURE_SCALE, ViewerController } from "./viewerService.ts"
 import { eyeOf } from "./camera.ts"
 import { SurfacePicker, threeToWorld, worldTriangleSoup } from "./picking.ts"
@@ -128,6 +128,8 @@ export const makeViewerPanel = (data: ViewerData, controller: ViewerController =
       declutterLabels(overlays.root, camera, canvas.clientWidth, canvas.clientHeight)
       renderer.render(scene, camera)
       canvas.dataset.frames = String(Number(canvas.dataset.frames ?? "0") + 1)
+      canvas.dataset.renderTriangles = String(renderer.info.render.triangles)
+      canvas.dataset.renderCalls = String(renderer.info.render.calls)
     }
 
     const overlays = new OverlayScene(requestRender)
@@ -136,11 +138,12 @@ export const makeViewerPanel = (data: ViewerData, controller: ViewerController =
     const { min, max } = data.manifest.bounds
     let live: ViewerControls | undefined
     let grabsHandle: (e: PointerEvent) => boolean = () => false
+    let grabsMarquee: (e: PointerEvent) => boolean = () => false
     const controls = new ViewerControls({
       element: canvas,
       camera,
       initial: { mode: "map", pose: frameBounds(min, max, FOV_DEG) },
-      intercept: (e) => grabsHandle(e),
+      intercept: (e) => grabsHandle(e) || grabsMarquee(e),
       onChange: () => {
         streamDirty = true
         requestRender()
@@ -196,6 +199,7 @@ export const makeViewerPanel = (data: ViewerData, controller: ViewerController =
     let bakedBvh = data.bakedBvh
     let picker: SurfacePicker | undefined
     let pickerReady = false
+    let pickerFromTiles = false
     const getPicker = (): SurfacePicker | undefined => {
       if (pickerReady) return picker
       pickerReady = true
@@ -204,8 +208,11 @@ export const makeViewerPanel = (data: ViewerData, controller: ViewerController =
       }
       if (!picker && world) {
         world.updateMatrixWorld(true)
+        // The bundle's collision GLB is the stable surface; the streamed render tiles only stand in when there is
+        // none, since a BVH over them goes stale (and costs seconds to rebuild) whenever a tile comes or goes.
         const meshes = surfaceMeshes(world)
-        if (streamer) { streamer.root.updateMatrixWorld(true); meshes.push(...surfaceMeshes(streamer.root)) }
+        pickerFromTiles = meshes.length === 0 && !!streamer
+        if (pickerFromTiles && streamer) { streamer.root.updateMatrixWorld(true); meshes.push(...surfaceMeshes(streamer.root)) }
         picker = SurfacePicker.fromSoup(worldTriangleSoup(meshes))
       }
       canvas.dataset.picker = picker?.source ?? "none"
@@ -259,7 +266,7 @@ export const makeViewerPanel = (data: ViewerData, controller: ViewerController =
         ...(cfg.lod0Range === undefined ? {} : { select: { lod0Range: cfg.lod0Range } }),
         onChange: () => {
           // A BVH built from the meshes goes stale when tiles come and go; the baked one does not.
-          if (picker?.source === "meshes") { picker = undefined; pickerReady = false }
+          if (picker?.source === "meshes" && pickerFromTiles) { picker = undefined; pickerReady = false }
           requestRender()
         },
         onStats: (st) => {
@@ -274,6 +281,7 @@ export const makeViewerPanel = (data: ViewerData, controller: ViewerController =
           canvas.dataset.tileMissing = String(st.missing)
           canvas.dataset.tileDisplayed = String(st.displayed)
           canvas.dataset.tileEvicted = String(st.evicted)
+          canvas.dataset.tileLoaded = String(st.loaded)
           controller.emitProgress(st)
         }
       })
@@ -336,11 +344,38 @@ export const makeViewerPanel = (data: ViewerData, controller: ViewerController =
       return nearestVertex(controller.vertexHandles(), project, x, y)
     }
     grabsHandle = (e) => e.button === 0 && !toolActive() && handleAt(e) !== undefined
+    // Box-select: Alt + drag with the select tool draws a rectangle and picks every point feature inside it
+    // (Shift adds to the current picks). Plain drags keep panning and orbiting.
+    grabsMarquee = (e) => e.button === 0 && e.altKey && !toolActive()
+    const marqueeBox = document.createElement("div")
+    marqueeBox.dataset.role = "marquee"
+    marqueeBox.style.cssText = "position:absolute;pointer-events:none;border:1px solid #6aa9ff;background:rgba(106,169,255,.15);display:none"
+    root.append(marqueeBox)
+    let marquee: { readonly x: number; readonly y: number } | undefined
+    const marqueeRect = (e: PointerEvent) => {
+      const r = canvas.getBoundingClientRect()
+      return [[marquee!.x - r.left, marquee!.y - r.top], [e.clientX - r.left, e.clientY - r.top]] as const
+    }
+    const drawMarquee = (e: PointerEvent) => {
+      const [a, b] = marqueeRect(e)
+      const cr = canvas.getBoundingClientRect(), rr = root.getBoundingClientRect()
+      Object.assign(marqueeBox.style, { display: "block", left: `${cr.left - rr.left + Math.min(a[0], b[0])}px`, top: `${cr.top - rr.top + Math.min(a[1], b[1])}px`, width: `${Math.abs(a[0] - b[0])}px`, height: `${Math.abs(b[1] - a[1])}px` })
+    }
+    const endMarquee = (e: PointerEvent) => {
+      if (!marquee) return
+      const [a, b] = marqueeRect(e)
+      marquee = undefined
+      marqueeBox.style.display = "none"
+      canvas.releasePointerCapture?.(e.pointerId)
+      const ids = pickInRect(overlays.layerData(), project, a, b, (id) => !id.startsWith("ann."))
+      controller.selectFeatures(ids, e.shiftKey || e.ctrlKey || e.metaKey)
+    }
     let hovered: string | null = null
     let down: { x: number; y: number } | undefined
     /** A handle drag in progress; `moved` once the pointer left the click tolerance. */
     let vertexDrag: { readonly index: number; moved: boolean } | undefined
     const onMove = (e: PointerEvent) => {
+      if (marquee) { drawMarquee(e); return }
       if (vertexDrag) {
         if (!vertexDrag.moved && down && Math.hypot(e.clientX - down.x, e.clientY - down.y) > 4) vertexDrag.moved = true
         if (vertexDrag.moved) {
@@ -378,6 +413,7 @@ export const makeViewerPanel = (data: ViewerData, controller: ViewerController =
     canvas.addEventListener("pointerdown", hideTip)
     const onDown = (e: PointerEvent) => {
       down = { x: e.clientX, y: e.clientY }
+      if (grabsMarquee(e)) { marquee = { x: e.clientX, y: e.clientY }; canvas.setPointerCapture?.(e.pointerId); return }
       const i = grabsHandle(e) ? handleAt(e) : undefined
       if (i === undefined) return
       vertexDrag = { index: i, moved: false }
@@ -385,6 +421,7 @@ export const makeViewerPanel = (data: ViewerData, controller: ViewerController =
       controller.selectVertex(i)
     }
     const onUp = (e: PointerEvent) => {
+      if (marquee) { endMarquee(e); down = undefined; return }
       if (vertexDrag) {
         const moved = vertexDrag.moved
         vertexDrag = undefined

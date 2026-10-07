@@ -1,3 +1,4 @@
+import { checkCancelled } from "./run.ts"
 import { MapEntity, regionOf, type Locatable, type Region } from "./entities.ts"
 import { Seq } from "./Seq.ts"
 import { Vec3 } from "./Vec3.ts"
@@ -42,6 +43,7 @@ export class SampleApi {
       *[Symbol.iterator]() {
         for (let x = Math.ceil(x0 / spacing) * spacing; x <= x1; x += spacing)
           for (let y = Math.ceil(y0 / spacing) * spacing; y <= y1; y += spacing) {
+            checkCancelled()
             const h = rc.raycastFirst([x, y, top], [0, 0, -1])
             if (h && h.normal[2] >= minNz) yield new Vec3(h.point[0], h.point[1], h.point[2])
           }
@@ -62,6 +64,7 @@ export class SampleApi {
       *[Symbol.iterator]() {
         const seen = new Set<string>()
         for (const p of floor) {
+          checkCancelled()
           const w = sem.nearestWall(s.raycaster, p.toArray(), s.params ?? {})
           if (!w) continue
           const key = `${Math.round(w.point[0] / spacing)},${Math.round(w.point[1] / spacing)},${Math.round(w.point[2] / spacing)}`

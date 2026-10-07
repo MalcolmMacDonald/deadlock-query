@@ -5,7 +5,7 @@ import { join } from "node:path"
 import { createHash } from "node:crypto"
 import { DEFAULT_GLB_TO_WORLD, buildMiniMap, writeBoxGlb } from "@deadlock-query/contracts"
 import { PLACEHOLDER_SEMANTICS, Raycaster, SampleGrid, isInterior, nearestWall } from "@deadlock-query/spatial-core"
-import { bakeBundle, loadCollisionMesh } from "../src/bake.ts"
+import { bakeBundle, loadCollisionMesh, walkableLevels } from "../src/bake.ts"
 import { inspectBundle } from "../src/inspect.ts"
 
 /** The contracts mini-map written as a bundle (manifest + collision only), no game data. */
@@ -134,4 +134,30 @@ test("bake errors are reported, not thrown", async () => {
   expect(bad.ok).toBe(false)
   expect(bad.errors[0]).toContain("cell-size")
   expect(existsSync(join(dir, "baked"))).toBe(false)
+})
+
+test("interior channel comes from the bundle's interior volumes when present", async () => {
+  const dir = miniBundle()
+  // The lane floor at z 0 near x -2000, y 0: one box around it, one far away.
+  writeFileSync(join(dir, "collision/interior-volumes.json"), JSON.stringify({ version: 1, volumes: [
+    { id: "a", model: "m", interiorType: 0, origin: [-2000, 0, 0], angles: [0, 0, 0], localMin: [-200, -200, 0], localMax: [200, 200, 300] },
+    { id: "b", model: "m", interiorType: 1, origin: [9000, 9000, 0], angles: [0, 0, 0], localMin: [-10, -10, 0], localMax: [10, 10, 10] }
+  ] }))
+  const r = await bakeBundle(dir, { cellSize: 100 })
+  expect(r.errors).toEqual([])
+  expect((r.baked as unknown as { interiorSource: string }).interiorSource).toBe("volumes")
+  const grid = SampleGrid.deserialize(rd(join(dir, r.baked!.sampleGrid.file)))
+  expect(grid.get("interior", [-2000, 0])).toBe(1)
+  expect(grid.get("interior", [-1500, 0])).toBe(0)
+}, BAKE_TIMEOUT_MS)
+
+test("walkableLevels lists stacked floors top first and merges surfaces within the gap", async () => {
+  const { Raycaster } = await import("@deadlock-query/spatial-core")
+  const quad = (z: number) => [-10, -10, z, 10, -10, z, 10, 10, z, -10, 10, z]
+  const positions = new Float32Array([...quad(0), ...quad(30), ...quad(400), ...quad(405)])
+  const indices = new Uint32Array([0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7, 8, 9, 10, 8, 10, 11, 12, 13, 14, 12, 14, 15])
+  const rc = Raycaster.fromGeometry(positions, indices)
+  expect(walkableLevels(rc, 0, 0, 1000, 48)).toEqual([405, 30])
+  expect(walkableLevels(rc, 0, 0, 1000, 10)).toEqual([405, 30, 0])
+  expect(walkableLevels(rc, 500, 500, 1000, 48)).toEqual([])
 })

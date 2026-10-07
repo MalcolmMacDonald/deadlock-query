@@ -4,7 +4,6 @@ export type PostResult =
   | { readonly ok: false; readonly status: number; readonly message: string; readonly issues?: ReadonlyArray<{ readonly code: string; readonly message: string }> }
 
 const FRIENDLY: Readonly<Record<string, string>> = {
-  turnstile: "The human check failed. Reload the page and try again.",
   "rate-limited": "Too many submissions from here. Try again in an hour, or use the download fallback.",
   github: "The submission could not be saved. Use the download fallback instead.",
   "too-large": "The submission is too large. Split it into smaller ones."
@@ -13,12 +12,12 @@ const FRIENDLY: Readonly<Record<string, string>> = {
 /** Sends the submission file text (`submissionFile(s).text`) to the worker. Network failures are reported, never thrown. */
 export const postSubmission = async (
   text: string,
-  opts: { readonly url: string; readonly turnstileToken: string; readonly fetch?: typeof fetch }
+  opts: { readonly url: string; readonly fetch?: typeof fetch }
 ): Promise<PostResult> => {
   const f = opts.fetch ?? fetch
   let res: Response
   try {
-    res = await f(opts.url, { method: "POST", body: text, headers: { "content-type": "application/json", "x-turnstile-token": opts.turnstileToken } })
+    res = await f(opts.url, { method: "POST", body: text, headers: { "content-type": "application/json" } })
   } catch {
     return { ok: false, status: 0, message: "Could not reach the submission service. Use the download fallback instead." }
   }
