@@ -245,18 +245,21 @@ export const navmeshObj = (soup: PolygonSoup, component: Int32Array): string => 
 // Links from entities
 // ---------------------------------------------------------------------------------------------------------------------
 
+/** Zipline stops may hang this far (Source units) above the navmesh: real nodes sit well above the street (47 of 129 are over 256 away). */
+const ZIPLINE_SNAP = 640
+
 const str = (v: unknown): string | undefined => (typeof v === "string" && v.length > 0 ? v : undefined)
 
 /**
  * Candidate off-mesh links, from the real dl_midtown entity lump (build 25738777):
  *   - ziplines: `citadel_zipline_path_node`s share a `path_uniqueid` and are ordered by `path_index`. The nodes hang in the air,
- *     so only each path's first and last node become one link (a rider can get on and off at the ends), bidirectional unless the
- *     first node has `one_way`;
+ *     so with `canBoard` only the nodes near the navmesh count as stops, and consecutive stops of a path (by `path_index`) are
+ *     linked, bidirectional unless the first node has `one_way` (without `canBoard` every node is a stop);
  *   - jump pads: `trigger_catapult` whose `target` names an `info_target_server_only` landing point (one way; `launchTarget` is
  *     accepted as an alias).
  * Entities without a resolvable target produce no link.
  */
-export const entityLinks = (entities: ReadonlyArray<Entity>): NavLink[] => {
+export const entityLinks = (entities: ReadonlyArray<Entity>, canBoard?: (p: readonly [number, number, number]) => boolean): NavLink[] => {
   const byName = new Map<string, Entity>()
   for (const e of entities) { const n = str(e.properties["targetname"]); if (n && !byName.has(n)) byName.set(n, e) }
   const out: NavLink[] = []
@@ -274,21 +277,24 @@ export const entityLinks = (entities: ReadonlyArray<Entity>): NavLink[] => {
   for (const nodes of paths.values()) {
     if (nodes.length < 2) continue
     nodes.sort((a, b) => idx(a) - idx(b))
-    const first = nodes[0]!, last = nodes[nodes.length - 1]!
-    out.push({ from: first.position, to: last.position, kind: "zipline", bidirectional: !(str(first.properties["one_way"]) === "1" || first.properties["one_way"] === true) })
+    const oneWay = str(nodes[0]!.properties["one_way"]) === "1" || nodes[0]!.properties["one_way"] === true
+    // Nodes that hang too high to step on or off are skipped, and the rest are chained in order, so a path whose middle is
+    // in the air still joins the ground stops at both ends (and any stop in between).
+    const stops = canBoard ? nodes.filter((n) => canBoard(n.position)) : nodes
+    for (let i = 0; i + 1 < stops.length; i++) out.push({ from: stops[i]!.position, to: stops[i + 1]!.position, kind: "zipline", bidirectional: !oneWay })
   }
   return out
 }
 
-/** Keeps links whose both endpoints lie within `maxSnap` of some navmesh vertex (uniform xy grid, no polygon tests). */
-export const snapLinks = (links: ReadonlyArray<NavLink>, vertices: Float64Array, maxSnap: number): { kept: NavLink[]; dropped: number } => {
+/** Predicate: is a point within `maxSnap` of some navmesh vertex (uniform xy grid, no polygon tests). */
+export const nearTest = (vertices: Float64Array, maxSnap: number): ((p: readonly [number, number, number]) => boolean) => {
   const cell = Math.max(maxSnap, 1)
   const grid = new Map<string, number[]>()
   for (let i = 0; i < vertices.length; i += 3) {
     const key = `${Math.floor(vertices[i]! / cell)},${Math.floor(vertices[i + 1]! / cell)}`
     const l = grid.get(key) ?? []; l.push(i); grid.set(key, l)
   }
-  const near = (p: readonly [number, number, number]) => {
+  return (p) => {
     const cx = Math.floor(p[0] / cell), cy = Math.floor(p[1] / cell)
     for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) {
       for (const i of grid.get(`${cx + dx},${cy + dy}`) ?? []) {
@@ -297,6 +303,11 @@ export const snapLinks = (links: ReadonlyArray<NavLink>, vertices: Float64Array,
     }
     return false
   }
+}
+
+/** Keeps links whose both endpoints lie within `maxSnap` of some navmesh vertex. */
+export const snapLinks = (links: ReadonlyArray<NavLink>, vertices: Float64Array, maxSnap: number): { kept: NavLink[]; dropped: number } => {
+  const near = nearTest(vertices, maxSnap)
   const kept = links.filter((l) => near(l.from) && near(l.to))
   return { kept, dropped: links.length - kept.length }
 }
@@ -422,8 +433,8 @@ export const bakeNavmesh = async (dir: string, o: NavmeshOptions = {}): Promise<
   const largestComponentShare = sizes[0]! / soup.polys.length
   o.log?.(`navmesh: ${built.tiles} tiles -> ${soup.polys.length} polygons, ${stitched} border edges stitched, ${sizes.length} components (largest ${(largestComponentShare * 100).toFixed(1)}%)`)
 
-  const candidates = entityLinks(entities)
-  const { kept, dropped } = snapLinks(candidates, soup.vertices, maxLinkSnap)
+  const candidates = entityLinks(entities, nearTest(soup.vertices, Math.max(maxLinkSnap, ZIPLINE_SNAP)))
+  const { kept, dropped } = snapLinks(candidates, soup.vertices, Math.max(maxLinkSnap, ZIPLINE_SNAP))
   const byKind: Record<string, number> = {}
   for (const l of kept) byKind[l.kind] = (byKind[l.kind] ?? 0) + 1
   if (dropped > 0) warnings.push(`${dropped} off-mesh links dropped: an endpoint is more than ${maxLinkSnap} units from the navmesh`)
@@ -508,8 +519,8 @@ const bakeGameNavmesh = async (
   const largestComponentShare = sizes[0]! / soup.polys.length
   o.log?.(`navmesh: ${stats.faces} faces -> ${soup.polys.length} polygons (${stats.duplicateFaces} repeated faces dropped, ${stats.stitchedEdges} T-junction edges stitched), ${sizes.length} components (largest ${(largestComponentShare * 100).toFixed(1)}%)`)
 
-  const entityCandidates = entityLinks(entities)
-  const { kept: entityKept, dropped } = snapLinks(entityCandidates, soup.vertices, maxLinkSnap)
+  const entityCandidates = entityLinks(entities, nearTest(soup.vertices, Math.max(maxLinkSnap, ZIPLINE_SNAP)))
+  const { kept: entityKept, dropped } = snapLinks(entityCandidates, soup.vertices, Math.max(maxLinkSnap, ZIPLINE_SNAP))
   if (dropped > 0) warnings.push(`${dropped} entity off-mesh links dropped: an endpoint is more than ${maxLinkSnap} units from the navmesh`)
   let flowKept: NavLink[] = []
   if (hasFlow) {
