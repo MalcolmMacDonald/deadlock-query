@@ -12,8 +12,8 @@ import type { MovementModelLike, NavInput } from "./spatial.ts"
 export const seconds = (n: number): number => n
 
 type Field = { costAt(p: readonly [number, number, number], maxSnap?: number): number; readonly costs?: ArrayLike<number> }
-/** Floating pickups on the real map hover up to ~855 units above the mesh, so the default must cover them (200 left every orb unreachable). */
-const DEFAULT_MAX_SNAP = 900
+/** Floating pickups hover far above their platforms (up to ~855 units on the published bundle, over 1,000 on newer extractor builds), so the default must cover them: 200 left every orb unreachable, 900 left 14 on a newer build. */
+const DEFAULT_MAX_SNAP = 1500
 const MAX_FIELDS = 256
 /** Cache budget in bytes of per-polygon costs: a real-map field is ~0.7 MB (85k polygons), so 256 entries would be ~175 MB. */
 const MAX_FIELD_BYTES = 96 * 1024 * 1024

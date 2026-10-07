@@ -25,7 +25,7 @@ export const grid = (): NavMeshData => {
 export const cell = (x: number, y: number) => [Math.floor((x - X0) / S), Math.floor((y - Y0) / S)] as const
 /** Hand model: polygon-centroid hops along axes, one cell at a time. */
 export const manhattan = (a: readonly number[], b: readonly number[]) => {
-  if (Math.abs(a[2]!) > 900 || Math.abs(b[2]!) > 900) return Infinity // more than maxSnap above the mesh plane
+  if (Math.abs(a[2]!) > 1500 || Math.abs(b[2]!) > 1500) return Infinity // more than maxSnap above the mesh plane
   const [ai, aj] = cell(a[0]!, a[1]!), [bi, bj] = cell(b[0]!, b[1]!)
   return (Math.abs(ai - bi) + Math.abs(aj - bj)) * S
 }
