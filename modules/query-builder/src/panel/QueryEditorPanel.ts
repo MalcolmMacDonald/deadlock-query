@@ -137,6 +137,7 @@ export const mountQueryEditor = async (container: HTMLElement, opts: QueryEditor
     const cancelBtn = q<HTMLButtonElement>("#cancel")
     const status = q("#status")
     const out = q("#results")
+    out.innerHTML = `<p class="empty" data-testid="results-empty">Press Run (Ctrl+Enter) to run the query. Rows appear here, and as points on the map.</p>`
 
     const ts = monaco.languages.typescript
     for (const [name, text] of Object.entries(lib.dts)) cleanups.push(ts.typescriptDefaults.addExtraLib(text, `file:///library/${name}`).dispose)
