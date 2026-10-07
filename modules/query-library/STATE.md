@@ -1,7 +1,7 @@
 # query-library — state
 
 - **Status:** M0 + M1 + M2 + M3 + M4 + M5 + M6 done
-- **Version:** 0.2.0
+- **Version:** 0.3.0 (0.2.0 -> 0.3.0: `Lane` `"purple"` renamed `"green"`)
 - **Current milestone:** M7
 - **Last updated:** 2026-10-07
 
@@ -41,11 +41,11 @@
 - 2026-10-06 — Directed costs: `a.travelTimeTo(b)` is the field from `a`; one-way links make it asymmetric.
 - 2026-10-06 — The active spatial backend is module-global (set by `fromBundle`; one map per worker) so `vec(...)` globals and entity positions can call `height()` etc. without carrying a context. Tests rebuild the map per test.
 - 2026-10-06 — `height()` is elevation above the map bounds' min z (not height above local floor), matching the plan's `grid(300).filter(p => p.height() > 800)`. `SemanticsParams` is a plain numeric record forwarded unchanged until spatial-core M2 fixes its shape. `EntityList.highGround` still uses absolute z (switch to `height()` when a backend is guaranteed).
-- 2026-10-06 — Lane numbers 1/2/3 stay yellow/blue/purple as the `laneColors` setting (per Malcolm via coordinator); still to verify on the real map.
+- 2026-10-07 — Lanes are Yellow, Blue (the middle lane) and Green, per Malcolm; the game data's "purple" lane is the Green one, so `"purple"` is no longer a `Lane` (it was never a real lane name in play). Lane numbers 1/2/3 are still yellow/blue/green (`laneColors`); the extractor now derives them from boss names (map-extractor PR #139) and the real map agrees (Yellow at -x, Blue in the middle, Green at +x).
 - 2026-10-06 — API snapshot is signature-only; adding symbols needs just `api:update`, removing/changing needs a `version` bump.
 - 2026-10-05 — `isInterior`/`isVisible`/`nearestWall` are owner-authored in spatial-core/semantics; this module only wraps them.
 - 2026-10-06 — Public types are structural (`RawEntity`, `BundleInput`) so `dist/*.d.ts` never imports contracts (Monaco only needs this library's `.d.ts`). Contracts is a dev dependency (tests/fixtures).
-- 2026-10-06 — `Lane = "yellow" | "blue" | "purple"` (names from the extractor's `subclass_name`); lane number -> colour default 1 yellow, 2 blue, 3 purple is a **proposal for the owner to confirm** (`MapSettings.laneColors`). `inLane` also accepts 1-3.
+- 2026-10-06 — `Lane = "yellow" | "blue" | "green"` (was `"purple"` until 2026-10-07; see below); lane number -> colour default 1 yellow, 2 blue, 3 green is a **proposal for the owner to confirm** (`MapSettings.laneColors`). `inLane` also accepts 1-3.
 - 2026-10-06 — `seconds()` deferred to M4 (needs the hero-speed/travel model).
 
 ## Open questions
