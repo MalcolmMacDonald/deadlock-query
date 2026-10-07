@@ -3,7 +3,7 @@ import * as THREE from "three"
 import { Effect } from "effect"
 import { MockMapDataService, worldToThree } from "@deadlock-query/contracts"
 import {
-  FOCUS_MIN_DISTANCE, MAX_PITCH, buildScene, decodeCamera, encodeCamera, eyeOf, fly, frameBounds, frameSelection, glbToThreeMatrix, loadViewerData,
+  FOCUS_MIN_DISTANCE, MAX_PITCH, buildScene, decodeCamera, encodeCamera, eyeOf, fly, frameBounds, frameEntities, frameSelection, glbToThreeMatrix, loadViewerData,
   pan, poseFromEye, rotate, switchMode, zoom, WORLD_TO_THREE
 } from "../src/index.ts"
 
@@ -14,6 +14,17 @@ test("frameBounds looks top-down at the box center", () => {
   expect(p.pitch).toBe(-MAX_PITCH)
   close(p.target, [0, 0, 300])
   expect(eyeOf(p)[2]).toBeGreaterThan(p.target[2])
+})
+
+test("frameEntities ignores stray outliers and the origin, and gives up on a handful of points", () => {
+  const grid: Array<[number, number, number]> = []
+  for (let i = 0; i < 100; i++) grid.push([(i % 10) * 800 - 4000, Math.floor(i / 10) * 600 - 3000, 100])
+  const wide = frameBounds([-4000, -3000, 100], [3200, 2400, 100])
+  const home = frameEntities([...grid, [0, 0, 0], [40000, -30000, 20000]])!
+  expect(home.pitch).toBe(-MAX_PITCH)
+  expect(home.distance).toBeLessThan(frameBounds([-4000, -3000, 0], [40000, 0, 20000]).distance / 2)
+  expect(home.distance).toBeGreaterThan(wide.distance * 0.9)
+  expect(frameEntities(grid.slice(0, 5))).toBeUndefined()
 })
 
 test("poseFromEye inverts eyeOf", () => {
