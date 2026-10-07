@@ -3,6 +3,7 @@ import { describe, isHidden, isLocked } from "./annotations.ts"
 import { TOOL_IDS, type BuiltinToolId } from "./tools.ts"
 import type { PanelComponent } from "./ViewerPanel.ts"
 import type { ViewerController } from "./viewerService.ts"
+import { OTHER_ENTITIES_LAYER } from "./entities.ts"
 import { SURFACE_LABELS, type SurfaceKind } from "./surfaces.ts"
 
 export const VIEWER_LAYERS_PANEL_ID = "viewer.layers"
@@ -22,6 +23,34 @@ const el = <K extends keyof HTMLElementTagNameMap>(tag: K, css = "", props: Part
 }
 
 const PANEL_CSS = "padding:8px;font:12px sans-serif;color:var(--fg,#d8dbe0);background:var(--surface,#1b1e24);height:100%;box-sizing:border-box;overflow:auto"
+
+/** Which group of the Layers panel an overlay layer belongs to. */
+export type LayerGroupId = "entities" | "tags" | "annotations" | "results"
+
+export const LAYER_GROUPS: ReadonlyArray<{ readonly id: LayerGroupId; readonly label: string }> = [
+  { id: "entities", label: "Map entities" },
+  { id: "tags", label: "Tags and metadata" },
+  { id: "annotations", label: "Annotations" },
+  { id: "results", label: "Query results and other" }
+]
+
+export const layerGroupOf = (layerId: string): LayerGroupId =>
+  layerId.startsWith("entities.") ? "entities" : layerId.startsWith("metadata.") ? "tags" : layerId.startsWith("ann.") ? "annotations" : "results"
+
+/** One-click combinations of layer visibility. `show` decides each layer; `surfaces` is the render / collision choice. */
+export interface LayerPreset {
+  readonly id: string
+  readonly label: string
+  readonly title: string
+  readonly show: (layerId: string) => boolean
+}
+
+export const LAYER_PRESETS: ReadonlyArray<LayerPreset> = [
+  { id: "all", label: "All", title: "Show every layer", show: () => true },
+  { id: "map", label: "Map only", title: "Hide every overlay, keep the map", show: () => false },
+  { id: "entities", label: "Entities", title: "Map entities only", show: (id) => layerGroupOf(id) === "entities" && id !== OTHER_ENTITIES_LAYER },
+  { id: "tagging", label: "Tagging", title: "Map entities and your tags", show: (id) => (layerGroupOf(id) === "entities" && id !== OTHER_ENTITIES_LAYER) || layerGroupOf(id) === "tags" }
+]
 
 /** `viewer.layers`: which map meshes show (render by default, collision on request), then visibility, colour, opacity and draw order of every overlay layer. */
 export const makeLayersPanel = (controller: ViewerController): PanelComponent => ({
@@ -51,7 +80,22 @@ export const makeLayersPanel = (controller: ViewerController): PanelComponent =>
         r.label.style.opacity = s.available ? "1" : ".5"
       }
     }
-    const list = el("div", "display:flex;flex-direction:column;gap:6px")
+    const presetBar = el("div", "display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px")
+    presetBar.dataset.role = "presets"
+    for (const preset of LAYER_PRESETS) {
+      const b = el("button", "", { textContent: preset.label, title: preset.title })
+      b.dataset.preset = preset.id
+      b.onclick = () => {
+        for (const l of controller.layers.list()) controller.layers.patch(l.id, { visible: preset.show(l.id) })
+      }
+      presetBar.append(b)
+    }
+    const advancedLabel = el("label", "display:flex;align-items:center;gap:6px;margin-bottom:6px;opacity:.8")
+    const advanced = el("input", "", { type: "checkbox" })
+    advanced.dataset.role = "advanced"
+    advancedLabel.append(advanced, el("span", "", { textContent: "Colour, opacity and order" }))
+    const list = el("div", "display:flex;flex-direction:column;gap:8px")
+    list.dataset.role = "layer-groups"
     const empty = el("div", "opacity:.6", { textContent: "No layers yet." })
     const groupsHeader = el("div", "display:flex;align-items:center;gap:6px;margin-top:12px;font-weight:700")
     groupsHeader.append(el("span", "flex:1", { textContent: "Annotation layers" }))
@@ -61,7 +105,7 @@ export const makeLayersPanel = (controller: ViewerController): PanelComponent =>
     groupsHeader.append(newGroup)
     const groups = el("div", "display:flex;flex-direction:column;gap:4px;margin-top:4px")
     groups.dataset.role = "doc-layers"
-    root.append(surfacesBox, list, empty, groupsHeader, groups)
+    root.append(presetBar, surfacesBox, advancedLabel, list, empty, groupsHeader, groups)
     container.appendChild(root)
 
     interface Row { readonly row: HTMLElement; readonly visible: HTMLInputElement; readonly color: HTMLInputElement; readonly opacity: HTMLInputElement; readonly name: HTMLElement }
@@ -89,12 +133,36 @@ export const makeLayersPanel = (controller: ViewerController): PanelComponent =>
       up.onclick = () => controller.layers.move(id, 1)
       down.onclick = () => controller.layers.move(id, -1)
       controls.append(color, opacity, up, down)
+      controls.dataset.role = "advanced-controls"
+      controls.style.display = advanced.checked ? "flex" : "none"
       row.append(visible, name, controls)
       return { row, visible, color, opacity, name }
     }
 
+    interface Group { readonly box: HTMLElement; readonly master: HTMLInputElement; readonly title: HTMLElement; readonly body: HTMLElement }
+    const groupBoxes = new Map<LayerGroupId, Group>()
+    for (const g of LAYER_GROUPS) {
+      const box = el("div", "display:flex;flex-direction:column;gap:4px")
+      box.dataset.group = g.id
+      const head = el("label", "display:flex;align-items:center;gap:6px;font-weight:700")
+      const master = el("input", "", { type: "checkbox", title: `Show or hide all of ${g.label.toLowerCase()}` })
+      master.dataset.role = "group-visible"
+      const title = el("span", "flex:1")
+      head.append(master, title)
+      const body = el("div", "display:flex;flex-direction:column;gap:6px;padding-left:18px")
+      master.onchange = () => {
+        for (const l of controller.layers.list()) if (layerGroupOf(l.id) === g.id) controller.layers.patch(l.id, { visible: master.checked })
+      }
+      box.append(head, body)
+      groupBoxes.set(g.id, { box, master, title, body })
+      list.append(box)
+    }
+    advanced.onchange = () => {
+      for (const r of rows.values()) (r.row.querySelector('[data-role="advanced-controls"]') as HTMLElement).style.display = advanced.checked ? "flex" : "none"
+    }
+
     const render = () => {
-      // Top layer first, like a paint program.
+      // Top layer first inside its group, like a paint program.
       const layers = [...controller.layers.list()].reverse()
       const sig = layers.map((l) => l.id).join("\n")
       if (sig !== signature) {
@@ -102,7 +170,7 @@ export const makeLayersPanel = (controller: ViewerController): PanelComponent =>
         for (const [id, r] of rows) if (!layers.some((l) => l.id === id)) { r.row.remove(); rows.delete(id) }
         for (const l of layers) {
           if (!rows.has(l.id)) rows.set(l.id, makeRow(l.id))
-          list.appendChild(rows.get(l.id)!.row) // re-appending reorders
+          groupBoxes.get(layerGroupOf(l.id))!.body.appendChild(rows.get(l.id)!.row) // re-appending reorders
         }
       }
       for (const l of layers) {
@@ -112,6 +180,15 @@ export const makeLayersPanel = (controller: ViewerController): PanelComponent =>
         r.visible.checked = l.visible
         r.opacity.value = String(l.opacity)
         r.color.value = hex(l.color ?? l.baseColor)
+      }
+      for (const g of LAYER_GROUPS) {
+        const gb = groupBoxes.get(g.id)!
+        const mine = layers.filter((l) => layerGroupOf(l.id) === g.id)
+        const on = mine.filter((l) => l.visible).length
+        gb.box.style.display = mine.length ? "" : "none"
+        gb.title.textContent = `${g.label} (${on}/${mine.length})`
+        gb.master.checked = mine.length > 0 && on === mine.length
+        gb.master.indeterminate = on > 0 && on < mine.length
       }
       empty.style.display = layers.length ? "none" : ""
     }
