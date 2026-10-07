@@ -18,6 +18,9 @@ test("exact modifiers are required", () => {
   expect(matchShortcut(key(",", { alt: true }))?.command).toBe("panel:previous")
   expect(matchShortcut(key("W", { alt: true, shift: true }))?.command).toBe("panel:close-active")
   expect(matchShortcut(key("w", { alt: true }))).toBeUndefined()
+  expect(matchShortcut(key("ArrowRight", { alt: true, shift: true }))?.command).toBe("panel:wider")
+  expect(matchShortcut(key("ArrowUp", { alt: true, shift: true }))?.command).toBe("panel:shorter")
+  expect(shortcutFor("panel:wider")).toBe("Alt+Shift+Arrow Right")
 })
 
 test("registry has no duplicate bindings and labels read naturally", () => {

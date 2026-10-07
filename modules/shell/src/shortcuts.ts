@@ -17,6 +17,10 @@ export const SHORTCUTS: ReadonlyArray<Shortcut> = [
   { command: "panel:previous", key: ",", alt: true },
   { command: "panel:close-active", key: "w", alt: true, shift: true },
   { command: "panel:maximize-active", key: "m", alt: true, shift: true },
+  { command: "panel:wider", key: "arrowright", alt: true, shift: true },
+  { command: "panel:narrower", key: "arrowleft", alt: true, shift: true },
+  { command: "panel:taller", key: "arrowdown", alt: true, shift: true },
+  { command: "panel:shorter", key: "arrowup", alt: true, shift: true },
 ]
 
 type KeyEventLike = Pick<KeyboardEvent, "key" | "ctrlKey" | "metaKey" | "altKey" | "shiftKey">
@@ -33,7 +37,7 @@ export const matchShortcut = (e: KeyEventLike, shortcuts: ReadonlyArray<Shortcut
 
 /** Human label such as "Ctrl+K" or "Alt+Shift+W". */
 export const shortcutLabel = (s: Shortcut): string =>
-  [s.ctrl && "Ctrl", s.alt && "Alt", s.shift && "Shift", s.key.length === 1 ? s.key.toUpperCase() : s.key].filter(Boolean).join("+")
+  [s.ctrl && "Ctrl", s.alt && "Alt", s.shift && "Shift", s.key.length === 1 ? s.key.toUpperCase() : s.key.replace(/^arrow(.)/, (_, c: string) => `Arrow ${c.toUpperCase()}`).replace(/^./, (c) => c.toUpperCase())].filter(Boolean).join("+")
 
 export const shortcutFor = (command: string, shortcuts: ReadonlyArray<Shortcut> = SHORTCUTS): string | undefined => {
   const s = shortcuts.find((x) => x.command === command)

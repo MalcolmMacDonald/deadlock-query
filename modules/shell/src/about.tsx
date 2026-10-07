@@ -43,6 +43,10 @@ const SHORTCUT_TEXT: Record<string, string> = {
   "panel:previous": "Focus the previous panel",
   "panel:close-active": "Close the active panel",
   "panel:maximize-active": "Maximize or restore the active panel",
+  "panel:wider": "Widen the active panel group",
+  "panel:narrower": "Narrow the active panel group",
+  "panel:taller": "Make the active panel group taller",
+  "panel:shorter": "Make the active panel group shorter",
 }
 
 const AboutPanel = () => {
