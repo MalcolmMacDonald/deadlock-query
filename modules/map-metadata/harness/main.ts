@@ -93,7 +93,13 @@ if (new URLSearchParams(location.search).has("review")) {
 } else {
 const drafts = await openDraftStore(indexedDbDraftStorage("harness"))
 const controller = createEditorController({ viewer, drafts, identity: () => ({ gameBuildId: "harness-build", mapName: "harness" }) })
-mountEditorPanel(document.getElementById("panel")!, controller)
+// `?mocksubmit` swaps the human check and the network for fakes so the submit flow can be tested without Cloudflare.
+const mock = new URLSearchParams(location.search).has("mocksubmit")
+const sent: string[] = []
+mountEditorPanel(document.getElementById("panel")!, controller, mock ? {
+  turnstile: async (_el, _key, onToken) => { onToken("test-token"); return { reset: () => onToken("test-token") } },
+  fetch: (async (_u: string, init: RequestInit) => { sent.push(String(init.body)); return Response.json({ id: "x", url: "https://github.com/o/r/pull/42" }, { status: 201 }) }) as unknown as typeof fetch
+} : { submitService: false })
 redraw()
-Object.assign(self, { __md: { controller, drafts, activate, tools, toWorld, toScreen } })
+Object.assign(self, { __md: { controller, drafts, activate, tools, toWorld, toScreen, sent } })
 }

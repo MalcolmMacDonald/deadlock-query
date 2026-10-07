@@ -1,7 +1,7 @@
 # map-metadata — state
 
 - **Status:** M0-M7 done in the module. Left outside it: shell mounts (review dev-only, history), infra proxy write endpoints, live worker config (Turnstile site key, allowed origin), real accepted data
-- **Version:** 1.0.0-rc.1
+- **Version:** 1.0.0-rc.2
 - **Current milestone:** M7 complete
 - **Last updated:** 2026-10-07
 
@@ -36,6 +36,8 @@
 
 - M7 (2026-10-07): `docs/contributing.md` (draw, checks table, submit, review, publish and rebase). `src/history/history.ts` (worker-safe: `historyRow` turns provenance into an audit-trail sentence list, `historyRows` newest first with status/kind/text filters, `statusCounts`) and `mountHistoryPanel(root, records, onPick)` (`metadata.history`, from the `editor` entry). Bulk accept-valid / reject-all landed with M5. Not frozen as 1.0.0 until the real flow has run once on the live site (`MetadataEditor 1.0.0` is PLAN.md's definition of done).
 
+- Live submit (2026-10-07): the editor panel's Submit section now has "Submit now" next to the download and issue fallback: Turnstile widget (site key `0x4AAAAAAFP9quRtWFXGGRRn`, public) then `postSubmission` to `https://deadlock-query-submit.m-51c.workers.dev/submit` (`DEFAULT_SUBMIT_SERVICE`; `mountEditorPanel(root, c, { submitService: false })` turns it off). Errors show the worker's message; if the human check cannot load, the panel says to use the fallback. The worker's `ALLOWED_ORIGIN` is now a comma-separated list matched exactly against the request's `Origin` (`wrangler.toml`: GitHub Pages and `deadlock-query-dev.pages.dev`; per-PR preview hosts are not allowed). Browser test with a faked check and network.
+
 ## In progress
 - (nothing)
 
@@ -48,7 +50,8 @@
 - shell: mount `mountHistoryPanel` as `metadata.history` (records from the same accepted-data fetch that feeds `setAccepted`; `onPick` can fly the camera).
 - shell: mount the review panel as a dev-only module entry (`devOnly: true` in `moduleEntries`): `createReviewController({ api: proxyApi(), viewer, reviewer })` + `mountReviewPanel`; the editor panel mounting in `shell/src/metadata.tsx` is the template.
 - infra (proxy allowlist, `modules/infra/src/proxy.ts`): review needs `PUT /contents/<path>` (commit decided files to the PR branch), `PUT /pulls/<n>/merge` and `PATCH /pulls/<n>` (close) added, with the proxy token allowed Contents and Pull requests write. Without them the review panel can list and show submissions but not accept or reject. Prefer restricting `PUT /contents/` to `data/metadata/**` and `PATCH /pulls` to `state: closed`.
-- Malcolm (live M4): create a Turnstile widget (site key for the page, secret as `TURNSTILE_SECRET`), a KV namespace `RATE`, a repo-scoped `GITHUB_TOKEN` (Contents + Pull requests write), then `bunx wrangler deploy` in `modules/map-metadata/submit-worker/` and set `ALLOWED_ORIGIN`. Until then submissions use the download/issue fallback.
+- Malcolm: re-run `bunx wrangler deploy` in `submit-worker/` after this merges (it carries the new allowed origins; without it the browser blocks the call). Done already: KV binding, secrets, first deploy.
+- (resolved) Malcolm (live M4): create a Turnstile widget (site key for the page, secret as `TURNSTILE_SECRET`), a KV namespace `RATE`, a repo-scoped `GITHUB_TOKEN` (Contents + Pull requests write), then `bunx wrangler deploy` in `modules/map-metadata/submit-worker/` and set `ALLOWED_ORIGIN`. Until then submissions use the download/issue fallback.
 - shell/editor: the panel does not call the worker yet because it needs the Turnstile site key and worker URL; once they exist, pass them to the panel and call `postSubmission`.
 - shell: pass `identity: () => ({ gameBuildId, mapName })` (or an `expect` in `context`) to `createEditorController`, otherwise Review & submit says the map is not loaded. (Earlier request, done in #157:) add the `metadata.editor` panel (`mountEditorPanel` + `createEditorController` from `@deadlock-query/map-metadata/editor`, storage `indexedDbDraftStorage(<gameBuildId>)`) to its module list; that is M2's integration work.
 - infra (root file, not editable from this module): NEXT.md row `screenshot-tool, map-metadata | Phase 3` can become `map-metadata | M1: editor panel (M0 done)`.

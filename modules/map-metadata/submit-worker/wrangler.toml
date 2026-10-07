@@ -8,7 +8,8 @@ GITHUB_REPO = "MalcolmMacDonald/deadlock-query"
 BASE_BRANCH = "main"
 PER_IP_PER_HOUR = "5"
 GLOBAL_PER_DAY = "200"
-# ALLOWED_ORIGIN = "https://malcolmmacdonald.github.io"   # set to the site origin(s) that call /submit
+# Site origin(s) that may call /submit, comma separated (exact match; per-PR preview hosts are not included).
+ALLOWED_ORIGIN = "https://malcolmmacdonald.github.io,https://deadlock-query-dev.pages.dev"
 
 # Rate-limit counters: the existing deadlock-query-dev-ratelimit namespace (keys are `ip:<address>` and `global`).
 [[kv_namespaces]]
