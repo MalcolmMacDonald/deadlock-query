@@ -23,8 +23,8 @@ const USAGE = `dlq-extract <command> [--json] [--game-dir <path>]
   extract    --map <name> [--tier full|lite] [--force] [--out <dir>] [--tri-budget <n>] [--full-fraction <0..1>] [--keep-work] [--materials]   (default map ${lock.game.mainMap}, tier lite, out <repo>/data/bundles)
   inspect    <bundle-dir>   validate manifest/entities against contracts, report sizes and frame sanity
   tile       <bundle-dir> [--lods <n>] [--lod-ratio <r>] [--keep-textures]   lite tier: meshopt-compress tiles, add simplified LODs (<id>#lod<n>), drop textures
-  bake       <bundle-dir> [--cell-size <n>] [--exclude-layers a,b] [--force]   collision BVH + sample grid (floorHeight, interior, wallDistance) into <bundle>/baked, recorded in the manifest (default cell ${DEFAULT_CELL_SIZE}, excludes ${DEFAULT_EXCLUDE_LAYERS.join(",")}),
-             then the Recast navmesh (baked/navmesh.bin + OBJ in <bundle>.qa/) unless --no-navmesh:
+  bake       <bundle-dir> [--cell-size <n>] [--exclude-layers a,b] [--floor-source auto|game-nav|collision] [--force]   collision BVH + sample grid (floorHeight, interior, wallDistance) into <bundle>/baked, recorded in the manifest (default cell ${DEFAULT_CELL_SIZE}, excludes ${DEFAULT_EXCLUDE_LAYERS.join(",")}; floorHeight from the game's nav faces when the bundle has collision/walkable.nav),
+             then the navmesh (baked/navmesh.bin + OBJ in <bundle>.qa/) unless --no-navmesh: from the game's nav faces (+ .navflowmap connections, --flow-hull <n>, default 0) when present, else Recast (force with --nav-source game|recast):
              [--agent-radius ${DEFAULT_NAV_AGENT.radius}] [--agent-height ${DEFAULT_NAV_AGENT.height}] [--agent-climb ${DEFAULT_NAV_AGENT.climb}] [--agent-slope ${DEFAULT_NAV_AGENT.slopeDegrees}] [--nav-cell-size 8] [--nav-cell-height 4] [--nav-tile-size 128] [--nav-exclude-layers ${DEFAULT_NAV_EXCLUDE_LAYERS.join(",")}] [--qa-dir <dir>|--no-qa]
   pack-lite  <bundle-dir>   validate lite bundle, check for textures, verify budget compliance
 (diff: not implemented yet)`
@@ -99,6 +99,7 @@ export const mainAsync = async (argv: ReadonlyArray<string>): Promise<number> =>
     const r = await bakeBundle(dir, {
       ...(cell !== undefined ? { cellSize: Number(cell) } : {}),
       ...(layers !== undefined ? { excludeLayers: layers.split(",").filter(Boolean) } : {}),
+      ...(flag(rest, "--floor-source") !== undefined ? { floorSource: flag(rest, "--floor-source") as "auto" | "game-nav" | "collision" } : {}),
       force: rest.includes("--force"), log: (m) => console.error(m)
     })
     const MB = 1048576
@@ -115,6 +116,8 @@ export const mainAsync = async (argv: ReadonlyArray<string>): Promise<number> =>
         ...defined({ cellSize: num("--nav-cell-size"), cellHeight: num("--nav-cell-height"), tileSize: num("--nav-tile-size") }),
         ...(navLayers !== undefined ? { excludeLayers: navLayers.split(",").filter(Boolean) } : {}),
         ...(rest.includes("--no-qa") ? { qaDir: false as const } : qa !== undefined ? { qaDir: qa } : {}),
+        ...(flag(rest, "--nav-source") !== undefined ? { source: flag(rest, "--nav-source") as "auto" | "game" | "recast" } : {}),
+        ...(num("--flow-hull") !== undefined ? { flowHull: num("--flow-hull")! } : {}),
         force: rest.includes("--force"), log: (m) => console.error(m)
       }
       nav = await bakeNavmesh(dir, navOpts)
@@ -124,12 +127,12 @@ export const mainAsync = async (argv: ReadonlyArray<string>): Promise<number> =>
     emit({ ...r, ...(nav ? { navmeshReport: nav } : {}) }, [...r.errors.map((e) => `✗ ${e}`), ...r.warnings.map((w) => `! ${w}`),
       ...(nav ? [...nav.errors.map((e) => `✗ navmesh: ${e}`), ...nav.warnings.map((w) => `! navmesh: ${w}`)] : []),
       ...(n ? [
-        `navmesh: ${n.polygons} polygons, ${n.components} components (largest ${(n.largestComponentShare * 100).toFixed(1)}%), ${n.links.count} links, ${(n.bytes / MB).toFixed(1)} MB${nav?.cached ? " [cached]" : ""}`,
+        `navmesh (${n.source ?? "recast"}): ${n.polygons} polygons, ${n.components} components (largest ${(n.largestComponentShare * 100).toFixed(1)}%${n.largestComponentShareWithLinks !== undefined ? `, ${(n.largestComponentShareWithLinks * 100).toFixed(1)}% with links` : ""}), ${n.links.count} links, ${(n.bytes / MB).toFixed(1)} MB${nav?.cached ? " [cached]" : ""}`,
         ...(nav?.qaFile ? [`navmesh QA export: ${nav.qaFile}`] : [])
       ] : []),
       ...(b ? [
         `bvh: ${b.bvh.triangles} triangles, ${(b.bvh.bytes / MB).toFixed(1)} MB`,
-        `sample grid: ${b.sampleGrid.nx}x${b.sampleGrid.ny} cells of ${b.sampleGrid.cellSize}, channels ${b.sampleGrid.channels.join(", ")}, ${(b.sampleGrid.bytes / MB).toFixed(1)} MB`,
+        `sample grid: ${b.sampleGrid.nx}x${b.sampleGrid.ny} cells of ${b.sampleGrid.cellSize}, channels ${b.sampleGrid.channels.join(", ")}, ${(b.sampleGrid.bytes / MB).toFixed(1)} MB, floor from ${b.floorSource ?? "collision"}${b.walkable ? ` (${b.walkable.coveredCells}/${b.walkable.totalCells} cells = ${((b.walkable.coveredCells / b.walkable.totalCells) * 100).toFixed(1)}% walkable)` : ""}`,
         `semanticsVersion ${b.semanticsVersion}${b.placeholder ? " (placeholder)" : ""}${r.cached ? " [cached]" : ""}`
       ] : []),
       ok ? "bake ok" : "bake failed"].join("\n"))

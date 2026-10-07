@@ -38,6 +38,9 @@ export const inspectBundle = async (dir: string): Promise<InspectReport> => {
         }
       }
     } else warnings.push("manifest has no collision reference")
+    const walkablePath = join(dir, "collision/walkable.nav")
+    if (existsSync(walkablePath)) info["walkableNavBytes"] = statSync(walkablePath).size
+    else warnings.push("no collision/walkable.nav: floors and navmesh come from collision clip volumes, not the walkable map (re-run extract)")
     const baked = manifest.baked as { navmesh?: { file: string; bytes: number; polygons?: number; components?: number; largestComponentShare?: number }; bvh?: { file: string; bytes: number }; sampleGrid?: { file: string; bytes: number }; placeholder?: boolean; semanticsVersion?: string } | undefined
     if (baked) {
       for (const [k, f] of [["bvh", baked.bvh], ["sampleGrid", baked.sampleGrid]] as const) {
