@@ -1,4 +1,5 @@
 import { requireSemantics, requireSpatial } from "./active.ts"
+import { checkCancelled } from "./run.ts"
 import { travelCost } from "./nav.ts"
 import type { VisibleOpts } from "./spatial.ts"
 
@@ -68,7 +69,7 @@ export class Vec3 {
   visibleFrom(from: Vec3 | Iterable<Vec3>, opts: VisibleOpts = {}): boolean {
     const { s, sem } = requireSemantics("visibleFrom()")
     const params = { ...(s.params ?? {}), ...(opts.eyeHeight === undefined ? {} : { eyeHeight: opts.eyeHeight }), ...(opts.targetHeight === undefined ? {} : { targetHeight: opts.targetHeight }), ...(opts.maxRange === undefined ? {} : { maxRange: opts.maxRange }) }
-    for (const v of from instanceof Vec3 ? [from] : from) if (sem.isVisible(s.raycaster, v.toArray(), this.toArray(), params)) return true
+    for (const v of from instanceof Vec3 ? [from] : from) { checkCancelled(); if (sem.isVisible(s.raycaster, v.toArray(), this.toArray(), params)) return true }
     return false
   }
 

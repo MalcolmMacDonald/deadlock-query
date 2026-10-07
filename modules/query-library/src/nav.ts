@@ -1,6 +1,7 @@
 import { Vec3 } from "./Vec3.ts"
 import { UNITS_PER_METER } from "./units.ts"
 import { requireSpatial } from "./active.ts"
+import { activeSignal, checkCancelled } from "./run.ts"
 import type { MovementModelLike, NavInput } from "./spatial.ts"
 
 /**
@@ -54,7 +55,10 @@ const fieldFor = (nav: NavInput, mode: "time" | "distance", sources: ReadonlyArr
   const key = `${mode}|${sources.map((s) => `${s.x},${s.y},${s.z}`).join(";")}`
   const hit = fields.get(key)
   if (hit) { fields.delete(key); fields.set(key, hit); return hit }
-  const f = nav.mesh.distanceField(sources.map((s) => s.toArray()), mode === "time" ? timeModel(nav) : distanceModel(nav))
+  checkCancelled(true)
+  const signal = activeSignal()
+  const f = nav.mesh.distanceField(sources.map((s) => s.toArray()), mode === "time" ? timeModel(nav) : distanceModel(nav), signal ? { signal } : undefined)
+  checkCancelled(true)
   const add = bytesOf(f)
   while (fields.size >= MAX_FIELDS || (fields.size >= MIN_FIELDS && fieldBytes + add > MAX_FIELD_BYTES)) {
     const oldest = fields.keys().next().value!
