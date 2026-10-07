@@ -1,7 +1,7 @@
 import type { Entity } from "@deadlock-query/contracts"
 import { entityKind } from "./entityKinds.ts"
 import { laneNumberFromProperties, ziplineLanes } from "./lanes.ts"
-import { teamFromProperties } from "./teams.ts"
+import { inheritBaseTeams, teamFromProperties } from "./teams.ts"
 
 export type VentValue = string | number | boolean | number[] | string[]
 export interface RawEntity {
@@ -120,5 +120,5 @@ export const toEntities = (raw: ReadonlyArray<RawEntity>): Entity[] => {
     } as Entity]
   })
   const zipLane = ziplineLanes(entities)
-  return entities.map((e) => (e.lane === undefined && zipLane.has(e.id) ? { ...e, lane: zipLane.get(e.id)! } : e))
+  return inheritBaseTeams(entities).map((e) => (e.lane === undefined && zipLane.has(e.id) ? { ...e, lane: zipLane.get(e.id)! } : e))
 }

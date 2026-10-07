@@ -23,3 +23,18 @@ test("only named kinds get a team, and an explicit teamnumber wins", () => {
   expect(a!.team).toBe(3)
   expect(b!.team).toBe(3)
 })
+
+test("spawns and base sentries inherit the team of the nearest teamed entity in their base", () => {
+  const raw = (id: string, props: Record<string, string | number>, origin: number[]) => ({ index: Number(id), props: { ...props, origin, hammeruniqueid: id }, outputs: [] })
+  const out = toEntities([
+    raw("1", { classname: "npc_barrack_boss", subclass_name: "npc_barrack_boss_amber" }, [1000, 9000, 1200]),
+    raw("2", { classname: "npc_barrack_boss", subclass_name: "npc_barrack_boss_sapphire" }, [-1000, -9000, 1200]),
+    raw("3", { classname: "info_team_spawn" }, [1200, 10200, 1218]),
+    raw("4", { classname: "npc_base_defense_sentry" }, [-900, -9400, 1152]),
+    raw("5", { classname: "info_team_spawn" }, [6136, 0, 1737])
+  ])
+  const team = (id: string) => out.find((e) => e.id === id)!.team
+  expect(team("3")).toBe(2)
+  expect(team("4")).toBe(3)
+  expect(team("5")).toBeUndefined() // mid-map, nothing near
+})

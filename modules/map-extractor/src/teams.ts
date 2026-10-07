@@ -35,3 +35,24 @@ export const teamFromProperties = (kind: EntityKind | undefined, cls: string, pr
   }
   return undefined
 }
+
+/** Kinds that carry no team name of their own but sit inside one base (the real map gives them no `teamnumber` either). */
+const BASE_KINDS: ReadonlySet<EntityKind> = new Set(["spawn", "baseSentry"])
+/** A base entity inherits the team of the nearest teamed entity within this horizontal distance and height difference. */
+export const BASE_TEAM_RADIUS = 2500
+export const BASE_TEAM_MAX_DZ = 300
+
+/** Gives spawns and base sentries the team of the nearest named-team entity (barracks, patron, ...) in their base. */
+export const inheritBaseTeams = <E extends { kind?: EntityKind; team?: number; position: readonly [number, number, number] }>(entities: ReadonlyArray<E>): E[] => {
+  const teamed = entities.filter((e) => e.team !== undefined)
+  return entities.map((e) => {
+    if (e.team !== undefined || !e.kind || !BASE_KINDS.has(e.kind)) return e
+    let best: E | undefined, bestD = BASE_TEAM_RADIUS
+    for (const t of teamed) {
+      if (Math.abs(t.position[2] - e.position[2]) > BASE_TEAM_MAX_DZ) continue
+      const d = Math.hypot(t.position[0] - e.position[0], t.position[1] - e.position[1])
+      if (d <= bestD) { bestD = d; best = t }
+    }
+    return best ? { ...e, team: best.team } : e
+  })
+}

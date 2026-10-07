@@ -304,6 +304,9 @@ Decision (Malcolm): option 4 of "Collision finding", reverse-engineer `maps/<map
 - **`interior` is still not meaningful (80.8 % of floor cells) and cannot be fixed from `world_physics`:** its playerclip/npcclip lids sit within 1500 above street level. Without the clip layers it is 3.3 % (0.0 % without foliage too), because real buildings are not in `world_physics` at all. It needs the `citadel_trigger_interior` volumes (22 entities, per-entity models not exported yet) or render geometry. `wallDistance` finds a clip/solid wall within range for 79 % of cells; also provisional (placeholder semantics).
 - Not decoded: per-face records (nav flags, one-way/ledge info), the meaning of the other two hulls, `.navspace`. **Not verified:** that all 85,485 polygons are walkable for the hero hull (the file may be the union over hulls); `navConnection` directions and costs are taken from the flowmap as is (link cost is distance / speed of the kind; the flowmap's own cost is ignored).
 
+## Teams for spawns and base sentries (2026-10-07)
+- The real map gives `info_team_spawn` and `npc_base_defense_sentry` no team and no name token. `inheritBaseTeams` (`teams.ts`, run at the end of `toEntities`) gives each the team of the nearest entity that has one within `BASE_TEAM_RADIUS` (2500 horizontal) and `BASE_TEAM_MAX_DZ` (300). On the real bundle every base spawn and sentry is 1,400 to 2,200 units from a barracks of its own side (positive y = team 2, negative y = team 3); the stray mid-map spawn at (6136, -1, 1737) stays neutral. Takes effect on the next `extract` (`EXTRACTOR_VERSION` is now 0.5.2 so the entity stage reruns).
+
 ## In progress
 - Nothing running; navmesh signed off (see above).
 

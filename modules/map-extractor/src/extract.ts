@@ -13,7 +13,7 @@ import { INTERIOR_VOLUMES_FILE, interiorModels, localBox, type InteriorVolume } 
 import { WALKABLE_FLOW_FILE, WALKABLE_NAV_FILE } from "./walkable.ts"
 
 /** Unchanged by the `nav` stage on purpose: adding it must not invalidate the cached multi-GB render stages. */
-export const EXTRACTOR_VERSION = "0.5.1"
+export const EXTRACTOR_VERSION = "0.5.2"
 export type Tier = "full" | "lite"
 
 export interface ExtractOptions {
