@@ -174,6 +174,22 @@ test("mock viewer with tools records registrations and unregisters", async () =>
   expect(Object.keys(plain).sort()).toEqual(Object.keys(await Effect.runPromise(Effect.gen(function* () { return yield* ViewerService }).pipe(Effect.provide(mock.layer)))).sort())
 })
 
+test("mock viewer records activateTool and deactivateTool", async () => {
+  const mock = makeMockViewerServiceWithTools()
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const viewer = yield* ViewerService
+      yield* viewer.activateTool!("metadata.camp")
+      expect(mock.activeTool()).toBe("metadata.camp")
+      yield* viewer.deactivateTool!()
+      expect(mock.activeTool()).toBeUndefined()
+    }).pipe(Effect.provide(mock.layer))
+  )
+  const plain = await Effect.runPromise(Effect.gen(function* () { return yield* ViewerService }).pipe(Effect.provide(MockViewerService)))
+  await Effect.runPromise(plain.activateTool!("x"))
+  await Effect.runPromise(plain.deactivateTool!())
+})
+
 test("OverlayFeature accepts free-form properties on every variant", () => {
   const props = { entity: "g1", "0.0,": "odd key", nested: { a: [1, 2] } }
   const features: ReadonlyArray<OverlayFeature> = [

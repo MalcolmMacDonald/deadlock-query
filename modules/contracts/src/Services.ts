@@ -122,6 +122,10 @@ export class ViewerService extends Context.Service<
      * built-in id.
      */
     readonly registerTool: (tool: ExternalTool) => Effect.Effect<() => void>
+    /** Makes the tool with this id (built-in or registered) the active viewer tool; fails (defect) on an unknown id. */
+    readonly activateTool?: (id: string) => Effect.Effect<void>
+    /** Returns the viewer to its default tool. */
+    readonly deactivateTool?: () => Effect.Effect<void>
   }
 >()("@deadlock-query/ViewerService") {}
 
@@ -151,7 +155,9 @@ const mockViewerService: (typeof ViewerService)["Service"] = {
   setOverlay: () => Effect.void,
   removeOverlay: () => Effect.void,
   highlight: () => Effect.void,
-  registerTool: () => Effect.succeed(() => {})
+  registerTool: () => Effect.succeed(() => {}),
+  activateTool: () => Effect.void,
+  deactivateTool: () => Effect.void
 }
 
 export const MockViewerService = Layer.succeed(ViewerService)(mockViewerService)
@@ -162,15 +168,18 @@ export const MockViewerService = Layer.succeed(ViewerService)(mockViewerService)
  */
 export const makeMockViewerServiceWithTools = () => {
   const tools = new Map<string, ExternalTool>()
+  let active: string | undefined
   const layer = Layer.succeed(ViewerService)({
     ...mockViewerService,
     registerTool: (tool: ExternalTool) => Effect.sync(() => {
       if (tools.has(tool.id)) throw new Error(`tool "${tool.id}" is already registered`)
       tools.set(tool.id, tool)
       return () => { if (tools.get(tool.id) === tool) tools.delete(tool.id) }
-    })
+    }),
+    activateTool: (id: string) => Effect.sync(() => { active = id }),
+    deactivateTool: () => Effect.sync(() => { active = undefined })
   })
-  return { layer, registeredTools: (): ReadonlyArray<ExternalTool> => [...tools.values()] }
+  return { layer, registeredTools: (): ReadonlyArray<ExternalTool> => [...tools.values()], activeTool: (): string | undefined => active }
 }
 
 export const MockDevAuth = Layer.succeed(DevAuth)({

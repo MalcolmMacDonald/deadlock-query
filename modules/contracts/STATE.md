@@ -63,5 +63,7 @@
 
 - 2026-10-06 — M4: one record union keyed by `kind` rather than a registry of per-kind schemas, so a new kind is one additive union member; nav overrides are `walkableRegion.flag` (noGo/walkable) + `costMultiplier` and `navLink`, as the plan's override list (blocked polygons, added links, area costs) needs; `contentHash` covers build, map and records only (not `schemaVersion`), so a pure schema-version bump does not look like a data change.
 
+- 2026-10-07 — `ViewerService.activateTool(id)` / `deactivateTool()` added as optional (additive) so panels such as map-metadata can start viewer tools; map-viewer implements them via its tools.setTool, and they can become required once it does. Mocks implement them (the tools mock records the active id).
+
 ## Open questions
 - (see PLAN.md §9)
