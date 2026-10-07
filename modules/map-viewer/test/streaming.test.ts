@@ -36,6 +36,9 @@ test("synthetic map is over 500 MB of tile files", () => {
   expect(map.manifest.tiles).toHaveLength(DEFAULT_SYNTHETIC.cols * DEFAULT_SYNTHETIC.rows * DEFAULT_SYNTHETIC.grids.length)
 })
 
+/** The flight decodes about 0.6 GB of fabricated geometry and bounds every tile (about 1.4 s alone). `bun test` allows 5 s, which a loaded `verify:all` (every module in parallel) exceeds. */
+const STREAM_FLIGHT_TIMEOUT_MS = 60_000
+
 test("streaming a >500 MB map through a flight stays within the memory budget", async () => {
   const map = syntheticMap()
   const budget = 128 * MB
@@ -76,7 +79,7 @@ test("streaming a >500 MB map through a flight stays within the memory budget", 
   expect(decodedTotal).toBeGreaterThan(2 * budget)
   streamer.dispose()
   expect(streamer.stats().residentBytes).toBe(0)
-})
+}, STREAM_FLIGHT_TIMEOUT_MS)
 
 test("a view that needs more than the budget drops the farthest cells instead of exceeding it", async () => {
   const map = syntheticMap({ cols: 6, rows: 6, grids: [260, 130] })

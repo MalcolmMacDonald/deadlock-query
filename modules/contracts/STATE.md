@@ -1,7 +1,7 @@
 # contracts — state
 
 - **Status:** M4 done (`MapMetadata`, `ScreenshotSet`, additive); `check:real` re-run on the real bundle still to do locally
-- **Version:** 0.5.0
+- **Version:** 0.5.1
 - **Current milestone:** M4 done; nothing queued (next: requests from other modules)
 - **Last updated:** 2026-10-06
 
@@ -26,6 +26,8 @@
 - ScreenshotSet (2026-10-06, requested by screenshot-tool): `src/ScreenshotSet.ts` with `ScreenshotSet`/`Shot`, `makeScreenshotSet`, `poseError`, `validateScreenshotSet`, `shotsNear`; JSON Schema generated. Details in CHANGELOG.
 
 - 0.5.0 (2026-10-06): `ViewerService.registerTool` is required now (map-viewer #107 and query-builder #109 provide it); `MockViewerService` has a no-op, `makeMockViewerServiceWithTools()` records. Details in CHANGELOG.
+
+- OverlayFeature.properties (2026-10-06, requested by map-viewer's selection inspector): optional free-form `properties` on every `OverlayFeature` variant; the inspector lists it. See CHANGELOG 0.5.1.
 
 ## In progress
 - Annotation schema (requested by map-viewer M3): added `Annotation`/`AnnotationDocument` (2026-10-06), see CHANGELOG. map-viewer can replace its local `Annotation` type (`src/annotations.ts`) with it for import/export and IndexedDB autosave; its local `id` is `a<N>`, which fits the non-empty string id.

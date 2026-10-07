@@ -15,7 +15,8 @@ import { insertVertex, moveVertex, removeVertex } from "./vertexEdit.ts"
 import { LayerStore, type LayerAppearance } from "./layers.ts"
 import { ToolMachine, type ExternalTool } from "./tools.ts"
 import type { StreamStats } from "./tileStreamer.ts"
-import { DEFAULT_COLOR } from "./overlays.ts"
+import { DEFAULT_COLOR, normalizeFeatures, parseFeatureId } from "./overlays.ts"
+import { annotationItem, entityItem, featureItem, shotItem, unknownItem, type InspectorItem } from "./inspector.ts"
 import {
   autosaveKey, indexedDbStorage, parseDocument, serializeDocument, toDocument, type AnnotationStorage, type MapIdentity, type ParsedDocument
 } from "./persistence.ts"
@@ -180,6 +181,7 @@ export class ViewerController {
 
   setOverlay(id: string, f: ReadonlyArray<Vec3> | ReadonlyArray<OverlayFeature>, s?: OverlayStyle, label?: string) {
     this.overlays.set(id, [f, s])
+    this.dropPicked(id)
     this.layers.ensure(id, { baseColor: s?.color ?? DEFAULT_COLOR, ...(label ? { label } : {}) })
     // Appearance first so a layer is never drawn once with default look.
     this.surface?.setAppearance(id, this.layers.appearance(id))
@@ -187,6 +189,7 @@ export class ViewerController {
   }
   removeOverlay(id: string) {
     this.overlays.delete(id)
+    this.dropPicked(id)
     this.surface?.removeOverlay(id)
     this.layers.drop(id)
   }
@@ -316,7 +319,7 @@ export class ViewerController {
     if (next.length !== 1 || next[0] !== this.selectedIds[0] || this.selectedIds.length !== 1) this.selectedVertexIndex = undefined
     this.selectedIds = next
     const layers = this.annotations.layers
-    this.highlight(next.flatMap((id) => featureIdForAnnotation(doc, id, layers) ?? []))
+    this.highlight([...next.flatMap((id) => featureIdForAnnotation(doc, id, layers) ?? []), ...this.picked])
     this.syncHandles()
     if (!same) for (const fn of [...this.selectionListeners]) fn()
   }
@@ -329,14 +332,25 @@ export class ViewerController {
     this.setSelection(this.selectedIds.includes(id) ? this.selectedIds.filter((x) => x !== id) : [...this.selectedIds, id])
   }
 
-  /** Selects the annotation under an overlay feature id (`additive`: toggle it in the selection); other layers' ids are ignored. */
+  /**
+   * Selects what is under an overlay feature id (`additive`: toggle it into the selection instead of replacing it).
+   * Annotations join the annotation selection; any other feature (entity, query result, screenshot) is picked, and a
+   * screenshot also opens its popup. Either way the feature is highlighted and listed by the inspector.
+   */
   selectFeature(featureId: string, additive = false) {
     const shot = this.shotForFeature(featureId)
-    if (shot) { this.selectShot(shot.id); return }
+    if (shot) this.selectShot(shot.id)
     const id = annotationIdForFeature(this.annotations.annotations, featureId, this.annotations.layers)
-    if (!id) return
-    if (additive) this.toggleAnnotation(id)
-    else this.selectAnnotation(id)
+    if (id) {
+      if (!additive) this.picked = []
+      if (additive) this.toggleAnnotation(id)
+      else this.selectAnnotation(id)
+      return
+    }
+    this.picked = additive
+      ? (this.picked.includes(featureId) ? this.picked.filter((x) => x !== featureId) : [...this.picked, featureId])
+      : [featureId]
+    this.setSelection(additive ? this.selectedIds : [])
   }
 
   /** Selects every annotation that can be selected (not locked, not hidden). */
@@ -440,7 +454,52 @@ export class ViewerController {
     }
     this.setSelection(this.selectedIds)
   }
-  highlight(ids: ReadonlyArray<string>) { this.highlighted = ids; this.surface?.highlight(ids) }
+  highlight(ids: ReadonlyArray<string>) {
+    this.highlighted = ids
+    this.surface?.highlight(ids)
+    for (const fn of [...this.highlightListeners]) fn(ids)
+  }
+
+  private readonly highlightListeners = new Set<(ids: ReadonlyArray<string>) => void>()
+  /** Features picked on the map that are not annotations (entities, query results, screenshots), in pick order. */
+  private picked: ReadonlyArray<string> = []
+
+  /** Feature ids currently highlighted: what the inspector lists (picked features, selected annotations, or a service `highlight`). */
+  get highlightedIds(): ReadonlyArray<string> { return this.highlighted }
+
+  /** Calls `fn` whenever the highlight list changes; returns the unsubscribe. */
+  onHighlightChange(fn: (ids: ReadonlyArray<string>) => void): () => void {
+    this.highlightListeners.add(fn)
+    return () => { this.highlightListeners.delete(fn) }
+  }
+
+  /** Everything the viewer knows about a feature id, ready for the inspector (every field, nothing curated away). */
+  inspect(featureId: string): InspectorItem {
+    const shot = this.shotForFeature(featureId)
+    if (shot) return shotItem(shot, featureId)
+    const annotationId = annotationIdForFeature(this.annotations.annotations, featureId, this.annotations.layers)
+    const annotation = annotationId ? this.annotations.annotations.find((a) => a.id === annotationId) : undefined
+    if (annotation) return annotationItem(annotation, featureId)
+    const entity = this.entityForFeature(featureId)
+    if (entity) return entityItem(entity, featureId)
+    const parsed = parseFeatureId(featureId)
+    const layer = parsed && this.overlays.get(parsed.layerId)
+    const feature = layer && parsed ? normalizeFeatures(layer[0])[parsed.index] : undefined
+    return feature && parsed && layer ? featureItem(featureId, feature, parsed.layerId, parsed.index, layer[1] ?? {}) : unknownItem(featureId)
+  }
+
+  /** Drops the picks and the annotation selection. */
+  clearSelection() {
+    this.picked = []
+    this.setSelection([])
+  }
+
+  private dropPicked(layerId: string) {
+    const next = this.picked.filter((id) => parseFeatureId(id)?.layerId !== layerId)
+    if (next.length === this.picked.length) return
+    this.picked = next
+    this.setSelection(this.selectedIds)
+  }
   getPose(): CameraPose { return this.surface?.getPose() ?? this.pose }
   setPose(p: CameraPose) { this.pose = p; this.surface?.setPose(p) }
   /** PNG of the canvas including overlays; `opts` picks a resolution multiplier and a transparent background. */

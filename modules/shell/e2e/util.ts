@@ -48,5 +48,5 @@ export const expectPanels = async (page: Page, expected: string[], what: string)
   throw new Error(`${what}: expected panels ${want.join(",")} but found ${(await panelIds(page)).join(",")}`)
 }
 
-export const QUERY = ["query.editor", "viewer.layers", "viewer.main", "viewer.tools"]
-export const EXPLORE = ["viewer.layers", "viewer.main", "viewer.tools"]
+export const QUERY = ["query.editor", "viewer.inspector", "viewer.layers", "viewer.main", "viewer.tools"]
+export const EXPLORE = ["viewer.inspector", "viewer.layers", "viewer.main", "viewer.tools"]

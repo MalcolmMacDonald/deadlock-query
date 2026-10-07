@@ -8,7 +8,7 @@ test("module exposes the viewer panels backed by the mock MapDataService", async
   expect(data.entities.length).toBeGreaterThan(0)
   const mod = makeViewerModule(data)
   expect(mod.id).toBe("map-viewer")
-  expect(mod.panels.map((p) => p.id)).toEqual([VIEWER_PANEL_ID, "viewer.layers", "viewer.tools"])
+  expect(mod.panels.map((p) => p.id)).toEqual([VIEWER_PANEL_ID, "viewer.layers", "viewer.tools", "viewer.inspector"])
   expect(typeof (mod.panels[0]!.component as { mount: unknown }).mount).toBe("function")
 })
 
