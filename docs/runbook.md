@@ -34,7 +34,7 @@ The tool takes `main`'s lockfile, runs `bun install` against the merged `package
 3. Prod URL is shown on the run's `github-pages` environment. The run never gets cancelled by later pushes to `main`.
 
 ## Publish a new map bundle
-Follow [dev-site.md → Publishing a new map bundle](dev-site.md#publishing-a-new-map-bundle): extract, tile, bake, check, `bun run publish-data <bundle> --upload`, then a pointer PR. The same steps update an existing bundle after re-extracting or re-baking. The PR that bumps `data/current-build.json` is checked by `data.yml`: it downloads every asset, verifies the sha256, unzips, and applies the site and tile budgets. Run the same check locally with `bun run check:data`.
+Run `bun run publish-map` ([dev-site.md → Publishing a new map bundle](dev-site.md#publishing-a-new-map-bundle)): it does extract, tile, bake, the checks, `publish-data --upload` and the pointer PR in one go; the page lists the steps for running one by hand. The same steps update an existing bundle after re-extracting or re-baking. The PR that bumps `data/current-build.json` is checked by `data.yml`: it downloads every asset, verifies the sha256, unzips, and applies the site and tile budgets. Run the same check locally with `bun run check:data`.
 Never delete an old asset or `data-<buildId>` Release unless it is a takedown; rollback depends on them.
 
 ## Rotate a secret

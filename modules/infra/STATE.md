@@ -6,6 +6,7 @@
 - **Last updated:** 2026-10-07
 
 ## Done
+- 2026-10-07: `bun run publish-map` (`tools/publish-map.ts`, steps and PR text in `tools/lib/publishMap.ts`, 6 tests in `test/publishMap.test.ts`): one command from the game install to the pointer PR. It pulls main, runs extract, tile, bake, inspect, pack-lite and `check:real`, then `publish-data --upload`, then branches `data/<buildId>`, commits `data/current-build.json`, opens an `[infra]` PR assigned to the user and enables auto-merge. Flags `--map --tier --force --bundle --no-pr --dry-run`. Needs a clean tree and `gh auth`. The planning and argument parsing are unit-tested and `--dry-run` was run; the real run (game, Source2Viewer, `gh`) needs Malcolm's laptop, so it is untested end to end. `publish-data` and the manual steps in `docs/dev-site.md` are unchanged.
 - M0: root workspace, `new-module`, `verify:all`.
 - M1: `check:scope/state/deps` (tools/lib/checks.ts, 6 tests), `ci.yml`, CODEOWNERS for `semantics/**`, claude/* semantics guard.
 

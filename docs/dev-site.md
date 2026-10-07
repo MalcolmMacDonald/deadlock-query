@@ -23,6 +23,10 @@ Behind the session cookie. Forwards an allowlist of repo-scoped endpoints (issue
 - **PR previews:** `preview.yml` deploys same-repo PRs to the dev Pages project on branch `pr-<number>` (`https://pr-<n>.deadlock-query-dev.pages.dev`, behind the same login). Pages preview deployments read *Preview* environment variables, so set `DEV_PASSWORD_HASH`, `SESSION_HMAC_KEY` (and later `GITHUB_TOKEN_PROXY`) under Settings → Variables and Secrets → Preview as well, or previews will not serve. Skipped until the Cloudflare secrets exist.
 
 ## Publishing a new map bundle
+**One command:** `bun run publish-map` (from the repo root, on the laptop with the Deadlock install, with `gh auth login` done and a clean working tree). It runs steps 1 to 7 below: pulls `main`, extract, tile, bake, the checks, the Release upload and the pointer PR (an `[infra]` PR assigned to you with auto-merge on), and stops at the first failure with the step's own error. Stages are cached, so running it again after a failure resumes cheaply. Flags: `--map <name>`, `--tier lite|full`, `--force` (redo cached stages and re-bake), `--bundle <dir>` (use an existing bundle, skip extract), `--no-pr` (stop after the upload), `--dry-run` (print the steps). Step 8 (promote to prod) stays a manual dispatch.
+
+The numbered steps are what the command does, for running or debugging one stage by hand.
+
 Everything up to the upload runs on the laptop that has the Deadlock install (it needs the game, Source2Viewer, ~4 GB free, `gh auth login` and `bun install`). Nothing here runs in CI except the gate in step 7 and the deploys in step 8. Run from the repo root; on Windows use `\` in the paths. `<id>` is the game build id the extractor prints (the folder name under `data/bundles`).
 
 1. `git checkout main && git pull && bun install`
