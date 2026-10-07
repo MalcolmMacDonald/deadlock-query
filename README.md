@@ -7,7 +7,7 @@ Prod is published to GitHub Pages at https://malcolmmacdonald.github.io/deadlock
 ## Getting started
 ```
 bun install
-bun run verify:all     # every module's typecheck, lint-free tests and e2e
+bun run verify:all     # every module's typecheck, tests and e2e
 ```
 Agents and contributors: read [CLAUDE.md](CLAUDE.md), then [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md), then the module's `modules/<id>/CLAUDE.md`. [NEXT.md](NEXT.md) lists what to do next per module. One module per PR, and update that module's `STATE.md`.
 
