@@ -1,7 +1,7 @@
 # map-extractor — state
 
 - **Status:** S2 spike complete — **GO** (render, collision, entities, nav all obtainable)
-- **Version:** 0.8.0 (module); `EXTRACTOR_VERSION` 0.4.0 (unchanged on purpose: the new `nav` stage must not invalidate the cached multi-GB render stages)
+- **Version:** 0.8.1 (module); `EXTRACTOR_VERSION` 0.4.0 (unchanged on purpose: the new `nav` stage must not invalidate the cached multi-GB render stages)
 - **Current milestone:** M0-M5 code done and run on real `dl_midtown` data (2026-10-06). **Walkable collision solved by reading the game's own `.nav`** (see "Walkable surface from the game's nav"); navmesh visual sign-off pending
 - **Last updated:** 2026-10-07
 
@@ -83,7 +83,7 @@ Notes on the commands:
 | `npc_boss_tier3` | 2 | **patrons**; `lanenum`, `teamnumber` |
 | `npc_barrack_boss` | 12 | `npc_barrack_boss_amber`/`_sapphire` (6 each) |
 | `npc_base_defense_sentry` | 8 | |
-| `info_super_trooper_spawn` | 12 | 6 with `subclass_name` `boss_{rebel,combine}_t1_{yellow,purple,blue}` = **Guardians' spawn points (the best candidate for T1 guardians, no `npc_boss_tier1` class exists in the map)** |
+| `info_super_trooper_spawn` | 12 | 6 with `subclass_name` `boss_{rebel,combine}_t1_{yellow,purple,blue}` (the game's "purple" lane is **Green**) = **Guardians' spawn points (the best candidate for T1 guardians, no `npc_boss_tier1` class exists in the map)** |
 | `info_trooper_spawn` | 24 | lane trooper spawns; `lane_marker_path` (12) has `lanenum`, `laneslot`, `pathnodes` (spline list) |
 | `citadel_zipline_path_node` | 129 | + `citadel_zipline_path` 5, `trigger_catapult` 17 (jump pads), `citadel_trigger_climb_rope` 17 |
 | `citadel_trigger_interior` | 22 | volume entities, with `interior_type` 0 (13) / 1 (9) |
@@ -93,7 +93,7 @@ Notes on the commands:
 
 Other (bulk, likely out of scope): `light_omni2` 1,968, `light_barn` 755, `citadel_breakable_prop` 665, `env_soundscape` 372, `info_particle_system` 302, `env_combined_light_probe_volume` 229, `env_volumetric_fog_volume` 124, `prop_dynamic` 112, etc.
 - **Volumes' extents (triggers) are not inlined in the text**: `model resource_name:"maps/dl_midtown/entities/<name>.vmdl"` refers to a per-entity model whose physics gives the volume. **Not yet exported**; needed for interior volumes and trigger shapes (to check in M1).
-- `lane_marker_path.pathnodes` holds a 9-float-per-node spline: usable as lane centrelines (`lanenum` 1–3).
+- `lane_marker_path.pathnodes` holds a 9-float-per-node spline: usable as lane centrelines. The real map has no `lanenum` on any entity (see the lane decision below), and `laneslot` is a slot within a lane, not a lane.
 - Tags worth mapping in contracts `kind`: guardian (see above), walker, patron, healingOrb, creepCamp (+tier from `subclass_name`), zipline, jumpPad, interior volume, shop, spawn.
 - Coordinates in entity text are Source Z-up units, matching D5 directly.
 
@@ -318,6 +318,7 @@ Decision (Malcolm): option 4 of "Collision finding", reverse-engineer `maps/<map
 - 2026-10-06 — Flaky `verify:all` fix: the five tests that run a real bake or navmesh bake (0.5 to 1.3 s alone) get an explicit 60 s timeout. bun's 5 s default failed them in clean-clone runs where `verify:all` ran every module in parallel on a busy machine. Assertions unchanged; the timeout only guards against a hang.
 
 - 2026-10-06 — Walkable surface: use the game's own `.nav` (Malcolm chose reverse engineering). Only the geometry is decoded (vertex pool + faces); the `.navflowmap` is read as binary KV3 (own reader, no text round trip through the CLI); `walkable.nav` / `.navflowmap` live in `collision/` of the bundle at fixed paths; `bake` and the navmesh stage switch to them automatically (`auto`) and keep the old collision/Recast path as the fallback and via flags; the navmesh record keeps the contracts shape (zeros for Recast-only fields) and carries raw extras until contracts adopts them; `EXTRACTOR_VERSION` stays 0.4.0 so the render stages stay cached; `interior` is left on the collision BVH and flagged, not faked.
+- 2026-10-07 — Lanes are exactly **Yellow (1), Blue (2, the middle lane) and Green (3)**; the game's own data calls Green "purple" (`boss_*_t1_purple`, `*_t2_boss_purple`, a (139,0,139) zipline tint), which is read as Green, so no "purple" lane exists downstream. The real dl_midtown entities carry no `lanenum`/`teamnumber`, so `toEntities` derives `lane` from the colour in `bossname` / `subclass_name` / `targetname` of guardians, walkers, barracks and base sentries, and gives zipline nodes the lane of their path (`citadel_zipline_path` `color_tint` by hue: orange Yellow, blue Blue, magenta Green; skipped when `use_baselane_color` is set or the path is untinted). An explicit `lanenum` always wins. Checked against the real bundle's entities: Yellow sits at -x, Blue at x ~ 0, Green at +x for all 6 guardians, 6 walkers, 12 barracks and all 129 zipline nodes. `team` is still not derived (rebel/combine to a team number is Malcolm's call). Multi-line quoted values (`pathnodes "` ... `]"`) are now one value (a flat number list) instead of one junk property per line (`"0.0,"`, with later lines overwriting earlier ones); the 9-floats-per-node layout is still unverified, so a real re-extract should be checked (`pathnodes` is an array of numbers, no key ends with a comma).
 
 ## Open questions
 - (see PLAN.md §9, and "Next" item 2 above)
