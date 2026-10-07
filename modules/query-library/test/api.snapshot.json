@@ -1,5 +1,5 @@
 {
-  "apiVersion": "0.3.0",
+  "apiVersion": "0.4.0",
   "symbols": [
     "BundleInput interface interface BundleInput",
     "DEFAULT_SETTINGS const DEFAULT_SETTINGS: MapSettings =",
@@ -13,6 +13,7 @@
     "EntityList.inLane method inLane(lane: Lane | 1 | 2 | 3): EntityList",
     "EntityList.onTeam method onTeam(team: number): EntityList",
     "EntityList.visibleFrom method visibleFrom(from: Locatable | Iterable<Locatable>, opts?: VisibleOpts): EntityList",
+    "EntityList.withLineOfSightTo method withLineOfSightTo(from: Locatable | Iterable<Locatable>, opts?:",
     "EntityList.within method within(range: number, of: Locatable | Iterable<Locatable>): EntityList",
     "EntityList.withinTravelTime method withinTravelTime(time: number, of: Locatable | Iterable<Locatable>): EntityList",
     "GridOpts interface interface GridOpts",
@@ -53,8 +54,9 @@
     "MetadataReport interface interface MetadataReport",
     "MovementModelLike interface interface MovementModelLike",
     "NavApi class class NavApi",
-    "NavApi.path method path(from: Vec3, to: Vec3): NavRoute | undefined",
+    "NavApi.path method path(from: Vec3, to: Vec3, opts:",
     "NavApi.timeFrom method timeFrom(sources: Vec3 | Iterable<Vec3>): (to: Vec3) => number",
+    "NavApi.walkable method walkable(a: Vec3, b: Vec3): boolean",
     "NavInput interface interface NavInput",
     "NavMeshLike interface interface NavMeshLike",
     "NavOverridesLike interface interface NavOverridesLike",
@@ -101,6 +103,7 @@
     "Vec3.crowFliesTo method crowFliesTo(other: Vec3): number",
     "Vec3.distanceTo method distanceTo(other: Vec3): number",
     "Vec3.equals method equals(other: Vec3): boolean",
+    "Vec3.hasLineOfSightTo method hasLineOfSightTo(other: Vec3, opts:",
     "Vec3.height method height(): number",
     "Vec3.isInterior method isInterior(): boolean",
     "Vec3.nearestWall method nearestWall():",

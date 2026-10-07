@@ -93,14 +93,26 @@ export interface NavRoute {
  */
 export class NavApi {
   /**
-   * Quickest route between two points, or `undefined` when unreachable. One A* search.
+   * Quickest route between two points, or `undefined` when unreachable. One A* search. `radius` (Source units) keeps
+   * the waypoints that far from wall corners; the route and `time` are unchanged.
    * @example map.nav.path(vec(0, 0, 0), vec(1000, 0, 0))?.time
    * @category Navigation
    */
-  path(from: Vec3, to: Vec3): NavRoute | undefined {
+  path(from: Vec3, to: Vec3, opts: { radius?: number } = {}): NavRoute | undefined {
     const nav = need("nav.path()")
-    const r = nav.mesh.findPath(from.toArray(), to.toArray(), timeModel(nav))
+    const r = nav.mesh.findPath(from.toArray(), to.toArray(), timeModel(nav), opts.radius ? { radius: opts.radius } : undefined)
     return r ? { points: r.points.map((p) => new Vec3(p[0], p[1], p[2])), time: r.cost } : undefined
+  }
+
+  /**
+   * True when the straight segment between two points stays on the walkable mesh (sampled; ignores off-mesh links).
+   * @example map.nav.walkable(map.guardians.first()!.position, map.patrons.first()!.position)
+   * @category Navigation
+   */
+  walkable(a: Vec3, b: Vec3): boolean {
+    const nav = need("nav.walkable()")
+    if (!nav.mesh.walkable) throw new Error("nav.walkable() needs a navmesh with a walkable() method (spatial-core NavMesh)")
+    return nav.mesh.walkable(a.toArray(), b.toArray())
   }
 
   /**
