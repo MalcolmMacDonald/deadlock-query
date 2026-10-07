@@ -15,7 +15,7 @@
 5. Re-run the deploy workflow.
 
 ## GitHub proxy (`/api/github/*`)
-Behind the session cookie. Forwards an allowlist of repo-scoped endpoints (issues, comments, labels, PR reads, workflow runs, workflow dispatch, contents read) to `api.github.com/repos/MalcolmMacDonald/deadlock-query`, using the Pages secret `GITHUB_TOKEN_PROXY`. Every request needs header `x-dlq-csrf: 1`; cross-origin `Origin` is rejected; merges, deletes and non-listed paths are refused. Returns 503 until the secret is set. Client side: `DevAuthLive` in `modules/infra/src/devAuth.ts`.
+Behind the session cookie. Forwards an allowlist of repo-scoped endpoints (issues, comments, labels, PR reads, workflow runs, workflow dispatch, contents read, plus three narrow review writes: `PUT contents/data/{metadata,submissions}/**` with a non-default `branch` in the body, `PUT pulls/N/merge`, and `PATCH pulls/N` with exactly `{"state":"closed"}`) to `api.github.com/repos/MalcolmMacDonald/deadlock-query`, using the Pages secret `GITHUB_TOKEN_PROXY`. Every request needs header `x-dlq-csrf: 1`; cross-origin `Origin` is rejected; other merges, deletes and non-listed paths are refused. Returns 503 until the secret is set. Client side: `DevAuthLive` in `modules/infra/src/devAuth.ts`.
 
 ## Budgets, promote, previews
 - `bun tools/build.ts` fails the build when the output exceeds a budget: tile ≤ 20 MB (any file under a `tiles/` dir), site ≤ 900 MB, first-load JS ≤ 1.5 MB gzipped (scripts and modulepreloads referenced by `index.html`). Limits live in `tools/lib/budget.ts`.

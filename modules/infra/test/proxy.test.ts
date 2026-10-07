@@ -2,7 +2,7 @@ import { expect, test } from "bun:test"
 import { Effect } from "effect"
 import { DevAuth } from "@deadlock-query/contracts"
 import { DevAuthLive } from "../src/devAuth.ts"
-import { CSRF_HEADER, REPO, decide, sanitizeResponse, upstreamHeaders } from "../src/proxy.ts"
+import { CSRF_HEADER, REPO, checkBody, decide, sanitizeResponse, upstreamHeaders } from "../src/proxy.ts"
 
 const keys = (h: Headers): string[] => {
   const k: string[] = []
@@ -31,10 +31,35 @@ test("rejects missing CSRF header and cross-origin requests", () => {
 test("rejects endpoints and methods outside the allowlist", () => {
   expect(call("DELETE", "/api/github/issues/1")).toMatchObject({ ok: false, status: 405 })
   expect(call("PUT", "/api/github/contents/x.md")).toMatchObject({ ok: false, status: 405 })
-  expect(call("GET", "/api/github/pulls/3/merge")).toMatchObject({ ok: false, status: 404 })
-  expect(call("POST", "/api/github/pulls/3/merge")).toMatchObject({ ok: false, status: 404 })
+  expect(call("GET", "/api/github/pulls/3/merge")).toMatchObject({ ok: false, status: 405 })
+  expect(call("POST", "/api/github/pulls/3/merge")).toMatchObject({ ok: false, status: 405 })
+  expect(call("PUT", "/api/github/contents/data/current-build.json")).toMatchObject({ ok: false, status: 405 })
+  expect(call("DELETE", "/api/github/contents/data/metadata/a.json")).toMatchObject({ ok: false, status: 405 })
+  expect(call("DELETE", "/api/github/pulls/3")).toMatchObject({ ok: false, status: 405 })
   expect(call("GET", "/api/github/collaborators")).toMatchObject({ ok: false, status: 404 })
   expect(call("GET", "/api/github/issues/abc")).toMatchObject({ ok: false, status: 404 })
+})
+
+test("allows PR-branch commits, merge and close on exact routes", () => {
+  expect(call("PUT", "/api/github/contents/data/metadata/123/lanes.json").ok).toBe(true)
+  expect(call("PUT", "/api/github/contents/data/submissions/a-b.json").ok).toBe(true)
+  expect(call("PUT", "/api/github/pulls/7/merge").ok).toBe(true)
+  expect(call("PATCH", "/api/github/pulls/7").ok).toBe(true)
+})
+
+test("checkBody confines the write routes", () => {
+  const w = "/contents/data/metadata/1/a.json"
+  expect(checkBody("PUT", w, '{"message":"m","content":"x","branch":"claude/meta-1"}')).toBeNull()
+  expect(checkBody("PUT", w, '{"message":"m","content":"x"}')).not.toBeNull()
+  expect(checkBody("PUT", w, '{"branch":"main"}')).not.toBeNull()
+  expect(checkBody("PUT", w, "nope")).not.toBeNull()
+  expect(checkBody("PUT", "/pulls/3/merge", '{"merge_method":"squash"}')).toBeNull()
+  expect(checkBody("PUT", "/pulls/3/merge", '{"sha":"x"}')).not.toBeNull()
+  expect(checkBody("PUT", "/pulls/3/merge", '{"merge_method":"bad"}')).not.toBeNull()
+  expect(checkBody("PATCH", "/pulls/3", '{"state":"closed"}')).toBeNull()
+  expect(checkBody("PATCH", "/pulls/3", '{"state":"open"}')).not.toBeNull()
+  expect(checkBody("PATCH", "/pulls/3", '{"state":"closed","base":"x"}')).not.toBeNull()
+  expect(checkBody("PATCH", "/issues/3", '{"anything":1}')).toBeNull()
 })
 
 test("rejects path traversal out of the repo", () => {
