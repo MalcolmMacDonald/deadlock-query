@@ -171,6 +171,7 @@ export const extract = async (o: ExtractOptions): Promise<ExtractResult> => {
         rmSync(join(work, "render-full"), { recursive: true, force: true }); mkdirSync(join(work, "render-full"), { recursive: true })
         await run(o.runner, "render", args.render(o.vpk, o.map, fullGltf, o.materials))
       }
+      mkdirSync(liteDir, { recursive: true }) // an empty dir can vanish during the multi-minute export
       for (const f of readdirSync(liteDir)) rmSync(join(liteDir, f), { recursive: true, force: true })
       await liteReady
       const r = buildLiteTiles(fullGltf, liteDir, { ...o.lite, log: o.log })
