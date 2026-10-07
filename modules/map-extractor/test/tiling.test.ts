@@ -188,3 +188,14 @@ test("keeps COLOR_0 through compression and every LOD, makes 3 LODs by default a
   expect(counts[1]!).toBeLessThan(counts[0]! * 0.5)
   expect(counts[2]!).toBeLessThan(counts[1]!)
 })
+
+test("without textures, normals and UVs are stripped so seams weld and LODs can simplify", async () => {
+  const { dir } = await bundle(40, true)
+  const report = await tileBundle(dir, { lods: 2, lodRatio: 0.25 })
+  expect(report.ok).toBe(true)
+  const io = new NodeIO().registerExtensions([EXTMeshoptCompression, KHRMeshQuantization]).registerDependencies({ "meshopt.decoder": MeshoptDecoder })
+  await MeshoptDecoder.ready
+  const doc = await io.read(join(dir, "render/tiles/0_0.glb"))
+  const prim = doc.getRoot().listMeshes()[0]!.listPrimitives()[0]!
+  expect(prim.listSemantics().sort()).toEqual(["COLOR_0", "POSITION"])
+})
