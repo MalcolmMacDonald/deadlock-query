@@ -21,7 +21,7 @@ const el = <K extends keyof HTMLElementTagNameMap>(tag: K, css = "", props: Part
   return Object.assign(e, props)
 }
 
-const PANEL_CSS = "padding:8px;font:12px sans-serif;color:#d8dbe0;background:#1b1e24;height:100%;box-sizing:border-box;overflow:auto"
+const PANEL_CSS = "padding:8px;font:12px sans-serif;color:var(--fg,#d8dbe0);background:var(--surface,#1b1e24);height:100%;box-sizing:border-box;overflow:auto"
 
 /** `viewer.layers`: which map meshes show (render by default, collision on request), then visibility, colour, opacity and draw order of every overlay layer. */
 export const makeLayersPanel = (controller: ViewerController): PanelComponent => ({
