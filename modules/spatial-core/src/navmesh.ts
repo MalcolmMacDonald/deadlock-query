@@ -125,6 +125,9 @@ export class NavMesh {
   /** Same mesh with blocked polygons, extra links and cost multipliers applied. */
   withOverrides(o: NavOverrides): NavMesh { return new NavMesh(this.data, this.srcLinks, o) }
 
+  /** Source off-mesh links (without `withOverrides` additions). */
+  get sourceLinks(): readonly NavLink[] { return this.srcLinks }
+
   centroid(poly: number): Vec3 { const c = this.centroids; return [c[poly * 3]!, c[poly * 3 + 1]!, c[poly * 3 + 2]!] }
 
   private nearestPoly(p: Vec3): number { return this.nearestPoint(p)?.poly ?? -1 }
