@@ -3,7 +3,7 @@
 - **Status:** M0 + M1 + M2 + M3 + M4 + M5 + M6 done
 - **Version:** 0.2.0
 - **Current milestone:** M7
-- **Last updated:** 2026-10-06
+- **Last updated:** 2026-10-07
 
 ## Done
 - M0: scaffold; `bun run build` emits `dist/index.js` (worker-safe ESM), per-file `.d.ts` (extensionless imports for Monaco), `apiCatalog.json`, `package.json` with `apiVersion`.
@@ -19,6 +19,7 @@
 
 - M5 (2026-10-06): headline query 3 as `examples/camps-visible-from-high-ground.ts` (`map.creepCamps.visibleFrom(map.sample.grid(400).where(p => p.height() >= 800))`). Golden test on a hand-computable plateau fixture (`test/plateauFixture.ts`: floor z=0 plus a 2000x2000 plateau at z=1000, stub semantics "visible if < 1500 units apart in XY") expects `["camp-1","camp-2"]`. Helpers: `EntityList.closestN`, `EntityList.groupByRegion(cell)`, `regionOf(p, cell)` / `Region`, `map.sample.density(points, cell)` (`HeatCell`; non-empty cells only, ordered by `ix` then `iy`), example `camp-density`. `EntityList.highGround(h)` now uses `height()` when a spatial backend is loaded (absolute z otherwise). Examples tagged `@requires spatial` run on the plateau map. API snapshot gained symbols only (no version bump).
 
+- navConnection speed (2026-10-07): the game-nav navmesh carries about 2,455 one-way `navConnection` links (map-extractor 0.8.0), and `linkSpeeds` had no entry for them, so on-foot reachability ignored them (34 of 115 base/lane/camp entities unreachable from a patron on the real map). `linkSpeedsOf` (`src/nav.ts`, shared with `metadata.ts`) now merges `nav.linkSpeeds` over the defaults `{ zipline: meters(15), navConnection: heroSpeed }`, so an explicit map without `navConnection` still gets it; a kind set to 0 is switched off (and a `navLink` metadata record of that kind is reported as not applied). Default speed = hero walking speed because the game's nav only connects pieces a walker can cross (jump, drop, climb); a proposal for Malcolm like the other defaults. Behaviour change: a caller passing `linkSpeeds` used to *replace* the defaults (dropping zipline); now it overrides per kind. Tests on the hand-computed grid (default, merge, off). Not run against the real navmesh (it is on Malcolm's laptop). `jumpPad` still has no default speed.
 - M6 (2026-10-06): accepted metadata merged at load time, built against the contracts `MetadataBundle` shape (structural `MetadataInput`/`MetadataRecordInput` in `src/metadata.ts`; contracts stays a dev dependency; the loader verifies the hash with `verifyMetadataBundle`, then passes `metadata:` to `MapContext.fromBundle`). Only `status: "accepted"` records are used. `creepCamp`/`healingOrb`/`sinnersSacrifice` become entities (`id` = `metadata:<recordId>`, `source: "metadata"`, `provenance` = the record's submitter/reviewer/comment); new `EntityKind` `sinnersSacrifice` + `map.sinnersSacrifices`, `EntityList.fromSource("extractor" | "metadata")`. A metadata camp/orb within `metadataDedupeRadius` (150) of an extractor entity of the same kind is skipped as a duplicate (extractor wins). Nav: `navLink` -> `NavMesh.withOverrides` added link (kinds without a `nav.linkSpeeds` entry are skipped with a message); `walkableRegion` `noGo` -> blocked polygons, `walkable` + `costMultiplier` -> cost multipliers, selected by polygon centroid inside the ring in XY and within `regionZTolerance` (250) of `floorZ`. `map.metadata` is a report with one outcome per accepted record (applied or why not, plus provenance) and bundle-level warnings; a bundle for another build or map is ignored with a warning, not applied. Tests use the hand-computable grid navmesh: a noGo wall forces a 2000 -> 10000 unit detour, a zipline across it gives 0.4 s, a 3x region doubles 4 s to 8 s. API: added symbols plus new trailing `MapEntity` constructor params and two `MapSettings` fields, so `version` bumped 0.1.0 -> 0.2.0.
 
 ## In progress
@@ -31,7 +32,7 @@
 
 ## Blockers / Requests to other modules
 - spatial-core: `NavMesh.withOverrides` can only block, re-cost and add links over existing polygons. A `walkableRegion` that adds ground (`flag: "walkable"` without `costMultiplier`) and a per-link `cost` need new override types (added polygons, link cost); until then they are reported as not applied in `map.metadata`. Overrides replace, not merge, any overrides already on the mesh.
-- map-metadata / contracts: the library treats `linkKind` as a navmesh link `kind`; only kinds present in `nav.linkSpeeds` (default: `zipline`) are usable. Speeds for `jumpPad`/`climb`/`teleport` are the owner's call.
+- map-metadata / contracts: the library treats `linkKind` as a navmesh link `kind`; only kinds with a speed in `nav.linkSpeeds` (defaults: `zipline`, `navConnection`) are usable. Speeds for `jumpPad`/`climb`/`teleport` are the owner's call.
 - spatial-core: grid/spatial index for `NavMesh.nearestPoint` (used by `distanceField().costAt` for every lookup) before the real-map benchmark; the bundle's navmesh must be loaded via `NavMesh.load` by the builder worker and passed as `spatial.nav.mesh`.
 
 ## Decisions log
