@@ -139,3 +139,19 @@ test("rejects full-tier, missing and already tiled bundles", async () => {
   writeFileSync(join(dir, "manifest.json"), JSON.stringify({ ...m, tier: "full", tiles: [] }))
   expect((await tileBundle(dir)).errors[0]).toContain('expected tier "lite"')
 })
+
+test("running tile again after an extract rewrote the manifest (tiles already compressed) gives the same result", async () => {
+  const { dir } = await bundle()
+  const before = readFileSync(join(dir, "manifest.json"), "utf8") // what a cached `extract` writes: untiled entries
+  const first = await tileBundle(dir, { lods: 2 })
+  expect(first.errors).toEqual([])
+  const tiled = JSON.parse(readFileSync(join(dir, "manifest.json"), "utf8"))
+  writeFileSync(join(dir, "manifest.json"), before)
+  const second = await tileBundle(dir, { lods: 2 })
+  expect(second.errors).toEqual([])
+  const again = JSON.parse(readFileSync(join(dir, "manifest.json"), "utf8"))
+  expect(again.tiles.map((t: { id: string }) => t.id)).toEqual(tiled.tiles.map((t: { id: string }) => t.id))
+  for (const t of again.tiles) expect(createHash("sha256").update(readFileSync(join(dir, t.file))).digest("hex")).toBe(t.sha256)
+  expect(tris(await decode(join(dir, "render/tiles/0_0.glb")))).toBe(60 * 60 * 2) // LOD0 keeps every triangle through the second pass
+  expect(tris(await decode(join(dir, "render/tiles/0_0.lod1.glb")))).toBeLessThan(tris(await decode(join(dir, "render/tiles/0_0.glb"))))
+})

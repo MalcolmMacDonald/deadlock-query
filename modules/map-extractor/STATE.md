@@ -3,7 +3,7 @@
 - **Status:** S2 spike complete — **GO** (render, collision, entities, nav all obtainable)
 - **Version:** 0.8.0 (module); `EXTRACTOR_VERSION` 0.4.0 (unchanged on purpose: the new `nav` stage must not invalidate the cached multi-GB render stages)
 - **Current milestone:** M0-M5 code done and run on real `dl_midtown` data (2026-10-06). **Walkable collision solved by reading the game's own `.nav`** (see "Walkable surface from the game's nav"); navmesh visual sign-off pending
-- **Last updated:** 2026-10-06
+- **Last updated:** 2026-10-07
 
 ## Done
 - **S2 spike** (2026-10-05, Windows 11, Deadlock build `25712201`, Source2Viewer-CLI 20.0). Findings below. No game assets are committed; all outputs were written outside the repo.
@@ -258,8 +258,11 @@ Decision (Malcolm): option 4 of "Collision finding", reverse-engineer `maps/<map
 ## In progress
 - Nothing running; navmesh signed off (see above).
 
+## `tile` after a cached `extract` (2026-10-07)
+- `extract` always rewrites `manifest.json` from scratch (tile entries of the lite stage, no LODs, no `baked`), even when its render stage is cached. After the first tiled run the files in `render/tiles` are meshopt-compressed, so a following `extract` (for example the cheap `nav` stage) left a manifest with stale hashes over compressed files, and `tile` died with `[EXT_meshopt_compression] Please install extension dependency, "meshopt.decoder"`. `tile` now registers the meshopt decoder, so the sequence `extract`, `tile`, `bake` works on any rerun (LODs are re-simplified from the decoded LOD0, which is quantised to 14 bits already). Test: tile, reset the manifest, tile again; ids, hashes and triangle counts hold. Found while writing the publish/update runbook (`docs/dev-site.md`).
+
 ## Next
-1. **Hull and M6:** the navmesh is signed off (see "Navmesh sign-off"); decide the hull (`--flow-hull`) if a query shows a hull-specific problem. Then M6 (caching/resume/`diff`, README, update runbook). To get `walkable.nav` into an existing bundle, re-run `extract` (only the cheap `nav` stage runs; `EXTRACTOR_VERSION` did not change), then `bake --force`.
+1. **Hull and M6:** the navmesh is signed off (see "Navmesh sign-off"); decide the hull (`--flow-hull`) if a query shows a hull-specific problem. Then M6 (caching/resume/`diff`, README, update runbook). To get `walkable.nav` into an existing bundle, re-run `extract` (only the cheap `nav` stage runs; `EXTRACTOR_VERSION` did not change), which rewrites the manifest, so then `tile` and `bake --force` (full sequence in `docs/dev-site.md`).
 2. **`interior`** needs other data: export the `citadel_trigger_interior` models (open question c) or derive it from render geometry; `world_physics` cannot supply it (see the game-nav section).
 3. Triangle cut quality (open question d): decimation is in (see above). Look at the lite tiles in map-viewer next to the collision GLB and tune `--tri-budget` (the bundle is only 109 MB, so there is room to raise it a lot), `--full-fraction` and `minTris`. Check `tile` LOD1 ratio at the same time.
 4. Open questions: (a) physics vs render frame **settled, same frame** (see M1 findings); (b) all hulls exported and (c) per-entity volume models (interior/trigger shapes) still open.
