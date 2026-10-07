@@ -38,6 +38,8 @@ export interface StreamerOptions {
   /** GLB-local -> Three space (`glbToThreeMatrix`). */
   readonly glbToThree: THREE.Matrix4
   readonly material: THREE.Material
+  /** Material for tiles that carry vertex colours (default: `material`). */
+  readonly colorMaterial?: THREE.Material
   readonly budgetBytes?: number
   readonly maxInFlight?: number
   readonly select?: SelectOptions
@@ -171,8 +173,9 @@ export class TileStreamer {
       const g = new THREE.BufferGeometry()
       g.setAttribute("position", new THREE.BufferAttribute(geo.positions, 3))
       g.setIndex(new THREE.BufferAttribute(geo.indices, 1))
+      if (geo.colors) g.setAttribute("color", new THREE.BufferAttribute(geo.colors, 4, true))
       if (geo.positions.length >= 3) g.computeBoundingSphere() // an empty tile has nothing to bound
-      const mesh = new THREE.Mesh(g, this.o.material)
+      const mesh = new THREE.Mesh(g, geo.colors && this.o.colorMaterial ? this.o.colorMaterial : this.o.material)
       mesh.visible = false
       mesh.frustumCulled = true
       this.root.add(mesh)

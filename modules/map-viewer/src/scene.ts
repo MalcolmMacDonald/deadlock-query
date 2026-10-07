@@ -26,6 +26,13 @@ const parseGlb = (bytes: Uint8Array): Promise<THREE.Group> => {
 export const makeTerrainMaterial = (): THREE.MeshStandardMaterial =>
   new THREE.MeshStandardMaterial({ color: 0x9aa3ad, roughness: 0.9, side: THREE.DoubleSide, flatShading: true })
 
+/**
+ * Material for tiles with baked vertex colours (`COLOR_0`, linear RGBA8): white, so the colours are the albedo. The
+ * lighting rig in `buildScene` is shared with the grey material.
+ */
+export const makeColoredTerrainMaterial = (): THREE.MeshStandardMaterial =>
+  new THREE.MeshStandardMaterial({ color: 0xffffff, vertexColors: true, roughness: 0.9, side: THREE.DoubleSide, flatShading: true })
+
 /** Visible terrain / collision meshes under a scene built by `buildScene` (entity markers excluded). */
 export const surfaceMeshes = (root: THREE.Object3D): THREE.Mesh[] => {
   const out: THREE.Mesh[] = []
@@ -47,12 +54,16 @@ export const setSurfaceVisible = (root: THREE.Object3D, kind: SurfaceKind, visib
 export const buildScene = async (data: ViewerData): Promise<THREE.Group> => {
   const root = new THREE.Group()
   const baseMat = makeTerrainMaterial()
+  const colorMat = makeColoredTerrainMaterial()
   // Eagerly drawn tiles are the full-resolution set: LOD tiles share their base tile's bounds and would draw over it.
   for (const tile of tilesAtLod(data.manifest, 0)) {
     const bytes = data.tiles.get(tile.id)
     if (!bytes) continue
     const group = await parseGlb(bytes)
-    group.traverse((o) => { if ((o as THREE.Mesh).isMesh) (o as THREE.Mesh).material = baseMat })
+    group.traverse((o) => {
+      const m = o as THREE.Mesh
+      if (m.isMesh) m.material = m.geometry.getAttribute("color") ? colorMat : baseMat
+    })
     const holder = new THREE.Group()
     holder.matrixAutoUpdate = false
     holder.matrix.copy(glbToThreeMatrix(data.manifest.coordinateSystem.glbToWorld))
