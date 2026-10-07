@@ -171,7 +171,7 @@ Other (bulk, likely out of scope): `light_omni2` 1,968, `light_barn` 755, `citad
 - **Not run on real data.** Expected scale: ~1500 tiles at the default tile size; no progress callback exists inside Recast's tiled generator, so a long real run only logs before and after. Memory/time unmeasured. If it is too slow, drive `generateTileNavMeshData` tile by tile (progress, worker threads) instead of `generateTiledNavMesh`.
 
 ## Navmesh sign-off
-- Pending: needs a human to look at the OBJ from a real `bake` (see M5 above).
+- 2026-10-07: Malcolm looked at the game-nav navmesh OBJ (`lite.qa/navmesh.obj`, build 25761866) and said it looks good. Signed off for the game-nav source; the Recast fallback is not signed off (its input is the clip volumes). Hull choice (`--flow-hull`, default 0) is still unverified.
 
 ## Real-data run: lite pipeline on dl_midtown (2026-10-06, build 25738777, Windows 11, 39 GB free on C: before)
 
@@ -256,10 +256,10 @@ Decision (Malcolm): option 4 of "Collision finding", reverse-engineer `maps/<map
 - Not decoded: per-face records (nav flags, one-way/ledge info), the meaning of the other two hulls, `.navspace`. **Not verified:** that all 85,485 polygons are walkable for the hero hull (the file may be the union over hulls); `navConnection` directions and costs are taken from the flowmap as is (link cost is distance / speed of the kind; the flowmap's own cost is ignored).
 
 ## In progress
-- Visual sign-off of `<bundle>.qa/navmesh.obj` (needs a human), then tune.
+- Nothing running; navmesh signed off (see above).
 
 ## Next
-1. **Navmesh sign-off** (see "Navmesh sign-off" and the game-nav section above): open `<bundle>.qa/navmesh.obj` from `bake` (component 0 = main mesh), check lanes, bases, stairs and ramps, and that rooftops and upper levels are separate components only where the game has them. Decide the hull (`--flow-hull`). Then M6 (caching/resume/`diff`, README, update runbook). To get `walkable.nav` into an existing bundle, re-run `extract` (only the cheap `nav` stage runs; `EXTRACTOR_VERSION` did not change), then `bake --force`.
+1. **Hull and M6:** the navmesh is signed off (see "Navmesh sign-off"); decide the hull (`--flow-hull`) if a query shows a hull-specific problem. Then M6 (caching/resume/`diff`, README, update runbook). To get `walkable.nav` into an existing bundle, re-run `extract` (only the cheap `nav` stage runs; `EXTRACTOR_VERSION` did not change), then `bake --force`.
 2. **`interior`** needs other data: export the `citadel_trigger_interior` models (open question c) or derive it from render geometry; `world_physics` cannot supply it (see the game-nav section).
 3. Triangle cut quality (open question d): decimation is in (see above). Look at the lite tiles in map-viewer next to the collision GLB and tune `--tri-budget` (the bundle is only 109 MB, so there is room to raise it a lot), `--full-fraction` and `minTris`. Check `tile` LOD1 ratio at the same time.
 4. Open questions: (a) physics vs render frame **settled, same frame** (see M1 findings); (b) all hulls exported and (c) per-entity volume models (interior/trigger shapes) still open.
