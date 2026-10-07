@@ -1,7 +1,7 @@
 # map-viewer — state
 
 - **Status:** M6 done (entity layers, screenshot markers and popups); M5 done (`registerTool` is on the `ViewerService` layer); M4 done; real-hardware perf checks pending
-- **Version:** 0.15.0
+- **Version:** 0.16.0
 - **Current milestone:** M7 (SDF labels, performance pass)
 - **Last updated:** 2026-10-07
 
@@ -41,6 +41,8 @@
 - 2026-10-07 — F frames the selection. With the canvas focused, F moves the camera to the selected features: a lone point or entity gets a close-up (`FOCUS_MIN_DISTANCE` = 300 units), several features or a long line get their bounding box (`frameSelection` in `src/camera.ts`: centred, distance fits the bounding sphere in the field of view with 15% margin). The viewing direction (yaw/pitch) and camera mode are kept. `ViewerController.focusSelection()` / `selectionPoints()` read the vertices of every highlighted feature (picked entity, query point, screenshot marker, selected annotation, or a service `highlight`), so it works for all of them; F does nothing with no selection, ignores Ctrl/Cmd/Alt+F (browser find) and is ignored while typing in an input. The Select tool's hint mentions it; there is no other in-app shortcut list (the shell's registry is for global commands). Tests: `camera.test.ts`, `selection.test.ts`, e2e smoke.
 
 - 2026-10-07 — M7 (outlined labels): label sprites are drawn as haloed text (dark stroke, round joins, mipmapped texture) instead of text on a dark pill, so they stay readable over any surface without hiding the map. Chose a canvas halo over a true SDF atlas: no new dependency or font asset, same declutter and constant-pixel sizing; revisit with a glyph atlas only if label counts need it. Remaining M7: theming, touch, keyboard-only a11y, docs.
+
+- 2026-10-07 — `ViewerService.activateTool(id)` / `deactivateTool()` (optional in contracts): `ViewerController.activateTool` selects a built-in or registered tool via `tools.setTool` and throws on an unknown id (a defect through the service); `deactivateTool` returns to Select. Unblocks map-metadata M2.
 
 ## In progress
 - (nothing)

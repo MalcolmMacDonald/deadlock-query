@@ -74,3 +74,15 @@ test("unregistering the active tool deactivates it and returns to Select; ids mu
   off() // idempotent
   c.registerTool(sampleTool()) // the id can be registered again
 })
+
+test("activateTool selects a built-in or registered tool, deactivateTool returns to Select, unknown ids throw", () => {
+  const c = new ViewerController()
+  c.registerTool(sampleTool())
+  c.activateTool("sample.pin")
+  expect(c.tools.tool).toBe("sample.pin")
+  c.activateTool("polygon")
+  expect(c.tools.tool).toBe("polygon")
+  c.deactivateTool()
+  expect(c.tools.tool).toBe("select")
+  expect(() => c.activateTool("nope")).toThrow()
+})
