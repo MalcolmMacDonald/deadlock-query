@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@deadlock-query/contracts": "workspace:*",
+    "@deadlock-query/spatial-core": "workspace:*",
     "effect": "4.0.1",
     "monaco-editor": "^0.52.2"
   },

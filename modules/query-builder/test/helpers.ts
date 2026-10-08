@@ -33,7 +33,7 @@ export const stripTypesCompiler: Compiler = {
 }
 
 /** Same worker source and cancel semantics as `SandboxRunner`, minus the iframe (Bun has no DOM). */
-export const workerRunner = (prelude: string, bundle: unknown): Runner & { dispose: () => void } => {
+export const workerRunner = (prelude: string, bundle: unknown, baked?: unknown): Runner & { dispose: () => void } => {
   const url = URL.createObjectURL(new Blob([workerSource(prelude)], { type: "text/javascript" }))
   let worker!: Worker
   let active: { runId: number; settle: (o: RunOutcome) => void } | undefined
@@ -48,7 +48,7 @@ export const workerRunner = (prelude: string, bundle: unknown): Runner & { dispo
         else if (m.type === "error") active.settle({ ok: false, reason: "error", message: m.message })
       }
     }
-    worker.postMessage({ type: "load", bundle })
+    worker.postMessage({ type: "load", bundle, ...(baked ? { baked } : {}) })
     worker.postMessage({ type: "ping", id: 0 })
   })
   const ready = spawn()

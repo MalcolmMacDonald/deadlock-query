@@ -17,7 +17,7 @@ import { globalsShim, toPrelude, type LibraryArtifact } from "../engine/prelude.
 import type { GalleryQuery } from "../gallery/queries.ts"
 import { checkApiVersion, decodeShare, encodeShare } from "../share/shareLink.ts"
 import { makeQueryStore, type KeyValueStorage, type QueryStore } from "../store/queryStore.ts"
-import { SandboxRunner } from "../sandbox/runner.ts"
+import { SandboxRunner, type BakedBuffers } from "../sandbox/runner.ts"
 import { STYLE } from "../ui/styles.ts"
 import { downloadBlob } from "../ui/download.ts"
 import { renderExportBar } from "../ui/exportBar.ts"
@@ -31,6 +31,24 @@ import { registerSnippetCompletions } from "../ui/snippetCompletions.ts"
 export interface QueryBundle {
   readonly manifest: { readonly mapName: string; readonly gameBuildId: string }
   readonly entities: ReadonlyArray<unknown>
+  /**
+   * Baked spatial data (`baked/collision.bvh`, `baked/navmesh.bin`) as buffers or as URLs the panel downloads. With it the
+   * worker gets a raycaster and navmesh, so travel-time, line-of-sight and height queries run on the real map.
+   */
+  readonly baked?: { readonly bvh?: ArrayBuffer | string; readonly navmesh?: ArrayBuffer | string }
+}
+
+/** Downloads the baked files named by URL; buffers pass through. Undefined when the bundle has none. */
+const resolveBaked = async (baked: QueryBundle["baked"]): Promise<BakedBuffers | undefined> => {
+  if (!baked) return undefined
+  const get = async (v: ArrayBuffer | string | undefined): Promise<ArrayBuffer | undefined> => {
+    if (v === undefined || typeof v !== "string") return v
+    const res = await fetch(v)
+    if (!res.ok) throw new Error(`${v}: HTTP ${res.status}`)
+    return res.arrayBuffer()
+  }
+  const [bvh, navmesh] = await Promise.all([get(baked.bvh), get(baked.navmesh)])
+  return bvh || navmesh ? { ...(bvh ? { bvh } : {}), ...(navmesh ? { navmesh } : {}) } : undefined
 }
 
 export type ViewerServiceShape = (typeof ViewerService)["Service"]
@@ -162,9 +180,11 @@ export const mountQueryEditor = async (container: HTMLElement, opts: QueryEditor
     })
     cleanups.push(() => editor.dispose())
 
-    const runner = new SandboxRunner(doc, toPrelude(lib.js))
+    const baked = await resolveBaked(bundle.baked)
+    const { baked: _urls, ...plainBundle } = bundle
+    const runner = new SandboxRunner(doc, toPrelude(lib.js, baked ? lib.spatial : undefined))
     cleanups.push(() => runner.dispose())
-    await runner.load(bundle)
+    await runner.load(plainBundle, baked)
     for (const e of bundle.entities) { const id = (e as { id?: unknown }).id; if (typeof id === "string") entityIndex.set(id, e) }
     const compilerModelUri = monaco.Uri.parse("file:///engine/query.ts")
     cleanups.push(() => monaco.editor.getModel(compilerModelUri)?.dispose())
