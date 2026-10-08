@@ -8,8 +8,12 @@ export interface NavMeshData {
   readonly offsets: Uint32Array
   readonly indices: Uint32Array
 }
-/** Off-mesh connection (zipline, jump pad, ...). Cost is distance / speed of its `kind`. */
-export interface NavLink { readonly from: Vec3; readonly to: Vec3; readonly kind: string; readonly bidirectional?: boolean }
+/**
+ * Off-mesh connection (zipline, jump pad, ...). Cost is distance / speed of its `kind`, unless `cost` is set.
+ * `cost` (override links only; it is not serialised) is the fixed travel time in seconds: the link is then
+ * usable whatever `linkSpeeds` says for its kind, except an explicit speed of 0, which switches the kind off.
+ */
+export interface NavLink { readonly from: Vec3; readonly to: Vec3; readonly kind: string; readonly bidirectional?: boolean; readonly cost?: number }
 export interface MovementModel {
   /** Walking speed in world units per second (use 1 for plain distance). */
   readonly speed: number
@@ -19,6 +23,12 @@ export interface MovementModel {
 export interface NavOverrides {
   readonly blockedPolys?: readonly number[]
   readonly addedLinks?: readonly NavLink[]
+  /**
+   * Extra convex ground polygons (3+ vertices, either winding). They get indices `baseCount, baseCount + 1, ...`
+   * after the mesh's own polygons (`NavMesh.addedPolyStart`). A vertex within 0.5 units of an existing one is shared,
+   * so a polygon that meets the mesh along an edge becomes a neighbour of it; otherwise reach it with an added link.
+   */
+  readonly addedPolygons?: readonly (readonly Vec3[])[]
   /** Multiplies the cost of entering the polygon. */
   readonly costMultipliers?: Readonly<Record<number, number>>
 }
@@ -82,7 +92,34 @@ const insetPortal = (a: Vec3, b: Vec3, r: number): [Vec3, Vec3] => {
 }
 
 type Edge = { to: number; a: number; b: number } // shared edge vertex indices
-type LinkEdge = { to: number; kind: string; len: number; from3: Vec3; to3: Vec3 }
+type LinkEdge = { to: number; kind: string; len: number; from3: Vec3; to3: Vec3; cost?: number | undefined }
+
+/** Appends `polys` to `data`, sharing vertices that coincide (within 0.5 units) with existing ones. */
+const withPolygons = (data: NavMeshData, polys: readonly (readonly Vec3[])[]): NavMeshData => {
+  const key = (x: number, y: number, z: number) => `${Math.round(x * 2)},${Math.round(y * 2)},${Math.round(z * 2)}`
+  const byKey = new Map<string, number>()
+  const V = data.vertices
+  for (let i = 0; i < V.length / 3; i++) byKey.set(key(V[i * 3]!, V[i * 3 + 1]!, V[i * 3 + 2]!), i)
+  const verts: number[] = [], idx: number[] = [], offs: number[] = []
+  let vc = V.length / 3
+  for (const poly of polys) {
+    if (poly.length < 3) throw new Error("added polygon needs at least 3 vertices")
+    const ids = poly.map((v) => {
+      const k = key(v[0], v[1], v[2])
+      let id = byKey.get(k)
+      if (id === undefined) { id = vc++; byKey.set(k, id); verts.push(v[0], v[1], v[2]) }
+      return id
+    })
+    offs.push(ids.length)
+    idx.push(...ids)
+  }
+  const vertices = new Float32Array(V.length + verts.length); vertices.set(V); vertices.set(verts, V.length)
+  const offsets = new Uint32Array(data.offsets.length + polys.length); offsets.set(data.offsets)
+  let acc = data.indices.length
+  offs.forEach((n, i) => { acc += n; offsets[data.offsets.length + i] = acc })
+  const indices = new Uint32Array(acc); indices.set(data.indices); indices.set(idx, data.indices.length)
+  return { vertices, offsets, indices }
+}
 
 export class NavMesh {
   readonly polyCount: number
@@ -91,8 +128,15 @@ export class NavMesh {
   private readonly links: LinkEdge[][]
   private readonly blocked: Uint8Array
   private readonly mult: Float64Array
+  /** Fastest link rate (units per second) among links with a fixed `cost`; keeps the A* heuristic admissible. */
+  private fixedLinkRate = 0
+  readonly data: NavMeshData
+  /** Index of the first polygon added by `overrides.addedPolygons` (equals `polyCount` when there are none). */
+  readonly addedPolyStart: number
 
-  private constructor(readonly data: NavMeshData, private readonly srcLinks: readonly NavLink[], private readonly overrides: NavOverrides = {}) {
+  private constructor(private readonly baseData: NavMeshData, private readonly srcLinks: readonly NavLink[], private readonly overrides: NavOverrides = {}) {
+    this.addedPolyStart = baseData.offsets.length - 1
+    const data = (this.data = overrides.addedPolygons?.length ? withPolygons(baseData, overrides.addedPolygons) : baseData)
     const n = (this.polyCount = data.offsets.length - 1)
     this.centroids = new Float64Array(n * 3)
     for (let p = 0; p < n; p++) {
@@ -124,15 +168,17 @@ export class NavMesh {
       const a = this.nearestPoly(l.from), b = this.nearestPoly(l.to)
       if (a < 0 || b < 0) continue
       const len = dist(l.from, l.to)
-      this.links[a]!.push({ to: b, kind: l.kind, len, from3: l.from, to3: l.to })
-      if (l.bidirectional ?? true) this.links[b]!.push({ to: a, kind: l.kind, len, from3: l.to, to3: l.from })
+      const cost = l.cost !== undefined && l.cost >= 0 ? l.cost : undefined
+      if (cost !== undefined && len > 0) this.fixedLinkRate = Math.max(this.fixedLinkRate, len / Math.max(cost, 1e-9))
+      this.links[a]!.push({ to: b, kind: l.kind, len, from3: l.from, to3: l.to, cost })
+      if (l.bidirectional ?? true) this.links[b]!.push({ to: a, kind: l.kind, len, from3: l.to, to3: l.from, cost })
     }
   }
 
   static fromPolygons(data: NavMeshData, links: readonly NavLink[] = []): NavMesh { return new NavMesh(data, links) }
 
-  /** Same mesh with blocked polygons, extra links and cost multipliers applied. */
-  withOverrides(o: NavOverrides): NavMesh { return new NavMesh(this.data, this.srcLinks, o) }
+  /** Same mesh with blocked polygons, extra polygons and links, and cost multipliers applied (replaces overrides already on the mesh). */
+  withOverrides(o: NavOverrides): NavMesh { return new NavMesh(this.baseData, this.srcLinks, o) }
 
   /** Source off-mesh links (without `withOverrides` additions). */
   get sourceLinks(): readonly NavLink[] { return this.srcLinks }
@@ -156,7 +202,9 @@ export class NavMesh {
     for (const e of this.adj[p]!) if (!this.blocked[e.to]) f(e.to, this.edgeCost(p, e.to, m.speed))
     for (const l of this.links[p]!) {
       const sp = m.linkSpeeds?.[l.kind]
-      if (sp && !this.blocked[l.to]) f(l.to, (l.len * this.mult[l.to]!) / sp, l)
+      if (this.blocked[l.to]) continue
+      if (l.cost !== undefined) { if (sp !== 0) f(l.to, l.cost * this.mult[l.to]!, l) }
+      else if (sp) f(l.to, (l.len * this.mult[l.to]!) / sp, l)
     }
   }
 
@@ -199,7 +247,7 @@ export class NavMesh {
     const g = new Float64Array(this.polyCount).fill(Infinity), prev = new Int32Array(this.polyCount).fill(-1)
     const via: (LinkEdge | undefined)[] = new Array(this.polyCount)
     const goal = this.centroid(b), h = new Heap()
-    const hf = (p: number) => dist(this.centroid(p), goal) / Math.max(model.speed, ...Object.values(model.linkSpeeds ?? {}))
+    const hf = (p: number) => dist(this.centroid(p), goal) / Math.max(model.speed, this.fixedLinkRate, ...Object.values(model.linkSpeeds ?? {}))
     g[a] = 0; h.push(hf(a), a)
     while (h.size) {
       if (opts?.signal?.aborted) throw new DOMException("aborted", "AbortError")
@@ -233,6 +281,52 @@ export class NavMesh {
     return true
   }
 
+  /**
+   * Exact line test: walks the segment a→b from polygon to polygon (convex clipping in XY), failing at the first border
+   * edge nobody can cross (open wall, blocked neighbour) or where the mesh height at the crossing differs from the
+   * segment's by more than `zTol` (default 24). Starts on the polygon nearest `a` within `zTol` and succeeds when
+   * `b` falls inside the polygon reached. Link hops are not walkable. Unlike `walkable` it never steps across a gap.
+   */
+  walkExact(a: Vec3, b: Vec3, opts: { zTol?: number } = {}): boolean {
+    const zTol = opts.zTol ?? 24
+    const start = this.nearestPoint(a, { maxDist: zTol })
+    if (!start || this.blocked[start.poly]) return false
+    const d = this.data, V = d.vertices
+    const dx = b[0] - a[0], dy = b[1] - a[1]
+    let poly = start.poly, prev = -1, tCur = 0
+    for (let step = 0; step < this.polyCount + 8; step++) {
+      const s = d.offsets[poly]!, e = d.offsets[poly + 1]!
+      let area = 0
+      for (let k = s; k < e; k++) {
+        const i = d.indices[k]! * 3, j = d.indices[k + 1 < e ? k + 1 : s]! * 3
+        area += V[i]! * V[j + 1]! - V[j]! * V[i + 1]!
+      }
+      const sign = area >= 0 ? 1 : -1 // outward normal of edge (p→q) is sign * (qy - py, px - qx)
+      let tExit = 1, exitK = -1
+      for (let k = s; k < e; k++) {
+        const i = d.indices[k]! * 3, j = d.indices[k + 1 < e ? k + 1 : s]! * 3
+        const nx = sign * (V[j + 1]! - V[i + 1]!), ny = sign * (V[i]! - V[j]!)
+        const den = nx * dx + ny * dy
+        if (den <= 1e-12) continue
+        const t = (nx * (V[i]! - a[0]) + ny * (V[i + 1]! - a[1])) / den
+        if (t < tExit) { tExit = t; exitK = k }
+      }
+      if (exitK < 0) return true
+      tExit = Math.max(tExit, tCur)
+      const ia = d.indices[exitK]!, ib = d.indices[exitK + 1 < e ? exitK + 1 : s]!
+      const next = this.adj[poly]!.find((x) => x.to !== prev && ((x.a === ia && x.b === ib) || (x.a === ib && x.b === ia)))
+        ?? this.adj[poly]!.find((x) => (x.a === ia && x.b === ib) || (x.a === ib && x.b === ia))
+      if (!next || this.blocked[next.to]) return false
+      // Mesh height where the segment crosses the shared edge.
+      const ex = V[ib * 3]! - V[ia * 3]!, ey = V[ib * 3 + 1]! - V[ia * 3 + 1]!, l2 = ex * ex + ey * ey
+      const cx = a[0] + dx * tExit, cy = a[1] + dy * tExit
+      const u = l2 > 0 ? Math.max(0, Math.min(1, ((cx - V[ia * 3]!) * ex + (cy - V[ia * 3 + 1]!) * ey) / l2)) : 0
+      if (Math.abs(V[ia * 3 + 2]! + (V[ib * 3 + 2]! - V[ia * 3 + 2]!) * u - (a[2] + (b[2] - a[2]) * tExit)) > zTol) return false
+      prev = poly; poly = next.to; tCur = tExit
+    }
+    return false
+  }
+
   private edgeMidpoint(a: number, b: number): Vec3 {
     const V = this.data.vertices
     return [(V[a * 3]! + V[b * 3]!) / 2, (V[a * 3 + 1]! + V[b * 3 + 1]!) / 2, (V[a * 3 + 2]! + V[b * 3 + 2]!) / 2]
@@ -256,14 +350,19 @@ export class NavMesh {
   private funnelRoute(from: Vec3, to: Vec3, polys: readonly number[], via: readonly (LinkEdge | undefined)[], radius = 0): Vec3[] {
     const V = this.data.vertices
     const out: Vec3[] = []
-    let start = from, portals: Portal[] = []
+    let start = from, portals: Portal[] = [], stretch: number[] = [polys[0]!]
+    const flush = (end: Vec3) => {
+      const pts = funnelPath(start, end, portals)
+      out.push(...(radius > 0 ? this.clearWalls(pts, stretch, radius) : pts))
+    }
     for (let i = 0; i + 1 < polys.length; i++) {
       const link = via[polys[i + 1]!]
       if (link) {
-        out.push(...funnelPath(start, link.from3, portals))
-        start = link.to3; portals = []
+        flush(link.from3)
+        start = link.to3; portals = []; stretch = [polys[i + 1]!]
         continue
       }
+      stretch.push(polys[i + 1]!)
       const e = this.adj[polys[i]!]!.find((x) => x.to === polys[i + 1])!
       const c = this.centroid(polys[i]!), m = this.edgeMidpoint(e.a, e.b)
       const A: Vec3 = [V[e.a * 3]!, V[e.a * 3 + 1]!, V[e.a * 3 + 2]!], B: Vec3 = [V[e.b * 3]!, V[e.b * 3 + 1]!, V[e.b * 3 + 2]!]
@@ -272,8 +371,75 @@ export class NavMesh {
       const [pa, pb] = radius > 0 ? insetPortal(A, B, radius) : [A, B]
       portals.push(side > 0 ? [pa, pb] : [pb, pa])
     }
-    out.push(...funnelPath(start, to, portals))
+    flush(to)
     return out.filter((p, i) => i === 0 || p[0] !== out[i - 1]![0] || p[1] !== out[i - 1]![1] || p[2] !== out[i - 1]![2])
+  }
+
+  /** Border edges of `p` nobody can cross: no neighbour, or a blocked one. */
+  private wallEdges(p: number): [Vec3, Vec3][] {
+    const d = this.data, V = d.vertices, s = d.offsets[p]!, e = d.offsets[p + 1]!
+    const open = new Set<number>()
+    for (const x of this.adj[p]!) if (!this.blocked[x.to]) open.add(Math.min(x.a, x.b) * (V.length / 3) + Math.max(x.a, x.b))
+    const out: [Vec3, Vec3][] = []
+    for (let k = s; k < e; k++) {
+      const a = d.indices[k]!, b = d.indices[k + 1 < e ? k + 1 : s]!
+      if (open.has(Math.min(a, b) * (V.length / 3) + Math.max(a, b))) continue
+      out.push([[V[a * 3]!, V[a * 3 + 1]!, V[a * 3 + 2]!], [V[b * 3]!, V[b * 3 + 1]!, V[b * 3 + 2]!]])
+    }
+    return out
+  }
+
+  private containsXY(p: number, x: number, y: number): boolean {
+    const d = this.data, V = d.vertices, s = d.offsets[p]!, e = d.offsets[p + 1]!
+    let pos = false, neg = false
+    for (let k = s; k < e; k++) {
+      const a = d.indices[k]! * 3, b = d.indices[k + 1 < e ? k + 1 : s]! * 3
+      const c = (V[b]! - V[a]!) * (y - V[a + 1]!) - (V[b + 1]! - V[a + 1]!) * (x - V[a]!)
+      if (c > 1e-9) pos = true; else if (c < -1e-9) neg = true
+    }
+    return !(pos && neg)
+  }
+
+  /**
+   * Keeps a smoothed stretch `radius` away from the open borders (walls) of the polygons it runs through. The funnel only
+   * insets portal ends, so a segment can still graze a long wall; at the worst grazing point a waypoint is pushed
+   * out from the wall (skipped when that would leave the corridor). Approximate: three splits per segment at most.
+   */
+  private clearWalls(pts: readonly Vec3[], corridor: readonly number[], radius: number): Vec3[] {
+    const walls = corridor.flatMap((p) => this.wallEdges(p))
+    if (!walls.length) return [...pts]
+    const near = (x: number, y: number, z: number) => {
+      let best = { d: Infinity, wx: 0, wy: 0 }
+      for (const [a, b] of walls) {
+        const ex = b[0] - a[0], ey = b[1] - a[1], l2 = ex * ex + ey * ey
+        const u = l2 > 0 ? Math.max(0, Math.min(1, ((x - a[0]) * ex + (y - a[1]) * ey) / l2)) : 0
+        const wx = a[0] + ex * u, wy = a[1] + ey * u, wz = a[2] + (b[2] - a[2]) * u
+        const d = Math.hypot(x - wx, y - wy)
+        if (d < best.d && Math.abs(wz - z) < 120) best = { d, wx, wy }
+      }
+      return best
+    }
+    const out: Vec3[] = [pts[0]!]
+    const fix = (a: Vec3, b: Vec3, depth: number) => {
+      const len = Math.hypot(b[0] - a[0], b[1] - a[1]), n = Math.min(200, Math.ceil(len / Math.max(radius / 2, 4)))
+      let worst: { d: number; wx: number; wy: number; t: number } | null = null
+      for (let k = 1; k < n; k++) {
+        const t = k / n, x = a[0] + (b[0] - a[0]) * t, y = a[1] + (b[1] - a[1]) * t
+        const w = near(x, y, a[2] + (b[2] - a[2]) * t)
+        if (w.d < radius * 0.98 && (!worst || w.d < worst.d)) worst = { ...w, t }
+      }
+      if (worst && depth < 3) {
+        const x = a[0] + (b[0] - a[0]) * worst.t, y = a[1] + (b[1] - a[1]) * worst.t
+        const d = Math.hypot(x - worst.wx, y - worst.wy)
+        // Away from the wall; a segment lying on it is pushed to the side of its start.
+        const ux = d > 1e-6 ? (x - worst.wx) / d : -(b[1] - a[1]) / (len || 1), uy = d > 1e-6 ? (y - worst.wy) / d : (b[0] - a[0]) / (len || 1)
+        const q: Vec3 = [worst.wx + ux * radius, worst.wy + uy * radius, a[2] + (b[2] - a[2]) * worst.t]
+        if (corridor.some((p) => this.containsXY(p, q[0], q[1]))) { fix(a, q, depth + 1); fix(q, b, depth + 1); return }
+      }
+      out.push(b)
+    }
+    for (let i = 1; i < pts.length; i++) fix(pts[i - 1]!, pts[i]!, 0)
+    return out
   }
 
   /** Header (magic, vertexCount, polyCount, indexCount, linkCount), vertices, offsets, indices, links (6 f32 + kind id + flags). */

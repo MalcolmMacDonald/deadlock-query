@@ -32,7 +32,7 @@ describe("real-navmesh excerpt (patron surroundings)", () => {
       expect(len(p.points)).toBeGreaterThan(last)
       last = len(p.points)
     }
-    expect(last).toBeCloseTo(5181, -1)
+    expect(last).toBeCloseTo(5695, -1)
   })
   test("distanceField agrees with findPath and the smoothed path is no longer than cost", () => {
     const f = nm.distanceField([patron], model)

@@ -9,6 +9,7 @@
     "bench": "bun bench/s5.ts",
     "bench:nav": "bun bench/nav.ts",
     "bench:real": "bun bench/real.ts",
+    "bench:grid": "bun bench/grid.ts",
     "semantics-version": "bun tools/semantics-version.ts",
     "verify": "bun run typecheck && bun run test"
   },

@@ -185,3 +185,92 @@ test("radius keeps funnel corners off portal ends; walkable follows the mesh", (
   expect(nm.walkable([2, 5, 0], [2, 28, 0], { tol: 1 })).toBe(false)
   expect(nm.walkable([25, 2, 0], [25, 28, 0])).toBe(true)
 })
+
+test("added polygons join the mesh along shared vertices and take indices after the base polygons", () => {
+  const base = NavMesh.fromPolygons(corridor(5))
+  const ext = base.withOverrides({ addedPolygons: [[[50, 0, 0], [60, 0, 0], [60, 10, 0], [50, 10, 0]]] })
+  expect(ext.polyCount).toBe(6)
+  expect(ext.addedPolyStart).toBe(5)
+  expect(base.polyCount).toBe(5)
+  const p = ext.findPath([5, 5, 0], [55, 5, 0], walk)!
+  expect(p.polys).toEqual([0, 1, 2, 3, 4, 5])
+  expect(p.cost).toBeCloseTo(5)
+  // Overrides replace rather than stack, and the base polygons are not duplicated.
+  expect(ext.withOverrides({ blockedPolys: [2] }).polyCount).toBe(5)
+  // A disjoint polygon is only reachable through an added link.
+  const island = base.withOverrides({ addedPolygons: [[[100, 0, 0], [110, 0, 0], [110, 10, 0], [100, 10, 0]]] })
+  expect(island.findPath([5, 5, 0], [105, 5, 0], { speed: 10, linkSpeeds: { bridge: 10 } })).toBeNull()
+  const linked = base.withOverrides({ addedPolygons: [[[100, 0, 0], [110, 0, 0], [110, 10, 0], [100, 10, 0]]], addedLinks: [{ from: [45, 5, 0], to: [105, 5, 0], kind: "bridge" }] })
+  expect(linked.findPath([5, 5, 0], [105, 5, 0], { speed: 10, linkSpeeds: { bridge: 10 } })!.cost).toBeCloseTo(10)
+  expect(() => base.withOverrides({ addedPolygons: [[[0, 0, 0], [1, 0, 0]]] })).toThrow()
+})
+
+test("a link cost is a fixed travel time and needs no speed for its kind", () => {
+  const base = NavMesh.fromPolygons(corridor(5))
+  const link = { from: [5, 5, 0] as const, to: [45, 5, 0] as const, kind: "zipline", cost: 0.25 }
+  const nm = base.withOverrides({ addedLinks: [link] })
+  expect(nm.findPath([5, 5, 0], [45, 5, 0], walk)!.cost).toBeCloseTo(0.25) // 40 units would take 4 s on foot; kind is not in linkSpeeds
+  expect(nm.distanceField([[5, 5, 0]], walk).costs[4]).toBeCloseTo(0.25)
+  expect(nm.findPath([5, 5, 0], [45, 5, 0], { speed: 10, linkSpeeds: { zipline: 0 } })!.cost).toBeCloseTo(4) // speed 0 switches the kind off
+  expect(nm.findPath([45, 5, 0], [5, 5, 0], walk)!.cost).toBeCloseTo(0.25) // bidirectional by default
+  expect(base.withOverrides({ addedLinks: [{ ...link, bidirectional: false }] }).findPath([45, 5, 0], [5, 5, 0], walk)!.cost).toBeCloseTo(4)
+  // The slower of two links is not preferred and the heuristic stays admissible (A* equals Dijkstra).
+  const two = base.withOverrides({ addedLinks: [{ ...link, cost: 2 }, { from: [15, 5, 0], to: [45, 5, 0], kind: "zipline", cost: 0.1 }] })
+  expect(two.findPath([5, 5, 0], [45, 5, 0], walk)!.cost).toBeCloseTo(two.distanceField([[5, 5, 0]], walk).costAt([45, 5, 0]), 6)
+})
+
+test("walkExact follows the polygons and stops at walls and blocked polygons", () => {
+  const nm = NavMesh.fromPolygons(corridor(5))
+  expect(nm.walkExact([5, 5, 0], [45, 5, 0])).toBe(true)
+  expect(nm.walkExact([5, 2, 0], [45, 8, 0])).toBe(true) // diagonal through every polygon
+  expect(nm.walkExact([5, 5, 0], [45, 15, 0])).toBe(false) // leaves through the side wall
+  expect(nm.walkExact([5, 5, 0], [55, 5, 0])).toBe(false) // runs off the end
+  expect(nm.walkExact([5, 5, 0], [5, 5, 0])).toBe(true)
+  expect(nm.withOverrides({ blockedPolys: [2] }).walkExact([5, 5, 0], [45, 5, 0])).toBe(false)
+  expect(nm.walkExact([5, 5, 100], [45, 5, 100])).toBe(false) // nowhere near the mesh in Z
+  // Mesh height must follow the segment: a ramp up to z=100 is not walkable along a flat segment.
+  const ramp = NavMesh.fromPolygons({ vertices: new Float32Array([0, 0, 0, 100, 0, 100, 100, 10, 100, 0, 10, 0]), offsets: new Uint32Array([0, 4]), indices: new Uint32Array([0, 1, 2, 3]) })
+  expect(ramp.walkExact([5, 5, 5], [95, 5, 95])).toBe(true)
+})
+
+test("walkExact agrees with a dense-sample oracle on random segments over a mesh with holes", () => {
+  const n = 12
+  const vertices = new Float32Array((n + 1) * (n + 1) * 3)
+  for (let j = 0; j <= n; j++) for (let i = 0; i <= n; i++) vertices.set([i * 10, j * 10, 0], (j * (n + 1) + i) * 3)
+  const indices: number[] = [], offsets = [0]
+  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
+    if ((i * 7 + j * 13) % 5 === 0) continue // holes
+    const a = j * (n + 1) + i
+    indices.push(a, a + 1, a + n + 2, a + n + 1); offsets.push(indices.length)
+  }
+  const nm = NavMesh.fromPolygons({ vertices, offsets: new Uint32Array(offsets), indices: new Uint32Array(indices) })
+  let seed = 7; const rnd = () => (seed = (seed * 1664525 + 1013904223) >>> 0) / 2 ** 32
+  let agree = 0, total = 0, trues = 0
+  for (let k = 0; k < 400; k++) {
+    const a: [number, number, number] = [rnd() * 120, rnd() * 120, 0], b: [number, number, number] = [a[0] + (rnd() - 0.5) * 60, a[1] + (rnd() - 0.5) * 60, 0]
+    const onMesh = (p: readonly number[]) => nm.nearestPoint([p[0]!, p[1]!, 0], { maxDist: 1e-6 }) !== null
+    if (!onMesh(a)) continue
+    let oracle = true
+    for (let i = 0; i <= 600 && oracle; i++) oracle = onMesh([a[0] + ((b[0] - a[0]) * i) / 600, a[1] + ((b[1] - a[1]) * i) / 600])
+    total++; trues += oracle ? 1 : 0
+    if (nm.walkExact(a, b) === oracle) agree++
+  }
+  expect(total).toBeGreaterThan(100)
+  expect(trues).toBeGreaterThan(10)
+  expect(trues).toBeLessThan(total - 10)
+  // Dense sampling can step over a hole corner, so allow a sliver of disagreement.
+  expect(agree / total).toBeGreaterThan(0.97)
+})
+
+test("findPath radius keeps a smoothed path off an open border, not only off portal ends", () => {
+  const nm = NavMesh.fromPolygons(corridor(5))
+  const near = nm.findPath([5, 5, 0], [45, 5, 0], walk, { radius: 4 })!
+  expect(near.points).toEqual([[5, 5, 0], [45, 5, 0]]) // already 5 from both walls: untouched
+  // Hugging the y=0 wall: start and end are 1 from it, the middle must be pushed out to the radius.
+  const hug = nm.findPath([5, 1, 0], [45, 1, 0], walk, { radius: 4 })!
+  expect(hug.polys).toEqual([0, 1, 2, 3, 4])
+  expect(hug.points.length).toBeGreaterThan(2)
+  expect(Math.max(...hug.points.map((q) => q[1]))).toBeGreaterThanOrEqual(3.9)
+  for (const q of hug.points) expect(q[1]).toBeLessThanOrEqual(10)
+  expect(nm.findPath([5, 1, 0], [45, 1, 0], walk)!.points).toEqual([[5, 1, 0], [45, 1, 0]])
+})
