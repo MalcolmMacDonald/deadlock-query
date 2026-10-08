@@ -4,3 +4,6 @@ dist
 .dev.vars
 # screenshot-tool output (PLAN.md §2)
 data/screenshots/
+# Local data bundles and extractor output; only the build pointer is tracked
+data/*
+!data/current-build.json

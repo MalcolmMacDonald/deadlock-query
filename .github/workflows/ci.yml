@@ -26,3 +26,14 @@ jobs:
           INFRA=""; if echo "$PR_LABELS" | grep -q '"infra"' || echo "$PR_TITLE" | grep -qi '^\[infra\]'; then INFRA="--infra"; fi
           bun run check:scope -- --base "origin/$BASE_REF" --branch "$HEAD_REF" $INFRA
           bun run check:state -- --base "origin/$BASE_REF"
+  shell-e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      # Prod build in dist; lock.ts builds its own VITE_TARGET=dev copy for the dev half.
+      - run: bun run --filter @deadlock-query/shell build
+      - run: bun run e2e
+        working-directory: modules/shell
+        env: { CHROMIUM_PATH: /usr/bin/google-chrome }
