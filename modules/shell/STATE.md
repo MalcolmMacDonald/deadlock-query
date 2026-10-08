@@ -56,6 +56,8 @@
 
 - 2026-10-08 — `e2e/lock.ts` expected a dev build without `?demoDevOnly` to skip the login, but the reviewer panel (`metadata.review`) is dev-only, so every dev build locks. The test now asserts the lock screen. `e2e/a11y.ts` still fails in the light theme on map-viewer's Layers panel (`opacity: 0.6` text, "No layers yet." / "Annotations are not grouped yet.", color-contrast); that is map-viewer's to fix.
 
+- 2026-10-08 — Query editor data: the panel's `bundle` is now query-builder's `fetchPublishedBundle(manifestUrl)` (entities plus the baked collision BVH and navmesh, so travel-time and line-of-sight queries run on the real map), falling back to `loadQueryBundle` (published entities, else the fixture) when the fetch fails.
+
 ## In progress
 - (nothing yet)
 

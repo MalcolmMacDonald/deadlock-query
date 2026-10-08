@@ -30,6 +30,19 @@ export const loadQueryBundle = async (manifestUrl = BUNDLE_MANIFEST_URL): Promis
   }
 }
 
+type QueryBuilder = typeof import("@deadlock-query/query-builder")
+type Report = Parameters<Extract<ReturnType<QueryBuilder["fetchPublishedBundle"]>, (...a: never[]) => unknown>>[0]
+
+/** The published bundle (entities plus the baked collision BVH and navmesh); the entities-only / fixture bundle when that fetch fails. */
+const publishedBundle = (qb: QueryBuilder) => async (report: Report): Promise<Awaited<ReturnType<typeof loadQueryBundle>>> => {
+  const load = qb.fetchPublishedBundle(BUNDLE_MANIFEST_URL)
+  try {
+    return await (typeof load === "function" ? load(report) : load)
+  } catch {
+    return loadQueryBundle()
+  }
+}
+
 type Services = { readonly viewer: (typeof ViewerService)["Service"]; readonly selection: (typeof SelectionBus)["Service"] }
 let resolveServices!: (s: Services) => void
 const services = new Promise<Services>((resolve) => { resolveServices = resolve })
@@ -69,7 +82,7 @@ const mountEditor = (container: HTMLElement): (() => void) => {
       const initialShare = takeInitialShare()
       dispose = qb.makeQueryEditorPanel({
         library: qb.fetchLibraryArtifact(LIBRARY_URL),
-        bundle: loadQueryBundle(),
+        bundle: publishedBundle(qb),
         viewer,
         selection,
         getWorkerUrl: monacoWorkerUrl,
