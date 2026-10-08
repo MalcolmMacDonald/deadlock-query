@@ -10,7 +10,7 @@ test("about reads the game build from the published manifest and the API version
   const data = await loadAboutData(
     routes({
       "dl_midtown/manifest.json": json({ mapName: "dl_midtown", gameBuildId: "25738777" }),
-      "editor/library.json": json({ apiVersion: "0.3.0" }),
+      "app/library.json": json({ apiVersion: "0.3.0" }),
     }),
     "https://site.test/app/",
   )

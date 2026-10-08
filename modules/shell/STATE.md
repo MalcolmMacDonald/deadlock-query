@@ -58,6 +58,8 @@
 
 - 2026-10-08 — Query editor data: the panel's `bundle` is now query-builder's `fetchPublishedBundle(manifestUrl)` (entities plus the baked collision BVH and navmesh, so travel-time and line-of-sight queries run on the real map), falling back to `loadQueryBundle` (published entities, else the fixture) when the fetch fails.
 
+- 2026-10-08 — `LIBRARY_URL` is `./library.json` at the site root (written by `tools/build.ts`), no longer `editor/library.json` from the standalone editor app.
+
 ## In progress
 - (nothing yet)
 
@@ -65,7 +67,6 @@
 - M2 done. Needs a real published bundle to exercise end to end (e2e still runs on the fixture).
 
 ## Blockers / Requests to other modules
-- infra + query-builder: ship `library.json` without the standalone editor app. `tools/build.ts` copies the whole `buildApp()` output to `<site>/editor/` only so the shell can fetch `editor/library.json`; the shell reads it from `LIBRARY_URL` (`src/editor.tsx`), so publishing just that file (or at another path, then change `LIBRARY_URL`) is a one-line shell change once it exists.
 - infra: `tools/build.ts` runs the shell build without a target, so every deployed shell is a `prod` build (dev-only modules omitted, no login). Once a dev-only module exists, build the shell with `VITE_TARGET=dev` for `--target dev` (e.g. pass `env: { ...process.env, VITE_TARGET: target }` to the shell build step). No dev-only module exists yet, so nothing is lost today.
 - query-builder (resolved 2026-10-06): the embeddable panel shipped in PR #67 and is wired. Still nice to have there: a `SelectionBus` change stream (the panel polls `current` every 250 ms).
 - map-viewer: confirmed — shell mounts a panel `component` that is `{ mount(container) => dispose }` (see `src/panels.tsx`); React components also work. `viewer.main` can use the handle as-is.

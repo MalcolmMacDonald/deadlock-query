@@ -1,5 +1,5 @@
 // Query share links (`#q=…`, made by query-builder) open in the shell's editor panel: filled in, not run.
-// Needs a Chromium and the query-library build (the editor reads `editor/library.json`). Run: bun e2e/querylink.ts
+// Needs a Chromium and the query-library build (the editor reads `library.json`). Run: bun e2e/querylink.ts
 import { chromium } from "playwright-core"
 import { deflateRawSync } from "node:zlib"
 import { mkdtempSync } from "node:fs"
