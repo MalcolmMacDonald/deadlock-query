@@ -96,7 +96,7 @@ export const makeLayersPanel = (controller: ViewerController): PanelComponent =>
     advancedLabel.append(advanced, el("span", "", { textContent: "Colour, opacity and order" }))
     const list = el("div", "display:flex;flex-direction:column;gap:8px")
     list.dataset.role = "layer-groups"
-    const empty = el("div", "opacity:.6", { textContent: "No layers yet." })
+    const empty = el("div", "color:var(--muted,#9aa3ad)", { textContent: "No layers yet." })
     const groupsHeader = el("div", "display:flex;align-items:center;gap:6px;margin-top:12px;font-weight:700")
     groupsHeader.append(el("span", "flex:1", { textContent: "Annotation layers" }))
     const newGroup = el("button", "", { textContent: "New layer", title: "Add an annotation layer" })
@@ -200,7 +200,7 @@ export const makeLayersPanel = (controller: ViewerController): PanelComponent =>
     const renderGroups = () => {
       const docLayers = controller.annotations.layers ?? []
       groups.replaceChildren(
-        ...(docLayers.length ? [el("div", "opacity:.6", { textContent: "● draw · visible · locked" })] : [el("div", "opacity:.6", { textContent: "Annotations are not grouped yet." })]),
+        ...(docLayers.length ? [el("div", "color:var(--muted,#9aa3ad)", { textContent: "● draw · visible · locked" })] : [el("div", "color:var(--muted,#9aa3ad)", { textContent: "Annotations are not grouped yet." })]),
         ...docLayers.map((l) => {
           const row = el("div", "display:flex;align-items:center;gap:6px")
           row.dataset.docLayer = l.id
