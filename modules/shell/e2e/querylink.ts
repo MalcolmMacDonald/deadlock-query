@@ -2,11 +2,11 @@
 // Needs a Chromium and the query-library build (the editor reads `library.json`). Run: bun e2e/querylink.ts
 import { chromium } from "playwright-core"
 import { deflateRawSync } from "node:zlib"
-import { mkdtempSync } from "node:fs"
+import { mkdtempSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { build } from "../../../tools/build.ts"
-import { buildApp, serve } from "../../query-builder/src/app/build.ts"
+import { buildApp, buildLibraryJson, serve } from "../../query-builder/src/app/build.ts"
 
 const marker = "// shared-from-link-marker"
 const link = `#q=${deflateRawSync(Buffer.from(`${marker}\nexport default async () => 42\n`)).toString("base64url")}&api=0.0.0`
@@ -15,6 +15,7 @@ const root = join(import.meta.dir, "..")
 const vite = Bun.spawnSync(["bunx", "vite", "build"], { cwd: root, stdout: "ignore", stderr: "inherit" })
 if (vite.exitCode !== 0) throw new Error("shell build failed")
 const site = build("dev", join(mkdtempSync(join(tmpdir(), "dlq-querylink-")), "site"), join(root, "dist"), await buildApp())
+writeFileSync(join(site, "library.json"), await buildLibraryJson()) // tools/build.ts writes this next to the shell
 const server = serve(site)
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH ?? "/opt/pw-browsers/chromium", args: ["--use-gl=swiftshader", "--enable-unsafe-swiftshader"] })
 try {
