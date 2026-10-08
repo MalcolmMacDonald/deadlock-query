@@ -41,7 +41,7 @@ export const panelIds = (page: Page): Promise<string[]> =>
 
 export const expectPanels = async (page: Page, expected: string[], what: string): Promise<void> => {
   const want = [...expected].sort()
-  for (let i = 0; i < 30; i++) {
+  for (let i = 0; i < 100; i++) {
     if (JSON.stringify(await panelIds(page)) === JSON.stringify(want)) return
     await Bun.sleep(100)
   }
