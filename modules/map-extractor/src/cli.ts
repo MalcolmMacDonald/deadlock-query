@@ -7,6 +7,7 @@ import lock from "../tools.lock.json" with { type: "json" }
 import { extract, type Tier } from "./extract.ts"
 import { bakeBundle, DEFAULT_CELL_SIZE, DEFAULT_EXCLUDE_LAYERS } from "./bake.ts"
 import { bakeNavmesh, DEFAULT_NAV_AGENT, DEFAULT_NAV_EXCLUDE_LAYERS, type NavmeshOptions } from "./navmesh.ts"
+import { diffBundles, formatDiff } from "./diff.ts"
 import { inspectBundle } from "./inspect.ts"
 import { packLite } from "./packLite.ts"
 import { tileBundle } from "./tiling.ts"
@@ -27,7 +28,8 @@ const USAGE = `dlq-extract <command> [--json] [--game-dir <path>]
              then the navmesh (baked/navmesh.bin + OBJ in <bundle>.qa/) unless --no-navmesh: from the game's nav faces (+ .navflowmap connections, --flow-hull <n>, default 0) when present, else Recast (force with --nav-source game|recast):
              [--agent-radius ${DEFAULT_NAV_AGENT.radius}] [--agent-height ${DEFAULT_NAV_AGENT.height}] [--agent-climb ${DEFAULT_NAV_AGENT.climb}] [--agent-slope ${DEFAULT_NAV_AGENT.slopeDegrees}] [--nav-cell-size 8] [--nav-cell-height 4] [--nav-tile-size 128] [--nav-exclude-layers ${DEFAULT_NAV_EXCLUDE_LAYERS.join(",")}] [--qa-dir <dir>|--no-qa]
   pack-lite  <bundle-dir>   validate lite bundle, check for textures, verify budget compliance
-(diff: not implemented yet)`
+  diff       <bundle-a> <bundle-b>   what changed between two bundles (build, tiles, entities by kind and team, baked and navmesh numbers); exit 1 when they differ
+`
 
 export const main = (argv: ReadonlyArray<string>): number => {
   const [cmd, ...rest] = argv
@@ -72,6 +74,13 @@ export const mainAsync = async (argv: ReadonlyArray<string>): Promise<number> =>
     const r = await inspectBundle(dir)
     emit(r, [...r.errors.map((e) => `✗ ${e}`), ...r.warnings.map((w) => `! ${w}`), ...Object.entries(r.info).map(([k, v]) => `${k}: ${JSON.stringify(v)}`), r.ok ? "inspect ok" : "inspect failed"].join("\n"))
     return r.ok ? EXIT.ok : EXIT.problem
+  }
+  if (cmd === "diff") {
+    const dirs = rest.filter((a) => !a.startsWith("--"))
+    if (dirs.length !== 2) { console.error(USAGE); return EXIT.usage }
+    const r = diffBundles(dirs[0]!, dirs[1]!)
+    emit(r, formatDiff(r))
+    return r.same ? EXIT.ok : EXIT.problem
   }
   if (cmd === "pack-lite") {
     const dir = rest.find((a) => !a.startsWith("--"))
