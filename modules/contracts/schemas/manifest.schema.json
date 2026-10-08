@@ -171,6 +171,44 @@
             "sha256": {
               "type": "string"
             },
+            "files": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string"
+                  },
+                  "bytes": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "Infinity",
+                          "-Infinity",
+                          "NaN"
+                        ]
+                      }
+                    ]
+                  },
+                  "sha256": {
+                    "type": "string"
+                  },
+                  "role": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "file",
+                  "bytes",
+                  "sha256"
+                ],
+                "additionalProperties": true
+              }
+            },
             "materials": {
               "type": "array",
               "items": {

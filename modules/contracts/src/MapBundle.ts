@@ -36,12 +36,27 @@ export const EntitiesFile = Schema.Struct({
 })
 export type EntitiesFile = typeof EntitiesFile.Type
 
+/** One file of a multi-file tile (for example geometry plus a texture atlas). */
+export const TileFile = Schema.Struct({
+  file: Schema.String,
+  bytes: Schema.Number,
+  sha256: Schema.String,
+  /** What the file holds (free text, for example "geometry" or "texture"); absent = geometry. */
+  role: Schema.optionalKey(Schema.String)
+})
+export type TileFile = typeof TileFile.Type
+
 export const Tile = Schema.Struct({
   id: Schema.String,
   bounds: AabbS,
   file: Schema.String,
   bytes: Schema.Number,
   sha256: Schema.String,
+  /**
+   * Extra files that belong to this tile besides `file` (which stays the primary geometry file, so readers that
+   * ignore `files` keep working). Absent = single-file tile.
+   */
+  files: Schema.optionalKey(Schema.Array(TileFile)),
   /** Optional material identity recovered from mesh names (`..._mt_<material>`). */
   materials: Schema.optionalKey(Schema.Array(Schema.String)),
   /**
