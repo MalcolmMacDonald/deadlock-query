@@ -1,28 +1,30 @@
+import { deflateSync, inflateSync, strFromU8, strToU8 } from "fflate"
 import { parseLayout, serializeLayout } from "./layout.ts"
 
 /** Hash parameter carrying a shared layout: `#layout=<base64url of the versioned stored layout>`. */
 export const SHARE_PARAM = "layout"
 
-const toBase64Url = (s: string): string => {
-  const bytes = new TextEncoder().encode(s)
+/** Compressed links carry this marker before the payload; older links (plain base64url JSON) still decode. */
+const COMPRESSED = "z."
+
+const toBase64Url = (bytes: Uint8Array): string => {
   let bin = ""
   for (const b of bytes) bin += String.fromCharCode(b)
   return btoa(bin).replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "")
 }
 
-const fromBase64Url = (s: string): string => {
-  const bin = atob(s.replaceAll("-", "+").replaceAll("_", "/"))
-  return new TextDecoder().decode(Uint8Array.from(bin, (c) => c.charCodeAt(0)))
-}
+const fromBase64Url = (s: string): Uint8Array => Uint8Array.from(atob(s.replaceAll("-", "+").replaceAll("_", "/")), (c) => c.charCodeAt(0))
 
-export const encodeLayoutHash = (layout: unknown): string => `#${SHARE_PARAM}=${toBase64Url(serializeLayout(layout))}`
+export const encodeLayoutHash = (layout: unknown): string =>
+  `#${SHARE_PARAM}=${COMPRESSED}${toBase64Url(deflateSync(strToU8(serializeLayout(layout)), { level: 9 }))}`
 
 /** The layout carried by a location hash, or null when absent, malformed, or from an unknown layout version. */
 export const decodeLayoutHash = (hash: string): unknown | null => {
   const value = new URLSearchParams(hash.replace(/^#/, "")).get(SHARE_PARAM)
   if (!value) return null
   try {
-    return parseLayout(fromBase64Url(value))
+    const bytes = value.startsWith(COMPRESSED) ? inflateSync(fromBase64Url(value.slice(COMPRESSED.length))) : fromBase64Url(value)
+    return parseLayout(strFromU8(bytes))
   } catch {
     return null
   }
