@@ -139,3 +139,21 @@ test("mantle links default to half the walking speed and can be overridden or sw
   expect(time({ mantle: SPEED * 4 })).toBeCloseTo(len / (SPEED * 4), 3)
   expect(time({ mantle: 0 })).toBeCloseTo(14000 / SPEED, 3)
 })
+
+test("climbRope links default to half the walking speed, work both ways, and can be overridden or switched off", () => {
+  expect(linkSpeedsOf({ heroSpeed: 500 }).climbRope).toBe(250)
+  expect(linkSpeedsOf({}).climbRope).toBe(3.5 * UNITS_PER_METER)
+  expect(linkSpeedsOf({ heroSpeed: 500, linkSpeeds: { climbRope: 0 } }).climbRope).toBe(0)
+  const a = vec(-3750, -3750, 0), b = vec(3750, 3750, 0)
+  const link = { from: [-3750, -3750, 0] as [number, number, number], to: [3750, 3750, 0] as [number, number, number], kind: "climbRope", bidirectional: true }
+  const times = (linkSpeeds?: Record<string, number>) => {
+    MapContext.fromBundle({ ...mini, spatial: { raycaster: floor as RaycasterLike, nav: { mesh: NavMesh.fromPolygons(grid(), [link]) as NavMeshLike, heroSpeed: SPEED, ...(linkSpeeds ? { linkSpeeds } : {}) } } })
+    return [a.travelTimeTo(b), b.travelTimeTo(a)]
+  }
+  const len = Math.hypot(7500, 7500)
+  const [ab, ba] = times({ climbRope: SPEED * 4 })
+  expect(ab).toBeCloseTo(len / (SPEED * 4), 3)
+  expect(ba).toBeCloseTo(ab!, 3) // two-way
+  for (const t of times()) expect(t).toBeCloseTo(14000 / SPEED, 3) // at half speed the walk (28 s) wins
+  for (const t of times({ climbRope: 0 })) expect(t).toBeCloseTo(14000 / SPEED, 3)
+})
