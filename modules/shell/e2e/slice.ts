@@ -1,16 +1,17 @@
 // M2 acceptance: load the built site, run a query in the embedded editor; its rows overlay and highlight on the real map.
 // Needs a Chromium, the query-library build, and no network. Run: bun e2e/slice.ts
 import { chromium } from "playwright-core"
-import { mkdtempSync } from "node:fs"
+import { mkdtempSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { build } from "../../../tools/build.ts"
-import { buildApp, serve } from "../../query-builder/src/app/build.ts"
+import { buildApp, buildLibraryJson, serve } from "../../query-builder/src/app/build.ts"
 
 const root = join(import.meta.dir, "..")
 const vite = Bun.spawnSync(["bunx", "vite", "build"], { cwd: root, stdout: "ignore", stderr: "inherit" })
 if (vite.exitCode !== 0) throw new Error("shell build failed")
 const site = build("dev", join(mkdtempSync(join(tmpdir(), "dlq-slice-")), "site"), join(root, "dist"), await buildApp())
+writeFileSync(join(site, "library.json"), await buildLibraryJson()) // tools/build.ts writes this next to the shell
 const server = serve(site)
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH ?? "/opt/pw-browsers/chromium", args: ["--use-gl=swiftshader", "--enable-unsafe-swiftshader"] })
 try {
