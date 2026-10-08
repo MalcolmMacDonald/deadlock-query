@@ -313,6 +313,11 @@ Bundle baked with team mapping, interior volumes, island stitching and mantle li
 - **Spawn entities:** the first `spawn` entity (6136,-1,1737) is off the mesh; use the ones near y +-10000 as sources.
 - **Needs from query-library:** a `mantle` entry in `linkSpeeds` (0.5x walking) and an orb snap distance of at least 1500.
 
+## M6: `diff` and README (2026-10-08)
+- `dlq-extract diff <a> <b>` (`src/diff.ts`) compares two bundles by their JSON only (manifest and entities): build id, map, tier, tile and LOD counts and bytes, entities by kind, teams, bake and navmesh numbers (polygons, components, link counts by kind). Prints one line per difference, `--json` for machines, exit 1 when they differ. Test: `test/diff.test.ts`. A module `README.md` lists the commands and the game-update steps.
+- Caching and resume were already in (each `extract` stage is cached in `.work`, `bake` skips when its input key matches). The "unchanged rerun under 5 s" figure is not measured on the real map; it needs the laptop.
+- The LOD fields item is already done: `tile` writes `lod` / `lodOf` and the published bundle has 138 tiles each with LOD1 and LOD2 (file size ratio medians 0.38 and 0.20, geometry is 25 % and 6 % of triangles).
+
 ## In progress
 - Nothing running; navmesh signed off (see above).
 
