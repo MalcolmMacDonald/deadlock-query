@@ -1,5 +1,5 @@
 import { checkBudgets } from "./lib/budget.ts"
-import { buildApp } from "../modules/query-builder/src/app/build.ts"
+import { buildApp, buildLibraryJson } from "../modules/query-builder/src/app/build.ts"
 import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs"
 
 export const placeholderHtml = (target: string) =>
@@ -29,6 +29,8 @@ if (import.meta.main) {
   if (vite.exitCode !== 0) { console.error("shell build failed"); process.exit(1) }
   const editorDist = await buildApp()
   const out = build(target, "dist", "modules/shell/dist", editorDist)
+  // The shell loads the query library from the site root, so it no longer depends on the standalone editor app.
+  writeFileSync(`${out}/library.json`, await buildLibraryJson())
   const errors = checkBudgets(out)
   if (errors.length) { console.error(errors.map((e) => `✗ budget: ${e}`).join("\n")); process.exit(1) }
   console.log(`built ${target} -> ${out} (within budgets)`)
