@@ -1,8 +1,8 @@
 # kanban — state
 
-- **Status:** M0-M2 done against mocks
-- **Version:** 0.5.0
-- **Current milestone:** M5 (needs the live proxy)
+- **Status:** M0-M6 done on mocks (UI complete, live layer written) against mocks
+- **Version:** 0.6.0
+- **Current milestone:** M7 (docs, requests surfacing, security review)
 - **Last updated:** 2026-10-08
 
 ## Done
@@ -16,11 +16,13 @@
 
 - Live API: `ProxyGitHubApi` (`src/proxy.ts`) implements `GitHubApi` over `/api/github/*` (CSRF header, no token in the browser): issues without PRs, PRs linked by `claude/<module>/<n>-slug` branch with CI from workflow runs, create issue, comments, main CI, promote (`deploy.yml` dispatch with `promote=true`). `GitHubApi` gained `comments`, `addComment`, `mainCi`, `promote` (mock updated). Tested against a fake fetch that enforces the proxy's endpoint allowlist; going live is `Layer` swap in the shell.
 
+- M5/M6 UI: click or Enter on a card opens `Drawer` (comments, PR/CI, per-issue token total, "Send to Claude" posts an `@claude`-prefixed comment); `Header` shows main CI and a Promote button (enabled only when main CI is green, dispatches via `GitHubApi.promote`); the tab title gets a `(n)` badge for cards in Review. Mock round trips are tested; the sandbox-repo round trip and a real promote dispatch still need Malcolm's secrets (see below).
+
 ## In progress
 - (nothing)
 
 ## Next
-- Approve/request-changes via reviews and Revert (create a revert PR) need endpoints the proxy does not allow (PR reviews, git writes): request to infra, or do them through `@claude` comments. Remaining: M5 feedback drawer round-trip, M6 promote/CI/token totals, and the real `GitHubApi` over the dev `/api/github/*` proxy (infra M5 live).
+- Approve/request-changes via reviews and Revert (create a revert PR) need endpoints the proxy does not allow (PR reviews, git writes): request to infra, or do them through `@claude` comments. Remaining: M7 (operator README, STATE.md "requests" surfacing, security checklist), the shell wiring `ProxyGitHubApi` in place of the mock, and the live acceptance runs (infra M5 live).
 - Malcolm: set the `CLAUDE_CODE_OAUTH_TOKEN` secret and `CLAUDE_ALLOWED_ACTORS` variable so `claude.yml` can run; then run the M3 sandbox-repo acceptance.
 - Live path: a `GitHubApi` implementation that calls the dev `/api/github/*` proxy. Blocked on infra M5 live (`GITHUB_TOKEN_PROXY`); going live is a layer swap.
 

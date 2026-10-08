@@ -1,17 +1,20 @@
 import { useEffect, useState } from "react"
 import { Effect, type Layer } from "effect"
 import { DevAuth } from "@deadlock-query/contracts"
-import { COLUMNS, groupByColumn } from "./board.ts"
+import { COLUMNS, columnOf, groupByColumn } from "./board.ts"
 import { GitHubApi, type Issue } from "./github.ts"
+import { Drawer, Header } from "./Drawer.tsx"
+import { titleBadge } from "./feedback.ts"
 import { FeatureFormView } from "./FeatureForm.tsx"
 import { loadPrefs, moveLane, orderLanes, savePrefs, toggleCollapsed, type PrefsStore } from "./lanes.ts"
 
-export const BoardView = ({ issues, module, collapsed = false, onToggle, onMove }: {
+export const BoardView = ({ issues, module, collapsed = false, onToggle, onMove, onOpen }: {
   issues: ReadonlyArray<Issue>
   module: string
   collapsed?: boolean
   onToggle?: () => void
   onMove?: (delta: -1 | 1) => void
+  onOpen?: (issue: Issue) => void
 }) => {
   const g = groupByColumn(issues, module)
   return (
@@ -26,7 +29,7 @@ export const BoardView = ({ issues, module, collapsed = false, onToggle, onMove 
           <div key={c} role="group" aria-label={c} style={{ flex: 1 }}>
             <h3>{c}</h3>
             {g[c].map((i) => (
-              <article key={i.number}>
+              <article key={i.number} tabIndex={0} onClick={() => onOpen?.(i)} onKeyDown={(e) => { if (e.key === "Enter") onOpen?.(i) }}>
                 #{i.number} {i.title}
                 {i.pr ? <small> · PR #{i.pr.number} CI {i.pr.ci}</small> : null}
               </article>
@@ -41,6 +44,7 @@ export const BoardView = ({ issues, module, collapsed = false, onToggle, onMove 
 /** `kanban.board`: lock screen without a session, otherwise one collapsible, reorderable lane per module. */
 export const Board = ({ layer, modules, store }: { layer: Layer.Layer<GitHubApi | DevAuth>; modules: ReadonlyArray<string>; store: PrefsStore }) => {
   const [prefs, setPrefs] = useState(() => loadPrefs(store))
+  const [open, setOpen] = useState<Issue>()
   const update = (next: typeof prefs) => { setPrefs(next); savePrefs(store, next) }
   const [state, setState] = useState<{ auth: "anonymous" | "authenticated" | "loading"; issues: ReadonlyArray<Issue>; error?: string }>({ auth: "loading", issues: [] })
   useEffect(() => {
@@ -52,13 +56,19 @@ export const Board = ({ layer, modules, store }: { layer: Layer.Layer<GitHubApi 
       }).pipe(Effect.provide(layer), Effect.catch((e: Error) => Effect.succeed({ auth: "authenticated" as const, issues: [] as ReadonlyArray<Issue>, error: e.message })))
     ).then(setState)
   }, [layer])
+  const reviewCount = state.issues.filter((i) => columnOf(i) === "Review").length
+  useEffect(() => {
+    if (typeof document === "undefined") return
+    const base = document.title.replace(/^\(\d+\) /, "")
+    document.title = titleBadge(base, reviewCount)
+  }, [reviewCount])
   if (state.auth === "loading") return <p>Loading…</p>
   if (state.auth === "anonymous") return <p role="alert">Locked: sign in to the dev site to use the kanban.</p>
-  return state.error ? <p role="alert">{state.error}</p> : <><FeatureFormView modules={modules} onCreate={(d) => void Effect.runPromise(Effect.gen(function* () {
+  return state.error ? <p role="alert">{state.error}</p> : <><Header layer={layer} /><FeatureFormView modules={modules} onCreate={(d) => void Effect.runPromise(Effect.gen(function* () {
       const created = yield* (yield* GitHubApi).createIssue(d)
       return created
     }).pipe(Effect.provide(layer))).then((i) => setState((s) => ({ ...s, issues: [...s.issues, i] })))} />{orderLanes(modules, prefs).map((m) => (
     <BoardView key={m} issues={state.issues} module={m} collapsed={prefs.collapsed.includes(m)}
-      onToggle={() => update(toggleCollapsed(prefs, m))} onMove={(d) => update(moveLane(modules, prefs, m, d))} />
-  ))}</>
+      onToggle={() => update(toggleCollapsed(prefs, m))} onMove={(d) => update(moveLane(modules, prefs, m, d))} onOpen={setOpen} />
+  ))}{open ? <Drawer key={open.number} layer={layer} issue={open} /> : null}</>
 }
