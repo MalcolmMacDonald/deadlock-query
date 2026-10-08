@@ -1,4 +1,4 @@
-# `ctx.parallel` design (Phase 3, not implemented)
+# `ctx.parallel` design (Phase 3; in-thread API built, worker backend is the query-builder's)
 
 Goal: let a query shard an index range over a pool of workers that each hold the same map (bundle bytes are shared; the
 collision BVH, navmesh and sample grid are zero-copy `SharedArrayBuffer`s, see spatial-core's serialisation).
@@ -30,3 +30,6 @@ const hits = await ctx.parallel.map(map.sample.grid(100).toArray(), (p) => p.vis
   falls back to sequential when `navigator.hardwareConcurrency` is 1 or the item count is under one chunk.
 - Prerequisites: query-builder owns the worker pool; spatial-core needs `Raycaster`/`NavMesh` constructors from shared
   buffers (the serialised forms already are zero-copy). No library change is needed until those exist.
+
+## Built (2026-10-08)
+`ctx.parallel.map/reduce` and `setParallelBackend(backend)` exist in `src/run.ts`; without a backend chunks run in order on the current thread (same output). The query-builder's worker pool implements `ParallelBackend`.

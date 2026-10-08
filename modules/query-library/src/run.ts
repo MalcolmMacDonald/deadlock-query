@@ -65,13 +65,79 @@ export const progress = (fraction: number, label?: string): void => {
 }
 
 /**
- * The run's context (`ctx` in queries): its signal, and `progress`.
+ * Options for {@link ctx}`.parallel`.
+ * @category Run
+ */
+export interface ParallelOptions {
+  /** Items per chunk (default 256). Chunks are fixed slices by input index, so output order equals the sequential run. */
+  readonly chunk?: number
+  /** Read-only constants passed to `fn` as its second argument (structured-clone friendly, for worker backends). */
+  readonly args?: unknown
+}
+
+/**
+ * Runs chunks of work somewhere else (a worker pool). The query-builder installs one with {@link setParallelBackend};
+ * without one, `ctx.parallel` runs the chunks in order on the current thread.
+ * @category Run
+ */
+export interface ParallelBackend {
+  /** Maps one chunk; `fnSource` is `fn.toString()` and `fn` is the same function for in-thread backends. */
+  runChunk<T, R>(chunk: readonly T[], fn: (item: T, args: unknown) => R, fnSource: string, args: unknown): Promise<R[]>
+}
+
+let backend: ParallelBackend | undefined
+
+/**
+ * Installs (or clears, with `undefined`) the worker-pool backend used by `ctx.parallel`.
+ * @example setParallelBackend(undefined)
+ * @category Run
+ */
+export const setParallelBackend = (b: ParallelBackend | undefined): void => { backend = b }
+
+const chunksOf = <T>(items: readonly T[], size: number): T[][] => {
+  const n = Math.max(1, Math.floor(size))
+  const out: T[][] = []
+  for (let i = 0; i < items.length; i += n) out.push(items.slice(i, i + n))
+  return out
+}
+
+const parallelMap = async <T, R>(items: Iterable<T>, fn: (item: T, args: unknown) => R, opts: ParallelOptions = {}): Promise<R[]> => {
+  const all = Array.isArray(items) ? items as readonly T[] : [...items]
+  const chunks = chunksOf(all, opts.chunk ?? 256)
+  const out: R[] = []
+  const src = fn.toString()
+  // `withRun` has returned by the time we resume after an await, so re-enter the run captured at the call.
+  const run = active
+  const inRun = <V>(f: () => V): V => { const prev = active; active = run; try { return f() } finally { active = prev } }
+  for (let i = 0; i < chunks.length; i++) {
+    inRun(() => checkCancelled(true))
+    const c = chunks[i]!
+    const part = backend ? await backend.runChunk(c, fn, src, opts.args) : c.map(x => fn(x, opts.args))
+    for (const r of part) out.push(r)
+    inRun(() => active?.opts.onProgress?.((i + 1) / chunks.length, "parallel"))
+  }
+  inRun(() => checkCancelled(true))
+  return out
+}
+
+const parallelReduce = async <T, R, A>(items: Iterable<T>, fn: (item: T, args: unknown) => R, combine: (acc: A, r: R) => A, init: A, opts?: ParallelOptions): Promise<A> =>
+  (await parallelMap(items, fn, opts)).reduce(combine, init)
+
+/**
+ * The run's context (`ctx` in queries): its signal, `progress`, and `parallel`.
  * @example ctx.progress(0.25)
  * @category Run
  */
 export const ctx = {
   get signal(): AbortSignal | undefined { return activeSignal() },
   progress,
+  /**
+   * Shards work over input chunks: `map` returns results in input order, `reduce` folds them in that order. Output equals
+   * the sequential run. `fn` must be a pure function of its item and the loaded map (no closures) so a worker backend can
+   * re-evaluate it; pass constants through `opts.args`. Without a backend it runs the chunks in order on this thread.
+   * @example await ctx.parallel.map([1, 2, 3], x => x * 2)
+   */
+  parallel: { map: parallelMap, reduce: parallelReduce },
   /** True when the run was asked to stop; queries with their own long loops can poll it instead of waiting for a library call to throw. */
   get cancelled(): boolean { try { checkCancelled(true); return false } catch { return true } }
 } as const
