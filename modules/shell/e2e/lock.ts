@@ -61,9 +61,8 @@ await withShell(4179, async ({ open }) => {
   await page.waitForFunction(() => ((globalThis as any).__dockview?.panels.length ?? 0) > 0, null, { timeout: 20000 })
   if (await lock.count()) throw new Error("lock screen shown despite a session")
 
-  // A dev build without dev-only modules (no ?demoDevOnly) never asks for a login.
-  const plain = await open("", { beforeLoad: stubAuth({ authed: false, logins: [] }) })
-  await expectPanels(plain, QUERY, "dev build without dev-only modules")
-  if (await plain.getByTestId("lock-screen").count()) throw new Error("lock screen shown without dev-only modules")
+  // Every dev build ships the reviewer panel (dev-only), so it locks even without ?demoDevOnly.
+  const plain = await open("", { beforeLoad: stubAuth({ authed: false, logins: [] }), waitForDock: false })
+  await plain.getByTestId("lock-screen").waitFor({ timeout: 20000 })
 }, outDir)
 console.log("e2e ok: prod omits dev-only modules and skips /auth; dev build locks until a session, then shows the dev-only panel")

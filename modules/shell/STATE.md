@@ -54,6 +54,10 @@
 
 - 2026-10-08 — Published bundle first: the Map panel fetches the published manifest and mounts over it (no entities or tiles; `loadBundle` streams them in), so the mini-map fixture is only the fallback when no bundle is published. Share links are compressed: `#layout=z.<base64url of deflate>` (fflate, a new dependency); plain links from older builds still decode. Already in place before this change and re-checked: one shared `ViewerController`, the real `ViewerService`, history panel, `identity`, `setAccepted` and the tag source in the Metadata panel.
 
+- 2026-10-08 — `e2e/lock.ts` expected a dev build without `?demoDevOnly` to skip the login, but the reviewer panel (`metadata.review`) is dev-only, so every dev build locks. The test now asserts the lock screen. `e2e/a11y.ts` still fails in the light theme on map-viewer's Layers panel (`opacity: 0.6` text, "No layers yet." / "Annotations are not grouped yet.", color-contrast); that is map-viewer's to fix.
+
+- 2026-10-08 — Query editor data: the panel's `bundle` is now query-builder's `fetchPublishedBundle(manifestUrl)` (entities plus the baked collision BVH and navmesh, so travel-time and line-of-sight queries run on the real map), falling back to `loadQueryBundle` (published entities, else the fixture) when the fetch fails.
+
 ## In progress
 - (nothing yet)
 
