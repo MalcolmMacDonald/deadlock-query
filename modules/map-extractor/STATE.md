@@ -313,6 +313,11 @@ Bundle baked with team mapping, interior volumes, island stitching and mantle li
 - **Spawn entities:** the first `spawn` entity (6136,-1,1737) is off the mesh; use the ones near y +-10000 as sources.
 - **Needs from query-library:** a `mantle` entry in `linkSpeeds` (0.5x walking) and an orb snap distance of at least 1500.
 
+## Climb rope links (2026-10-08) — code done, real-data check pending
+- The 17 `citadel_trigger_climb_rope` entities have no extent in `entities.json` (only a model path), so they get the same treatment as the interior volumes: `extract` runs a best-effort `climb` stage that exports each rope model's physics bounds to `collision/climb-ropes.json` (same shape as `interior-volumes.json`; a model that will not export is skipped with a warning). `ropeLinks` (`src/ropes.ts`) turns each box into one two-way link of kind `climbRope` between the centres of the end faces of its longest local axis (boxes under `ROPE_MIN_LENGTH` 96 are ignored). `bakeGameNavmesh` adds them with the zipline and jump pad links (same snap, links further than 256 from the mesh are dropped with a warning), the rope file hash is in the cache key and `NAVMESH_BAKE_VERSION` is 1.4.0. Unit tests cover the endpoints and the rotation.
+- **Not checked on the real map** (needs the laptop): that the rope models export, that their longest axis is the rope, and how many of the 17 snap onto the mesh. To get them: `bun run publish-map --force` (the new `climb` stage runs once, then it is cached).
+- **For query-library:** `climbRope` has no default in `linkSpeeds`, so queries will not use the ropes until it gets one (suggested: walking speed or a little less).
+
 ## In progress
 - Nothing running; navmesh signed off (see above).
 

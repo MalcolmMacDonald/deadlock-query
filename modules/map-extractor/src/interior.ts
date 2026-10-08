@@ -26,12 +26,14 @@ export interface InteriorVolume {
 }
 export interface InteriorVolumesFile { readonly version: 1; readonly volumes: ReadonlyArray<InteriorVolume> }
 
-/** Volume entities that name a model: `[entity, model resource name without `_c`]`. */
-export const interiorModels = (entities: ReadonlyArray<Entity>): Array<{ entity: Entity; model: string }> =>
+/** Entities of a kind that name a model: `[entity, model resource name without `_c`]`. */
+export const volumeModels = (entities: ReadonlyArray<Entity>, kind: Entity["kind"]): Array<{ entity: Entity; model: string }> =>
   entities.flatMap((entity) => {
-    const m = entity.kind === "interior" ? entity.properties["model"] : undefined
+    const m = entity.kind === kind ? entity.properties["model"] : undefined
     return typeof m === "string" && m.endsWith(".vmdl") ? [{ entity, model: m }] : []
   })
+
+export const interiorModels = (entities: ReadonlyArray<Entity>) => volumeModels(entities, "interior")
 
 /** The entity's model bounds as a box in its own frame: the loaded bounds of the exported GLB mapped by its `glbToWorld`. */
 export const localBox = (info: Pick<GltfInfo, "loadedBounds">, glbToWorld: Mat4): { min: Vec3; max: Vec3 } | undefined => {
@@ -49,7 +51,7 @@ export const localBox = (info: Pick<GltfInfo, "loadedBounds">, glbToWorld: Mat4)
 const D2R = Math.PI / 180
 
 /** Rows of R = Rz(yaw) Ry(pitch) Rx(roll), Source's angle order (forward = cp cy, cp sy, -sp). */
-const rotation = ([pitch, yaw, roll]: Vec3): number[] => {
+export const rotation = ([pitch, yaw, roll]: Vec3): number[] => {
   const sp = Math.sin(pitch * D2R), cp = Math.cos(pitch * D2R), sy = Math.sin(yaw * D2R), cy = Math.cos(yaw * D2R), sr = Math.sin(roll * D2R), cr = Math.cos(roll * D2R)
   return [
     cp * cy, sr * sp * cy - cr * sy, cr * sp * cy + sr * sy,

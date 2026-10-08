@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto"
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs"
 import { basename, join } from "node:path"
-import { SCHEMA_VERSION, type Vec3, type Aabb, type EntitiesFile, type Manifest, type Mat4, IDENTITY_MAT4, transformPoint } from "@deadlock-query/contracts"
+import { SCHEMA_VERSION, type Vec3, type Entity, type Aabb, type EntitiesFile, type Manifest, type Mat4, IDENTITY_MAT4, transformPoint } from "@deadlock-query/contracts"
 import { ExportFailed } from "./errors.ts"
 import { gltfInfo, readGltfJson, type GltfInfo } from "./gltfInfo.ts"
 import { invertAffine } from "./mat4.ts"
@@ -9,7 +9,8 @@ import { args, firstExceptionLine, lastRunOutput, run, type S2VRunner } from "./
 import { buildLiteTiles, liteReady, type LiteOptions } from "./liteRender.ts"
 import { buildPaints } from "./materials.ts"
 import { toEntities, parseVents } from "./vents.ts"
-import { INTERIOR_VOLUMES_FILE, interiorModels, localBox, type InteriorVolume } from "./interior.ts"
+import { INTERIOR_VOLUMES_FILE, interiorModels, localBox, volumeModels, type InteriorVolume } from "./interior.ts"
+import { CLIMB_ROPES_FILE } from "./ropes.ts"
 import { WALKABLE_FLOW_FILE, WALKABLE_NAV_FILE } from "./walkable.ts"
 
 /** Unchanged by the `nav` stage on purpose: adding it must not invalidate the cached multi-GB render stages. */
@@ -146,21 +147,22 @@ export const extract = async (o: ExtractOptions): Promise<ExtractResult> => {
     warnings.push(`nav: no walkable nav file exported (${e.stderr}); bake will fall back to the collision surface`)
   }
 
-  // Interior volumes: the physics of each `citadel_trigger_interior` entity's own model, as boxes (see interior.ts). Best effort:
-  // a model that will not export is skipped with a warning and bake falls back to the collision-based `interior`.
-  const interiorOut = join(dir, INTERIOR_VOLUMES_FILE)
-  const interiorEntities = interiorModels(toEntities(parseVents(readFileSync(entitiesRaw, "utf8"))))
-  if (interiorEntities.length > 0) {
+  // Interior and climb rope volumes: the physics of each entity's own model, as boxes (see interior.ts, ropes.ts). Best effort:
+  // a model that will not export is skipped with a warning and bake falls back (collision-based `interior`, no rope links).
+  const parsedEntities = toEntities(parseVents(readFileSync(entitiesRaw, "utf8")))
+  const volumeStage = async (name: "interior" | "climb", outFile: string, list: Array<{ entity: Entity; model: string }>, fallback: string): Promise<void> => {
+    if (list.length === 0) return
+    const out = join(dir, outFile)
     try {
-      await stage(o, dir, "interior", [interiorOut], async () => {
+      await stage(o, dir, name, [out], async () => {
         const volumes: InteriorVolume[] = []
         const boxes = new Map<string, { min: Vec3; max: Vec3 } | null>()
-        for (const { entity, model } of interiorEntities) {
+        for (const { entity, model } of list) {
           if (!boxes.has(model)) {
-            const tmp = join(work, "interior", createHash("sha1").update(model).digest("hex").slice(0, 12))
+            const tmp = join(work, name, createHash("sha1").update(model).digest("hex").slice(0, 12))
             rmSync(tmp, { recursive: true, force: true }); mkdirSync(tmp, { recursive: true })
             try {
-              await run(o.runner, "interior", args.entityModel(o.vpk, model, join(tmp, "m")))
+              await run(o.runner, name, args.entityModel(o.vpk, model, join(tmp, "m")))
               const glb = findPhysicsGlb(tmp)
               const info = glb ? gltfInfo(readGltfJson(glb)) : undefined
               boxes.set(model, info ? (localBox(info, fileGlbToWorld(info).matrix) ?? null) : null)
@@ -175,14 +177,16 @@ export const extract = async (o: ExtractOptions): Promise<ExtractResult> => {
           const it = entity.properties["interior_type"]
           volumes.push({ id: entity.id, model, interiorType: Number.isFinite(Number(it)) && it !== "" && it !== undefined ? Number(it) : undefined, origin: entity.position, angles: entity.rotation ?? [0, 0, 0], localMin: box.min, localMax: box.max })
         }
-        if (volumes.length < interiorEntities.length) warnings.push(`interior: ${interiorEntities.length - volumes.length} of ${interiorEntities.length} volume models could not be exported`)
-        writeFileSync(interiorOut, JSON.stringify({ version: 1, volumes }))
+        if (volumes.length < list.length) warnings.push(`${name}: ${list.length - volumes.length} of ${list.length} volume models could not be exported`)
+        writeFileSync(out, JSON.stringify({ version: 1, volumes }))
       })
     } catch (e) {
       if (!(e instanceof ExportFailed)) throw e
-      warnings.push(`interior: no volumes exported (${e.stderr}); bake keeps the collision-based interior`)
+      warnings.push(`${name}: no volumes exported (${e.stderr}); ${fallback}`)
     }
   }
+  await volumeStage("interior", INTERIOR_VOLUMES_FILE, interiorModels(parsedEntities), "bake keeps the collision-based interior")
+  await volumeStage("climb", CLIMB_ROPES_FILE, volumeModels(parsedEntities, "climbRope"), "the navmesh gets no climb rope links")
 
   const tiles: Manifest["tiles"][number][] = []
   let renderInfo: GltfInfo | undefined

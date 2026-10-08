@@ -4,6 +4,7 @@ import { join } from "node:path"
 import { Effect } from "effect"
 import { EntitiesFile, Manifest, decodeVersioned, type Entity, type Mat4 } from "@deadlock-query/contracts"
 import { NavMesh, type NavLink } from "@deadlock-query/spatial-core"
+import { CLIMB_ROPES_FILE, loadRopeVolumes, ropeLinks } from "./ropes.ts"
 import { init } from "recast-navigation"
 import { generateTiledNavMesh } from "recast-navigation/generators"
 import { loadCollisionMesh } from "./bake.ts"
@@ -20,7 +21,7 @@ import { WALKABLE_FLOW_FILE, WALKABLE_NAV_FILE, loadWalkable, type WalkableStats
  * Recast (`source: "game-nav"`): `world_physics` holds only clip volumes, so Recast over it describes clip lids, not the walkable map.
  */
 
-export const NAVMESH_BAKE_VERSION = "1.3.0"
+export const NAVMESH_BAKE_VERSION = "1.4.0"
 
 /** Source units. Provisional: these are Source-engine defaults, not measured from Deadlock heroes. */
 export interface NavAgent { readonly radius: number; readonly height: number; readonly climb: number; readonly slopeDegrees: number }
@@ -564,7 +565,10 @@ const bakeGameNavmesh = async (
   const maxLinkSnap = o.maxLinkSnap ?? 256
   const flowHull = o.flowHull ?? 0
   const navHash = sha256(readFileSync(navFile)), flowHash = hasFlow ? sha256(readFileSync(flowFile)) : "none"
-  const key = inputKey({ v: NAVMESH_BAKE_VERSION, source: "game-nav", nav: navHash, flow: flowHash, flowHull, maxLinkSnap, entities: entitiesHash })
+  const ropeFile = join(dir, CLIMB_ROPES_FILE)
+  const ropes = loadRopeVolumes(ropeFile)
+  const ropeHash = existsSync(ropeFile) ? sha256(readFileSync(ropeFile)) : "none"
+  const key = inputKey({ v: NAVMESH_BAKE_VERSION, source: "game-nav", nav: navHash, flow: flowHash, flowHull, maxLinkSnap, entities: entitiesHash, ropes: ropeHash })
   const rawManifest = JSON.parse(readFileSync(join(dir, "manifest.json"), "utf8")) as Record<string, unknown>
   const prev = (rawManifest["baked"] as { navmesh?: NavmeshRecord } | undefined)?.navmesh
   const navPath = join(dir, "baked", "navmesh.bin")
@@ -587,7 +591,7 @@ const bakeGameNavmesh = async (
   const largestComponentShare = sizes[0]! / soup.polys.length
   o.log?.(`navmesh: ${stats.faces} faces -> ${soup.polys.length} polygons (${stats.duplicateFaces} repeated faces dropped, ${stats.stitchedEdges} T-junction edges stitched), ${sizes.length} components (largest ${(largestComponentShare * 100).toFixed(1)}%)`)
 
-  const entityCandidates = entityLinks(entities, nearTest(soup.vertices, Math.max(maxLinkSnap, ZIPLINE_SNAP)))
+  const entityCandidates = [...entityLinks(entities, nearTest(soup.vertices, Math.max(maxLinkSnap, ZIPLINE_SNAP))), ...ropeLinks(ropes)]
   const { kept: entityKept, dropped } = snapLinks(entityCandidates, soup.vertices, Math.max(maxLinkSnap, ZIPLINE_SNAP))
   if (dropped > 0) warnings.push(`${dropped} entity off-mesh links dropped: an endpoint is more than ${maxLinkSnap} units from the navmesh`)
   let flowKept: NavLink[] = []
