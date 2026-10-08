@@ -318,6 +318,11 @@ Bundle baked with team mapping, interior volumes, island stitching and mantle li
 - Caching and resume were already in (each `extract` stage is cached in `.work`, `bake` skips when its input key matches). The "unchanged rerun under 5 s" figure is not measured on the real map; it needs the laptop.
 - The LOD fields item is already done: `tile` writes `lod` / `lodOf` and the published bundle has 138 tiles each with LOD1 and LOD2 (file size ratio medians 0.38 and 0.20, geometry is 25 % and 6 % of triangles).
 
+## Triangle budget and LOD ratios on the published bundle (2026-10-08)
+Measured on bundle 25763945 (zip 7f679f290262, decoded with meshopt, all 138 tiles): **LOD0 29.9 M triangles, LOD1 7.5 M (25.1 % of LOD0), LOD2 3.3 M (11.2 %)**. LOD0 file bytes total 141 MB, LOD1 and LOD2 tiles are about 0.38 and 0.20 of their LOD0 tile's bytes. Findings:
+- The lite render keeps every triangle (`--tri-budget` defaults to unlimited), so there is nothing to tune on the budget: 30 M triangles fit in 141 MB after meshopt. Lower `--tri-budget` only if the viewer cannot hold it (that needs an fps check on a real machine, not something this module can settle).
+- LOD1 hits its 25 % target. LOD2 asks for 6.25 % but lands at 11 %, because `--lod-error` (0.1 of the tile) stops the simplifier first. Raising `--lod-error` or simplifying LOD2 from LOD1 would reach 6 %; whether the far view still looks acceptable is for the viewer to judge, so the default stays until someone looks. Re-measure with `bun run` over the manifest after any change.
+
 ## In progress
 - Nothing running; navmesh signed off (see above).
 
