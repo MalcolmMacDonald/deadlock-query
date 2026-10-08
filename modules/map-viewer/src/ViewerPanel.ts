@@ -48,7 +48,7 @@ export interface ViewerData {
   /** Raw render-tile GLB bytes keyed by tile id (drawn eagerly; leave empty when streaming through `tileSource`). */
   readonly tiles: ReadonlyMap<string, Uint8Array>
   /** Fetches one tile's GLB. When set, tiles are streamed by camera (frustum + LOD + memory budget) instead of read from `tiles`. */
-  readonly tileSource?: ((tile: ManifestTile) => Promise<Uint8Array>) | undefined
+  readonly tileSource?: ((tile: ManifestTile, signal?: AbortSignal) => Promise<Uint8Array>) | undefined
   readonly streaming?: StreamingConfig | undefined
   /** Raw collision GLB bytes (loaded with the map; drawn only when the user shows the collision mesh, or the bundle has no render tiles). */
   readonly collision?: Uint8Array | undefined
@@ -76,7 +76,12 @@ export const loadViewerData = Effect.gen(function* () {
   const tiles = new Map<string, Uint8Array>()
   // Only the full-resolution tiles: LOD tiles share their base tile's bounds (streaming is for `loadBundle`).
   for (const t of tilesAtLod(manifest, 0)) tiles.set(t.id, yield* data.loadTile(t.id))
-  return { manifest, entities, tiles } satisfies ViewerData
+  // The baked collision BVH speeds up picking; a bundle without one (or a service without `bakedBytes`) falls back to meshes.
+  const bvhFile = bakedBvhFile(manifest)
+  const bakedBvh = bvhFile && data.bakedBytes
+    ? yield* data.bakedBytes(bvhFile).pipe(Effect.catch(() => Effect.succeed(undefined)))
+    : undefined
+  return { manifest, entities, tiles, ...(bakedBvh ? { bakedBvh } : {}) } satisfies ViewerData
 })
 
 const MODE_LABELS: ReadonlyArray<readonly [CameraMode, string, string]> = [
@@ -515,15 +520,15 @@ export const makeViewerPanel = (data: ViewerData, controller: ViewerController =
       },
       loadBundle: async (manifestUrl) => {
         const base = new URL(manifestUrl, globalThis.location?.href)
-        const get = async (p: string) => {
-          const res = await fetch(new URL(p, base))
+        const get = async (p: string, signal?: AbortSignal) => {
+          const res = await fetch(new URL(p, base), signal ? { signal } : undefined)
           if (!res.ok) throw new Error(`${p}: HTTP ${res.status}`)
           return res
         }
         const manifest = (await (await get(base.href)).json()) as Manifest
         const entities = ((await (await get(manifest.entitiesFile)).json()) as { entities: Entity[] }).entities
         // Tiles are streamed by camera; only the collision GLB and the BVH are fetched up front.
-        const tileSource = async (t: ManifestTile) => new Uint8Array(await (await get(t.file)).arrayBuffer())
+        const tileSource = async (t: ManifestTile, signal?: AbortSignal) => new Uint8Array(await (await get(t.file, signal)).arrayBuffer())
         const collision = manifest.collision ? new Uint8Array(await (await get(manifest.collision.file)).arrayBuffer()) : undefined
         const loaded: ViewerData = { manifest, entities, tiles: new Map(), tileSource, streaming: data.streaming, collision }
         const g = await buildScene(loaded)

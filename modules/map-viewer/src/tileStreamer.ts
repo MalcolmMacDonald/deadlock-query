@@ -12,6 +12,8 @@ export const DEFAULT_TILE_BUDGET_BYTES = 512 * 1024 * 1024
  */
 export const DEFAULT_DRAW_BUDGET_BYTES = 288 * 1024 * 1024
 export const DEFAULT_MAX_IN_FLIGHT = 4
+/** Cells outside the view whose coarsest LOD is prefetched while the connection is idle. */
+const PREFETCH_CELLS = 6
 /** Decoded size over file size, assumed until a tile has been measured (meshopt-compressed tiles inflate a lot). */
 const INITIAL_INFLATION = 4
 
@@ -38,8 +40,8 @@ export interface StreamStats {
 
 export interface StreamerOptions {
   readonly cells: ReadonlyArray<TileCell>
-  /** Fetches a tile's GLB bytes. */
-  readonly fetchTile: (tile: ManifestTile) => Promise<Uint8Array>
+  /** Fetches a tile's GLB bytes. `signal` aborts when the camera moved on and the tile is no longer wanted. */
+  readonly fetchTile: (tile: ManifestTile, signal?: AbortSignal) => Promise<Uint8Array>
   readonly decoder: TileDecoder
   /** GLB-local -> Three space (`glbToThreeMatrix`). */
   readonly glbToThree: THREE.Matrix4
@@ -82,9 +84,13 @@ export class TileStreamer {
   private readonly maxInFlight: number
   private readonly resident = new Map<string, Resident>()
   private readonly inFlight = new Set<string>()
+  /** Abort handles of the fetches in `inFlight`. */
+  private readonly aborts = new Map<string, AbortController>()
   private readonly failedKeys = new Set<string>()
   /** Tiles that decoded but could not be given room under the current camera; retried when the camera moves. */
   private readonly blocked = new Set<string>()
+  /** Keys fetched speculatively (not in the plan); these are not cancelled when the plan moves on. */
+  private readonly prefetching = new Set<string>()
   private wanted: ReadonlyArray<PlannedTile> = []
   private visibleCount = 0
   private inflation = INITIAL_INFLATION
@@ -122,6 +128,7 @@ export class TileStreamer {
     const visible = selectVisible(this.o.cells, camera, this.o.select)
     this.visibleCount = visible.length
     this.wanted = planResidency(visible, this.drawBudget, this.cost)
+    this.cancelUnwanted()
     this.show()
     this.pump()
     this.publish()
@@ -146,6 +153,7 @@ export class TileStreamer {
 
   dispose(): void {
     this.disposed = true
+    for (const a of this.aborts.values()) a.abort()
     for (const r of this.resident.values()) { r.mesh.geometry.dispose(); this.root.remove(r.mesh) }
     this.resident.clear()
     this.bytes = 0
@@ -158,7 +166,13 @@ export class TileStreamer {
     return this.wanted.filter((p) => !this.resident.has(keyOf(p.cell, p.index)))
   }
 
-  /** Starts loads for missing tiles, in plan (nearest-first) order, up to the in-flight limit. */
+  /** Aborts fetches for tiles the new plan no longer wants (a fast camera move would otherwise queue stale downloads). */
+  private cancelUnwanted() {
+    const wanted = new Set(this.wanted.map((p) => keyOf(p.cell, p.index)))
+    for (const [key, a] of this.aborts) if (!wanted.has(key) && !this.prefetching.has(key)) a.abort()
+  }
+
+  /** Starts loads for missing tiles, in plan (nearest-first) order, up to the in-flight limit; spare slots prefetch. */
   private pump() {
     for (const p of this.missing()) {
       if (this.inFlight.size >= this.maxInFlight) return
@@ -166,15 +180,42 @@ export class TileStreamer {
       if (this.inFlight.has(key) || !this.retryable(key)) continue
       void this.load(p.cell, p.index)
     }
+    this.prefetch()
+  }
+
+  /**
+   * With nothing missing and a free slot, fetches the coarsest LOD of the nearest cells outside the view so a turn of
+   * the camera finds them resident. Stays below half the budget so prefetched tiles never push out needed ones.
+   */
+  private prefetch() {
+    const camera = this.lastCamera
+    if (!camera || this.missing().length > 0 || this.bytes >= this.budget / 2) return
+    const here = camera.position
+    const seen = new Set(this.wanted.map((p) => p.cell.base))
+    const candidates = this.o.cells
+      .filter((c) => !seen.has(c.base))
+      .map((c) => ({ c, d: c.box.distanceToPoint(here) }))
+      .sort((a, b) => a.d - b.d)
+    for (const { c } of candidates.slice(0, PREFETCH_CELLS)) {
+      if (this.inFlight.size >= this.maxInFlight) return
+      const index = c.lods.length - 1
+      const key = keyOf(c, index)
+      if (this.resident.has(key) || this.inFlight.has(key) || !this.retryable(key)) continue
+      this.prefetching.add(key)
+      void this.load(c, index)
+    }
   }
 
   private async load(cell: TileCell, index: number) {
     const entry = cell.lods[index]!
     const key = entry.tile.id
     this.inFlight.add(key)
+    const abort = new AbortController()
+    this.aborts.set(key, abort)
     this.publish()
     try {
-      const bytes = await this.o.fetchTile(entry.tile)
+      const bytes = await this.o.fetchTile(entry.tile, abort.signal)
+      if (abort.signal.aborted) return
       const geo = await this.o.decoder.decode(bytes)
       if (this.disposed) return
       const size = decodedBytes(geo)
@@ -194,11 +235,14 @@ export class TileStreamer {
       this.peak = Math.max(this.peak, this.bytes)
       this.loaded++
     } catch (err) {
+      if (abort.signal.aborted) return // cancelled, not a failure: it can be requested again later
       this.failed++
       this.failedKeys.add(key)
       console.warn(`tile ${key} failed to load:`, err)
     } finally {
       this.inFlight.delete(key)
+      this.aborts.delete(key)
+      this.prefetching.delete(key)
       if (!this.disposed) {
         // Re-plan with the camera we have: the new size changes the estimates, and a slot is free for the next tile.
         if (this.lastCamera) this.replan(this.lastCamera)

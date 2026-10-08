@@ -218,7 +218,19 @@ export const makeLayersPanel = (controller: ViewerController): PanelComponent =>
           move.dataset.role = "doc-move"
           move.disabled = l.locked === true || controller.selection.length === 0
           move.onclick = () => controller.moveSelectionToLayer(l.id)
-          row.append(active, visible, locked, name, move)
+          const rename = el("button", "", { textContent: "Rename", title: "Rename this layer" })
+          rename.dataset.role = "doc-rename"
+          rename.onclick = () => {
+            const next = window.prompt("Layer name", l.name)?.trim()
+            if (next) controller.annotations.patchLayer(l.id, { name: next })
+          }
+          const del = el("button", "", { textContent: "Delete", title: "Delete this layer (its annotations are kept, ungrouped)" })
+          del.dataset.role = "doc-delete"
+          del.onclick = () => {
+            if (controller.activeLayer === l.id) controller.setActiveLayer(undefined)
+            controller.annotations.removeLayer(l.id)
+          }
+          row.append(active, visible, locked, name, move, rename, del)
           return row
         })
       )
