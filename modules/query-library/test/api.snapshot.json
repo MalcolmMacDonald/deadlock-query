@@ -65,6 +65,8 @@
     "OrderedSeq.thenBy method thenBy(key: (item: T) => number | string): OrderedSeq<T>",
     "OrderedSeq.thenByDescending method thenByDescending(key: (item: T) => number | string): OrderedSeq<T>",
     "OverridableNavMeshLike interface interface OverridableNavMeshLike",
+    "ParallelBackend interface interface ParallelBackend",
+    "ParallelOptions interface interface ParallelOptions",
     "QueryCancelled class class QueryCancelled",
     "QueryCancelled.reason property readonly reason: \"cancelled\" | \"timeout\"",
     "RawEntity interface interface RawEntity",
@@ -124,6 +126,7 @@
     "progress const progress = (fraction: number, label?: string): void =>",
     "regionOf const regionOf = (at: Locatable, cellSize: number): Region =>",
     "seconds const seconds = (n: number): number => n",
+    "setParallelBackend const setParallelBackend = (b: ParallelBackend | undefined): void =>",
     "units const units = (n: number): number => n",
     "vec const vec = (x: number, y: number, z: number): Vec3 => new Vec3(x, y, z)",
     "withRun const withRun = <T>(opts: RunOptions, f: () => T): T =>"

@@ -56,3 +56,20 @@ describe("cancellation, budget and progress", () => {
     expect(seen).toBe(ac.signal)
   })
 })
+
+describe("ctx.parallel", () => {
+  test("map keeps input order, chunks, and reports progress", async () => {
+    const seen: number[] = []
+    const out = await withRun({ onProgress: f => seen.push(f) }, () => ctx.parallel.map([1, 2, 3, 4, 5], (x, a) => x * (a as number), { chunk: 2, args: 10 }))
+    expect(out).toEqual([10, 20, 30, 40, 50])
+    expect(seen).toEqual([1 / 3, 2 / 3, 1])
+  })
+  test("reduce folds in order and cancellation rejects", async () => {
+    expect(await ctx.parallel.reduce([1, 2, 3], x => x, (a: number, r) => a + r, 0)).toBe(6)
+    const ac = new AbortController(); ac.abort()
+    await expect(ctx.parallel.map([1], x => x).then(() => "ok")).resolves.toBe("ok")
+    let err: unknown
+    try { await withRun({ shouldCancel: () => true }, () => ctx.parallel.map([1], x => x)) } catch (e) { err = e }
+    expect(err).toBeInstanceOf(QueryCancelled)
+  })
+})
