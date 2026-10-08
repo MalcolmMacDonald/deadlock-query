@@ -34,13 +34,15 @@ const need = (what: string): NavInput => {
  * `navConnection` links come from the game's own nav (jumps, drops and climbs it lets a walker make), so they default to
  * the walking speed; without an entry on-foot routes cannot use them (34 of 115 base/lane/camp entities are otherwise
  * unreachable from a patron on the real map). `mantle` links (upward climbs that mirror the one-way drops) default to
- * half the walking speed; a bundle without any `mantle` links is unaffected, since an unused kind costs nothing.
+ * half the walking speed, and so do `climbRope` links (two-way rope climbs); a bundle without those links is unaffected, since an
+ * unused kind costs nothing.
  * @internal
  */
 export const linkSpeedsOf = (nav: Pick<NavInput, "heroSpeed" | "linkSpeeds">): Readonly<Record<string, number>> => ({
   zipline: 15 * UNITS_PER_METER,
   navConnection: nav.heroSpeed ?? 7 * UNITS_PER_METER,
   mantle: (nav.heroSpeed ?? 7 * UNITS_PER_METER) / 2,
+  climbRope: (nav.heroSpeed ?? 7 * UNITS_PER_METER) / 2,
   ...nav.linkSpeeds
 })
 
