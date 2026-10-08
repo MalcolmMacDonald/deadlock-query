@@ -99,3 +99,21 @@ export const fetchLibraryArtifact = (url: string): Loadable<LibraryArtifact> => 
 
 /** Same for a `bundle.json`-style `{ manifest, entities }` download. */
 export const fetchQueryBundle = (url: string): Loadable<QueryBundle> => (report) => fetchJsonCached<QueryBundle>(url, report)
+
+/**
+ * A published bundle by its `manifest.json` URL: the manifest, `entities.json` and, when the manifest has a `baked` record,
+ * the URLs of `collision.bvh` and `navmesh.bin` (the panel downloads those). Pass the result as the panel's `bundle`.
+ */
+export const fetchPublishedBundle = (manifestUrl: string): Loadable<QueryBundle> => async (report) => {
+  const base = new URL(manifestUrl, globalThis.location?.href)
+  const manifest = await fetchJsonCached<{ mapName: string; gameBuildId: string; entitiesFile: string; baked?: { bvh?: { file: string }; navmesh?: { file: string } } }>(base.href, report)
+  const entities = await fetchJsonCached<{ entities: ReadonlyArray<unknown> }>(new URL(manifest.entitiesFile, base).href, report)
+  const at = (f: string | undefined) => (f ? new URL(f, base).href : undefined)
+  const bvh = at(manifest.baked?.bvh?.file)
+  const navmesh = at(manifest.baked?.navmesh?.file)
+  return {
+    manifest: { mapName: manifest.mapName, gameBuildId: manifest.gameBuildId },
+    entities: entities.entities,
+    ...(bvh || navmesh ? { baked: { ...(bvh ? { bvh } : {}), ...(navmesh ? { navmesh } : {}) } } : {}),
+  }
+}

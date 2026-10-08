@@ -2,7 +2,7 @@
   "id": "query-builder",
   "version": "0.0.0",
   "kind": "web",
-  "dependsOn": ["contracts"],
+  "dependsOn": ["contracts", "spatial-core"],
   "devOnly": false,
   "firstPhase": "1",
   "paths": ["modules/query-builder/**"]

@@ -4,6 +4,9 @@ export type RunOutcome =
   | { readonly ok: true; readonly value: unknown; readonly ms: number; readonly totalRows?: number; readonly provisional?: boolean }
   | { readonly ok: false; readonly reason: "error" | "cancelled" | "timeout"; readonly message: string }
 
+/** Serialized spatial-core data (`Raycaster.serialize()` / `NavMesh.serialize()`) from the bundle's `baked/` files. */
+export interface BakedBuffers { readonly bvh?: ArrayBuffer; readonly navmesh?: ArrayBuffer }
+
 export interface RunOptions { readonly timeoutMs?: number }
 
 /** Main-thread handle to the sandboxed iframe→Worker. One run at a time. */
@@ -57,11 +60,13 @@ export class SandboxRunner {
   }
 
   /** Sends the map bundle to the worker; it is replayed after every respawn. Resolves once the worker is ready. */
-  async load(bundle: unknown): Promise<void> {
+  async load(bundle: unknown, baked?: BakedBuffers): Promise<void> {
     await this.ready()
     this.isReady = false
     const back = this.ready()
-    this.post({ type: "load", bundle })
+    // The buffers move to the frame (no copy); the frame keeps them and clones them into each respawned worker.
+    const transfer = [baked?.bvh, baked?.navmesh].filter((b): b is ArrayBuffer => b !== undefined)
+    this.frame.contentWindow!.postMessage({ type: "load", bundle, ...(baked ? { baked } : {}) }, "*", transfer)
     await back
   }
 

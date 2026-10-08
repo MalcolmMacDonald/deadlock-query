@@ -3,7 +3,7 @@
  * `SelectionBus` and mounts it. This entry is deliberately light (a loader and a few pure helpers);
  * Monaco and the panel are a separate chunk fetched when a panel mounts or `prefetchQueryEditor` runs.
  */
-export { fetchLibraryArtifact, fetchQueryBundle, makeQueryEditorPanel, mountQueryEditor, prefetchQueryEditor } from "./panel/loader.ts"
+export { fetchLibraryArtifact, fetchPublishedBundle, fetchQueryBundle, makeQueryEditorPanel, mountQueryEditor, prefetchQueryEditor } from "./panel/loader.ts"
 export type { LazyQueryEditorPanelOptions } from "./panel/loader.ts"
 export type { QueryBundle, QueryEditorHandle, QueryEditorPanelOptions, SelectionBusShape, ViewerServiceShape } from "./panel/QueryEditorPanel.ts"
 export type { LibraryArtifact } from "./engine/prelude.ts"

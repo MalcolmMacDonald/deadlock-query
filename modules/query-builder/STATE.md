@@ -3,7 +3,7 @@
 - **Status:** M7 done (real-data parts of M6 still deferred, see below)
 - **Version:** 0.0.0
 - **Current milestone:** all of PLAN.md §6 done except the real-data leftovers; see Next
-- **Last updated:** 2026-10-07
+- **Last updated:** 2026-10-08
 
 ## Done
 - **S1 spike** (`spike/`, `src/sandbox/`, `bench/s1.ts`, `test/worker.test.ts`). Run `bun run bench` (needs Chromium via Playwright; builds the spike with `Bun.build`, serves it, drives it headless).
@@ -108,12 +108,17 @@ Also verified: library-class member completions with TSDoc signature, string-lit
 
 - 2026-10-07 — External selection changes now come from the bus's `changes` stream (contracts #209) with an initial read of `current`; the 250 ms polling remains only as the fallback for a bus without `changes` (that fallback has no test of its own). The standalone host's selection bus now has a `changes` stream, so the existing row↔selection e2e exercises the stream path.
 
+- 2026-10-08 — Real map in the worker (spatial runtime + baked buffers). `QueryBundle.baked` (`{ bvh, navmesh }`, each an `ArrayBuffer` or a URL the panel downloads) is how a bundle brings `collision.bvh` / `navmesh.bin`. `src/spatial/runtime.ts` is built (IIFE, 320 kB min) into `library.json` as `spatial` (new `buildLibraryJson()` in `app/build.ts`, also used by `buildApp`); it is added to the worker prelude only when the bundle has baked data, so fixture-only pages stay light. The buffers go parent → frame by transfer (no copy), the frame keeps them and clones them into each respawned worker (replay as before); the worker runs `Raycaster.deserialize` / `NavMesh.load` and hands the library `spatial: { raycaster, nav: { mesh }, semantics, params }` (spatial-core's semantics, so queries 2 and 3 run and results are flagged provisional while `PLACEHOLDER_SEMANTICS` is true). `fetchPublishedBundle(manifestUrl)` (package entry) builds such a bundle from a published `manifest.json`. **module.json now depends on `spatial-core`** (only for this runtime bundle; no source file imports it outside `src/spatial/`); IMPLEMENTATION_PLAN §3's edge list does not name query-builder yet.
+  - **Gallery on the real dl_midtown bundle (build 25763945, bundle hash 7f679f290262), `test/realBundle.test.ts` with `DL_BUNDLE_DIR`:** query 1 returns 5 orbs (`1380418:13`, `1380424:126`, `1380424:135`, `1388748:27`, `1388749:3`) in ~0.15 s; query 2 (`take(150)` walls, was 300) ~20 s on this container (27 s with 300, too close to the 30 s timeout); query 3 returns 52-ish camps, provisional, because `height() >= 800` is absolute and the owner semantics are placeholders. Gallery notes no longer say walkable data is pending.
+  - Already done earlier and re-checked, not redone: `withRun`/`progress`/`ctx` wiring (2026-10-07), overlay styling by column and Pin (2026-10-07), literal-argument inlay hints (2026-10-07).
+
 ## In progress
 - (nothing)
 
 ## Next
-- With real data: buffer transfer to the worker, `NavMesh`/spatial loading in the worker, worker pool, real-network load numbers (M6 leftovers above); gallery queries 1-3 on the real map; the PLAN.md §10 definition-of-done check ("the three PLAN.md queries run on the real map").
-- Open from M7: real screen-reader pass, inlay hints, overlay styling by column, pinned result layers (see the M7 checklist).
+- Shell: pass `fetchPublishedBundle(manifestUrl)` as the panel's `bundle` (or add `baked` URLs to its own loader) so the panel gets the navmesh and BVH; without it queries 1-3 still stop with "needs map data" in the shell.
+- Worker pool (needs SharedArrayBuffer/COOP+COEP and real timings; query 2 is ~20 s single-worker), real-network load numbers (M6 leftovers above). Query 3 results need owner semantics to mean anything.
+- Open from M7: real screen-reader pass (needs a human).
 
 ## Blockers / Requests to other modules
 - contracts (done, #209): `SelectionBus.changes`; the panel uses it and only polls without it.
