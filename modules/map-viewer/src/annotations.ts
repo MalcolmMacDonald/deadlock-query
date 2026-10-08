@@ -172,6 +172,15 @@ export class AnnotationStore {
     this.setLayers(layers.map((l) => (l.id === id ? { ...l, ...p } : l)))
   }
 
+  /** Deletes a document layer; its annotations stay, ungrouped (one undo step). False when the layer does not exist. */
+  removeLayer(id: string): boolean {
+    const layers = this.docLayers
+    if (!layers?.some((l) => l.id === id)) return false
+    this.assignLayer(this.doc.filter((a) => a.layer === id).map((a) => a.id), undefined)
+    this.setLayers(layers.filter((l) => l.id !== id))
+    return true
+  }
+
   undo(): boolean {
     this.commitEdit()
     const prev = this.past.pop()

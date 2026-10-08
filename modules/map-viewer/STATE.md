@@ -121,3 +121,5 @@
 
 ## Open questions
 - (see PLAN.md §9)
+
+- 2026-10-08 — Tile fetch cancellation and prefetch: `fetchTile`/`tileSource` take an `AbortSignal`; the streamer aborts in-flight fetches the new plan no longer wants (an abort is not a failure, so the tile can be requested again) and, when nothing is missing and a slot is free, prefetches the coarsest LOD of the 6 nearest cells outside the view while resident bytes are under half the budget (default; prefetched tiles are not cancelled by the plan). Document layers can be renamed and deleted in the layers panel (`AnnotationStore.removeLayer` keeps the annotations, ungrouped, one undo step). Adopted `ViewerService.captureImageWith` and `MapDataService.bakedBytes` (`loadViewerData` loads the baked BVH through it). Not done: "screenshots publish path" (no spec found in the plan; needs a pointer from the screenshot-tool module) and `Tile.files` use (contracts 0.8.0 field exists; the viewer still loads `file` only). Request for contracts: add `captureImageWith` to the mock viewer so the parity test can drop its exception.

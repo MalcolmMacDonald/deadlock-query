@@ -573,6 +573,7 @@ export const makeViewerService = (c: ViewerController): Layer.Layer<ViewerServic
     highlight: (ids) => Effect.sync(() => c.highlight(ids)),
     events: c.events,
     captureImage: Effect.tryPromise({ try: () => c.capture(), catch: (e) => e instanceof Error ? e : new Error(String(e)) }),
+    captureImageWith: (opts) => Effect.tryPromise({ try: () => c.capture(opts), catch: (e) => e instanceof Error ? e : new Error(String(e)) }),
     registerTool: (tool) => Effect.sync(() => c.registerTool(tool)),
     activateTool: (id) => Effect.sync(() => c.activateTool(id)),
     deactivateTool: () => Effect.sync(() => c.deactivateTool())

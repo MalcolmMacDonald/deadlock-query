@@ -259,3 +259,15 @@ test("restore never overwrites annotations drawn before it finished, and corrupt
   expect(c.annotations.annotations).toHaveLength(1)
   expect(JSON.parse(storage.entries.get("annotations:m")!).annotations).toHaveLength(1)
 })
+
+test("removeLayer deletes the layer, keeps its annotations ungrouped, and is one undo step", () => {
+  const { store } = rig()
+  const layer = store.addLayer("Rotations")
+  store.add({ id: "a1", kind: "point", points: [[0, 0, 0]], layer: layer.id } as Annotation)
+  expect(store.removeLayer("nope")).toBe(false)
+  expect(store.removeLayer(layer.id)).toBe(true)
+  expect(store.layers ?? []).toHaveLength(0)
+  expect(store.annotations[0]!.layer).toBeUndefined()
+  store.undo()
+  expect(store.annotations[0]!.layer).toBe(layer.id)
+})

@@ -217,3 +217,22 @@ test("vertex colours: decoded as RGBA8 per vertex, counted in the budget, carrie
     s.dispose()
   }
 })
+
+test("fetches for tiles the camera moved away from are aborted, not counted as failures", async () => {
+  const map = syntheticMap({ cols: 4, rows: 1, grids: [65] })
+  const aborted: string[] = []
+  const streamer = new TileStreamer({
+    cells: buildTileIndex(map.manifest.tiles),
+    fetchTile: (t, signal) => new Promise((resolve, reject) => {
+      signal?.addEventListener("abort", () => { aborted.push(t.id); reject(new Error("aborted")) })
+      setTimeout(() => resolve(new Uint8Array(t.bytes)), 50)
+    }),
+    decoder: fakeDecoder(1), glbToThree: new THREE.Matrix4(), material: new THREE.MeshBasicMaterial(), budgetBytes: 64 * MB, maxInFlight: 8
+  })
+  streamer.update(cameraAt(0, 400, 0))
+  streamer.update(cameraAt(1e7, 400, 0)) // far away: nothing near is wanted any more
+  await new Promise((r) => setTimeout(r, 120))
+  expect(aborted.length).toBeGreaterThan(0)
+  expect(streamer.stats().failed).toBe(0)
+  streamer.dispose()
+})
