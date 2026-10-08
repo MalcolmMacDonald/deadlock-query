@@ -69,3 +69,5 @@
 
 ## Open questions
 - (see PLAN.md §9)
+
+- 2026-10-08 — `Tile.files?` added (default chosen: an optional list of extra `TileFile`s next to the required primary `file`, rather than replacing `file`, so nothing breaks). `captureImageWith` and `MapDataService.bakedBytes` were already in 0.7.0; map-viewer adopts them in its own PR.

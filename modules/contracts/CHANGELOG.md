@@ -1,5 +1,8 @@
 # contracts changelog
 
+## 0.8.0 — Tile.files (additive, schemaVersion stays 1.0.0)
+- `Tile.files?: TileFile[]` (`file`, `bytes`, `sha256`, optional `role`) lists extra files of a multi-file tile. `file` remains the primary geometry file and is still required, so existing bundles and readers are unaffected; `checkFiles` does not look at `files` yet.
+
 ## 0.7.0 — open requests (additive, schemaVersion stays 1.0.0)
 - `ViewerService.captureImageWith?(opts: CaptureOptions)` (`{ scale?, transparent? }`); `captureImage` is unchanged.
 - `SelectionBus.changes?`: stream of the new selection after each `select`; `MockSelectionBus` implements it.
