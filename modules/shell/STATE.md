@@ -62,6 +62,8 @@
 
 - 2026-10-08 — `e2e/querylink.ts` and `e2e/slice.ts` write `library.json` into their test site (as `tools/build.ts` does), since the shell now loads it from the site root.
 
+- 2026-10-08 — Fix: the Map panel's manifest probe (added with the bundle-first mount) threw when the server answered with a non-JSON page (`vite preview`/SPA fallback when no bundle is published), so the map never loaded; the probe now treats any failure as "no bundle" and falls back to the fixture. Found by `e2e/panels.ts` in CI.
+
 ## In progress
 - (nothing yet)
 

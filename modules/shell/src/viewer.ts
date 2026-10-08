@@ -79,7 +79,8 @@ export const viewerModule: ModuleDefinition = {
             // and fall back to the mini-map fixture only when no bundle is published (local dev, no fetch-data).
             const overlay = loadingOverlay(container)
             const published = await fetch(new URL(BUNDLE_MANIFEST_URL, globalThis.location?.href))
-              .then(async (r) => (r.ok ? ((await r.json()) as Manifest) : undefined), () => undefined)
+              .then(async (r) => (r.ok ? ((await r.json()) as Manifest) : undefined))
+              .catch(() => undefined) // no bundle: a 404, a network error, or an SPA fallback page that is not JSON
             const data = published
               ? { manifest: published, entities: [], tiles: new Map<string, Uint8Array>() }
               : await Effect.runPromise(v.loadViewerData.pipe(Effect.provide(MockMapDataService)))
