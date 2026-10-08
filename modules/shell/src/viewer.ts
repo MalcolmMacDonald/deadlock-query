@@ -1,5 +1,6 @@
 import { Effect, Layer } from "effect"
 import { MockMapDataService, MockViewerService, ViewerService, type ModuleDefinition } from "@deadlock-query/contracts"
+import type { Manifest } from "@deadlock-query/contracts"
 import type { ViewerController } from "@deadlock-query/map-viewer"
 
 const VIEWER_PANEL_ID = "viewer.main"
@@ -72,14 +73,19 @@ export const viewerModule: ModuleDefinition = {
           let dispose = () => {}
           let cancelled = false
           void viewerPackage().then(async (v) => {
-            const data = await Effect.runPromise(v.loadViewerData.pipe(Effect.provide(MockMapDataService)))
             const c = await getViewerController()
             if (cancelled) return
-            dispose = v.makeViewerPanel(data, c).mount(container)
-            // Cover the mini-map fixture while the published bundle loads, so the wrong map never flashes up.
+            // The published bundle is the map: mount over its own manifest (no entities or tiles, `loadBundle` streams them in)
+            // and fall back to the mini-map fixture only when no bundle is published (local dev, no fetch-data).
             const overlay = loadingOverlay(container)
-            // Prefer the published bundle; keep the fixture when it is absent (local dev, no fetch-data).
-            await c.loadBundle(BUNDLE_MANIFEST_URL).catch((e) => console.warn("bundle not loaded, using fixture:", e))
+            const published = await fetch(new URL(BUNDLE_MANIFEST_URL, globalThis.location?.href))
+              .then(async (r) => (r.ok ? ((await r.json()) as Manifest) : undefined), () => undefined)
+            const data = published
+              ? { manifest: published, entities: [], tiles: new Map<string, Uint8Array>() }
+              : await Effect.runPromise(v.loadViewerData.pipe(Effect.provide(MockMapDataService)))
+            if (cancelled) return
+            dispose = v.makeViewerPanel(data, c).mount(container)
+            if (published) await c.loadBundle(BUNDLE_MANIFEST_URL).catch((e) => console.warn("bundle not loaded:", e))
             overlay.remove()
           }).catch((e) => {
             container.textContent = `Map failed to load: ${String(e)}`

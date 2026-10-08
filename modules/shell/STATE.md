@@ -52,15 +52,16 @@
 
 - Tag panel mount (2026-10-07): `metadata.editor` now builds a tag source from the map (`ViewerController.highlightedIds` -> `entityForFeature` -> `{ id, position, label }`, `onHighlightChange`) and passes `createTagController` to `mountEditorPanel`, so clicked entities can be tagged from the Metadata panel. Box-select and "tag these rows" are still open (map-viewer / query-builder).
 
+- 2026-10-08 — Published bundle first: the Map panel fetches the published manifest and mounts over it (no entities or tiles; `loadBundle` streams them in), so the mini-map fixture is only the fallback when no bundle is published. Share links are compressed: `#layout=z.<base64url of deflate>` (fflate, a new dependency); plain links from older builds still decode. Already in place before this change and re-checked: one shared `ViewerController`, the real `ViewerService`, history panel, `identity`, `setAccepted` and the tag source in the Metadata panel.
+
 ## In progress
 - (nothing yet)
 
 ## Next
-- M2 (remaining): swap the fixture for the published MapBundle once Malcolm publishes a real one.
-- M3 leftovers: share links are uncompressed (a default layout is a few KB); compress if links get unwieldy. Review preset has nothing to show until map-metadata ships a `metadata.*` panel.
-- Infra follow-up: ship `library.json` without the standalone editor app (it is only published for that file now).
+- M2 done. Needs a real published bundle to exercise end to end (e2e still runs on the fixture).
 
 ## Blockers / Requests to other modules
+- infra + query-builder: ship `library.json` without the standalone editor app. `tools/build.ts` copies the whole `buildApp()` output to `<site>/editor/` only so the shell can fetch `editor/library.json`; the shell reads it from `LIBRARY_URL` (`src/editor.tsx`), so publishing just that file (or at another path, then change `LIBRARY_URL`) is a one-line shell change once it exists.
 - infra: `tools/build.ts` runs the shell build without a target, so every deployed shell is a `prod` build (dev-only modules omitted, no login). Once a dev-only module exists, build the shell with `VITE_TARGET=dev` for `--target dev` (e.g. pass `env: { ...process.env, VITE_TARGET: target }` to the shell build step). No dev-only module exists yet, so nothing is lost today.
 - query-builder (resolved 2026-10-06): the embeddable panel shipped in PR #67 and is wired. Still nice to have there: a `SelectionBus` change stream (the panel polls `current` every 250 ms).
 - map-viewer: confirmed — shell mounts a panel `component` that is `{ mount(container) => dispose }` (see `src/panels.tsx`); React components also work. `viewer.main` can use the handle as-is.

@@ -7,7 +7,7 @@ const layout = { grid: { width: 100, root: { type: "leaf", data: ["viewer.main"]
 test("layout hash round-trips, including non-ASCII titles", () => {
   const hash = encodeLayoutHash(layout)
   expect(hash.startsWith("#layout=")).toBe(true)
-  expect(hash.slice("#layout=".length)).toMatch(/^[A-Za-z0-9_-]+$/)
+  expect(hash.slice("#layout=".length)).toMatch(/^z\.[A-Za-z0-9_-]+$/)
   expect(decodeLayoutHash(hash)).toEqual(layout)
 })
 
@@ -34,4 +34,11 @@ test("withoutLayoutParam drops only the layout parameter", async () => {
   expect(withoutLayoutParam("")).toBe("")
   expect(withoutLayoutParam("#q=xyz&api=0.1.0&layout=abc")).toBe("#q=xyz&api=0.1.0")
   expect(withoutLayoutParam("#q=xyz")).toBe("#q=xyz")
+})
+
+test("compressed links are shorter than plain ones, and plain links from older builds still decode", () => {
+  const big = { grid: {}, panels: Object.fromEntries(Array.from({ length: 30 }, (_, i) => [`p${i}`, { title: "Some panel title", params: { a: 1 } }])) }
+  const plain = Buffer.from(serializeLayout(big)).toString("base64url")
+  expect(encodeLayoutHash(big).length).toBeLessThan(plain.length / 2)
+  expect(decodeLayoutHash(`#layout=${plain}`)).toEqual(big)
 })
