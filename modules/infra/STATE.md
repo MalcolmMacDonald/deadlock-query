@@ -66,6 +66,7 @@
 - Review-panel proxy writes (2026-10-07): `PUT contents/data/{metadata,submissions}/**`, `PUT pulls/N/merge`, `PATCH pulls/N`; `checkBody` in `proxy.ts` (called from the Pages function) requires a non-default `branch` on contents writes, limits merge fields, and allows only `{"state":"closed"}` on PR patch. Tests in `test/proxy.test.ts`. `GITHUB_TOKEN_PROXY` now needs Pull requests (write) and Contents (write): Malcolm must update the PAT.
 
 ## Next
+- Done 2026-10-08: `shell-e2e` CI job (prod shell build + `bun run e2e` with system Chrome), `data/*` gitignored except `current-build.json`, NEXT.md rows refreshed. Dev deploy already builds with `VITE_TARGET=dev` via `tools/build.ts --target dev`.
 - Malcolm: import the ruleset, enable auto-merge, optional `LOCKFILE_BOT_TOKEN`, run the prod rollback dry run (see `docs/runbook.md` one-time setup).
 - Malcolm creates the fine-grained PAT and sets `GITHUB_TOKEN_PROXY` (see `docs/secrets.md`); then curl the live proxy with a session cookie, confirm the token never appears in a response.
 
