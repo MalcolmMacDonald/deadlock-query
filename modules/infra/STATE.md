@@ -93,3 +93,6 @@
 
 ## Data-pointer scope (2026-10-07)
 - `check:scope` now passes a PR whose only change is `data/current-build.json` (the pointer PR from `publish-data`) without an `[infra]` title/label. First real pointer PR (#130, branch `UpdateMap`, title "map updated") failed scope with `files outside modules/<id>/`. Test in `test/checks.test.ts`.
+
+- 2026-10-08 — `tools/build.ts` also writes `dist/library.json` (query-builder `buildLibraryJson()`), so the shell can load the query library from the site root instead of `editor/library.json`. `editor/` is unchanged.
+- 2026-10-08 — Reminder: a PR that touches `tools/` needs the `[infra]` title prefix for `check:scope`; renaming a PR does not change the title a re-run sees, so push a commit after fixing it.
