@@ -119,7 +119,7 @@ export const KINDS = {
     validators: [pointOnSurfaceValidator],
     tool: { id: "metadata.creepCamp", label: "Creep camp", hint: "Click the camp centre", clicks: 1 },
     style: { color: "#e0a030", glyph: "●" },
-    uniqueness: { radius: 200 }
+    uniqueness: { radius: 300 }
   }),
   sinnersSacrifice: define({
     id: "sinnersSacrifice", label: "Sinner's Sacrifice", geometryType: "point",
@@ -133,7 +133,7 @@ export const KINDS = {
     validators: [pointOnSurfaceValidator],
     tool: { id: "metadata.healingOrb", label: "Healing orb", hint: "Click the orb spawn", clicks: 1 },
     style: { color: "#40b0e0", glyph: "+" },
-    uniqueness: { radius: 100 }
+    uniqueness: { radius: 60 }
   }),
   navLink: define({
     id: "navLink", label: "Navigation link", geometryType: "link",

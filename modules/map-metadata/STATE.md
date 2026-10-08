@@ -3,7 +3,7 @@
 - **Status:** M0-M7 done in the module. Left outside it: shell mounts (review dev-only, history), infra proxy write endpoints, live worker config (Turnstile site key, allowed origin), real accepted data
 - **Version:** 1.0.0-rc.2
 - **Current milestone:** M7 complete
-- **Last updated:** 2026-10-07
+- **Last updated:** 2026-10-08
 
 ## Done
 - M0 (2026-10-06): package scaffold (`@deadlock-query/map-metadata`, depends on contracts only), feature kinds registry, validators, `metadata:validate` CLI, fixtures and tests. Consumes `MetadataRecord`, `MetadataFile`, `MetadataBundle`, `Submission`, `decodeVersioned`, `verifyMetadataBundle`, `validateMetadataRecords` from contracts M4; no contracts change was needed.
@@ -47,7 +47,7 @@
 ## Next
 - M2 left: load `metadata.bundle.json` and call `setAccepted` (shell/library supplies the file); a `CollisionProbe` from the loaded bundle needs spatial-core, which this module may not import: request a probe from shell or contracts (see below).
 - M2: mount the panel in the real viewer, pass a `CollisionProbe` from the loaded bundle (and `bounds`, `existing` accepted records) as the controller's `context`, snap/Z fill is already done by the viewer's tool feed; overlays of accepted data from `metadata.bundle.json`.
-- Tune the default radii (camp 200, sacrifice 200, orb 100), `surfaceEpsilon` (24) and overlap tolerance (64) on the real dl_midtown data.
+- Collision-dependent tolerances (`surfaceEpsilon` 24, overlap 64) still need a `CollisionProbe` on real data (needs spatial-core via shell); radii tuned 2026-10-08.
 
 ## Blockers / Requests to other modules
 - shell: mount the new tagging panel: build a `TagSource` from the viewer (picked entity feature ids -> `ViewerController.entityForFeature` -> `{ id, position, label }`, `onHighlightChange` to subscribe), `createTagController({ viewer, drafts, source })` and pass `{ tags }` to `mountEditorPanel`. Tagged entities have no worker-side surface checks beyond the existing custom-point ones.
@@ -75,3 +75,5 @@
 
 ## Open questions
 - (see PLAN.md §9)
+
+- 2026-10-08 — Radii tuned on dl_midtown build 25763945 entities: 52 `info_neutral_trooper_camp` are >= 462 units apart, so camp duplicate radius 200 -> 300 (still well clear of real spacing); 36 `citadel_pickup_spawner` have a closest pair at 68 units, so orb radius 100 -> 60 (a real pair no longer flags). Sacrifice radius stays 200 (no sacrifice entities in the data). Review panel mount and infra proxy routes (#174) are already on main (`shell/src/metadata.tsx`), so nothing left to mount.
