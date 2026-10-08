@@ -5,8 +5,8 @@ import { useEffect, useRef } from "react"
 import { LazyPanel } from "./LazyPanel.tsx"
 import { BUNDLE_MANIFEST_URL } from "./viewer.ts"
 
-/** The query-library artifact `tools/build.ts` ships next to the standalone editor app (`editor/`). */
-export const LIBRARY_URL = "./editor/library.json"
+/** The query-library artifact `tools/build.ts` writes at the site root. */
+export const LIBRARY_URL = "./library.json"
 
 type QueryBundle = { readonly manifest: { readonly mapName: string; readonly gameBuildId: string }; readonly entities: ReadonlyArray<unknown> }
 
