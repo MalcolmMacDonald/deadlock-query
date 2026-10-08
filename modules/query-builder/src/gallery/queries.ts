@@ -11,7 +11,7 @@ export interface GalleryQuery {
   readonly note?: string
 }
 
-const NAV_PENDING = "Needs the baked navmesh. Walkable data for the real map is still pending in the map extractor, so on a bundle without navigation the run stops with a \"needs map data\" message."
+const NAV_PENDING = "Needs the baked navmesh (the real map has one). On a bundle without navigation the run stops with a \"needs map data\" message."
 
 /** The three PLAN.md headline queries, plus a starter that already runs on the fixture map. */
 export const GALLERY: ReadonlyArray<GalleryQuery> = [
@@ -45,7 +45,7 @@ export const GALLERY: ReadonlyArray<GalleryQuery> = [
     title: "Wall positions twice as far to walk as to fly",
     description: "Pairs of wall points whose walking distance is at least double the straight line. Samples a bounded set first because pairs grow quadratically.",
     source: `map.sample.walls(600)
-  .take(300)
+  .take(150)
   .pairs()
   .where(([a, b]) => a.travelDistanceTo(b) >= 2 * a.crowFliesTo(b))
   .select(([a, b]) => [a.toArray(), b.toArray()])

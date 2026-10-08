@@ -99,7 +99,21 @@ self.onmessage = async (e) => {
   const m = e.data;
   if (m.type === "ping") return post({ type: "pong", id: m.id });
   if (m.type === "load") {
-    try { if (typeof self.__dlqLoad === "function") self.__dlqLoad(m.bundle); loadError = undefined }
+    try {
+      let bundle = m.bundle;
+      const b = m.baked;
+      // Baked buffers (collision BVH, navmesh) become the library's spatial backend; the spatial runtime is only in the prelude when the bundle has them.
+      if (b && (b.bvh || b.navmesh)) {
+        const S = self.__dlqSpatial;
+        if (!S) throw new Error("the spatial runtime is missing from library.json; rebuild the editor app");
+        const spatial = { semantics: S.semantics, params: S.params };
+        if (b.bvh) spatial.raycaster = S.Raycaster.deserialize(b.bvh);
+        if (b.navmesh) spatial.nav = { mesh: S.NavMesh.load(b.navmesh) };
+        bundle = { ...bundle, spatial };
+      }
+      if (typeof self.__dlqLoad === "function") self.__dlqLoad(bundle);
+      loadError = undefined;
+    }
     catch (err) { loadError = describe(err) }
     return;
   }

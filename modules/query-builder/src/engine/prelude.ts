@@ -11,6 +11,8 @@ export interface LibraryArtifact {
   readonly globals: ReadonlyArray<{ readonly name: string; readonly kind: "class" | "const" | "interface" | "type" }>
   /** `apiCatalog.json`: powers the docs panel, hover links and friendly errors. Absent in artifacts built before M4. */
   readonly catalog?: ApiCatalog
+  /** Browser-safe IIFE of spatial-core's `Raycaster` and `NavMesh` (`globalThis.__dlqSpatial`), loaded in the worker only for bundles with baked data. */
+  readonly spatial?: string
 }
 
 const EXPORT_BLOCK = /export\s*\{([^}]*)\}\s*;?\s*$/
@@ -19,14 +21,14 @@ const EXPORT_BLOCK = /export\s*\{([^}]*)\}\s*;?\s*$/
  * Turns the library ESM into a classic-script prelude for the query Worker: the trailing
  * `export { a, b as c }` becomes global assignments, and `__dlqLoad(bundle)` defines `map`.
  */
-export const toPrelude = (js: string): string => {
+export const toPrelude = (js: string, spatial?: string): string => {
   const m = EXPORT_BLOCK.exec(js)
   if (!m) throw new Error("query-library index.js has no trailing `export { ... }` block")
   const assigns = m[1]!.split(",").map((s) => s.trim()).filter(Boolean).map((s) => {
     const [local, exported = local] = s.split(/\s+as\s+/)
     return `globalThis[${JSON.stringify(exported)}] = ${local};`
   })
-  return `${js.slice(0, m.index)}\n${assigns.join("\n")}\nglobalThis.__dlqLoad = (bundle) => { globalThis.map = MapContext.fromBundle(bundle); };\n`
+  return `${spatial ? `${spatial}\n` : ""}${js.slice(0, m.index)}\n${assigns.join("\n")}\nglobalThis.__dlqLoad = (bundle) => { globalThis.map = MapContext.fromBundle(bundle); };\n`
 }
 
 /**

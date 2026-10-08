@@ -18,6 +18,16 @@ export const ensureLibraryBuilt = (): string => {
   return LIBRARY_DIST
 }
 
+/**
+ * The `library.json` the panel loads (`fetchLibraryArtifact`): the query-library build plus the spatial runtime for baked bundles.
+ * Standalone so the shell can publish it without the standalone editor app.
+ */
+export const buildLibraryJson = async (): Promise<string> => {
+  const spatial = await Bun.build({ entrypoints: [join(here, "..", "spatial", "runtime.ts")], target: "browser", format: "iife", minify: true })
+  if (!spatial.success) throw new Error(spatial.logs.join("\n"))
+  return JSON.stringify({ ...readLibraryArtifact(ensureLibraryBuilt()), spatial: await spatial.outputs[0]!.text() })
+}
+
 /** Builds the standalone editor app (Monaco + workers) into `.app-dist/`. */
 export const buildApp = async (): Promise<string> => {
   rmSync(OUT, { recursive: true, force: true })
@@ -36,7 +46,7 @@ export const buildApp = async (): Promise<string> => {
   if (!r.success) throw new Error(r.logs.join("\n"))
   cpSync(join(here, "index.html"), join(OUT, "index.html"))
   // Library artifact + the fixture bundle (standalone mode; the shell supplies real bundles later).
-  writeFileSync(join(OUT, "library.json"), JSON.stringify(readLibraryArtifact(ensureLibraryBuilt())))
+  writeFileSync(join(OUT, "library.json"), await buildLibraryJson())
   const mini = buildMiniMap()
   writeFileSync(join(OUT, "bundle.json"), JSON.stringify({ manifest: { mapName: mini.manifest.mapName, gameBuildId: mini.manifest.gameBuildId }, entities: mini.entities }))
   return OUT
