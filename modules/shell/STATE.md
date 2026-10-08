@@ -60,6 +60,8 @@
 
 - 2026-10-08 — `LIBRARY_URL` is `./library.json` at the site root (written by `tools/build.ts`), no longer `editor/library.json` from the standalone editor app.
 
+- 2026-10-08 — `e2e/querylink.ts` and `e2e/slice.ts` write `library.json` into their test site (as `tools/build.ts` does), since the shell now loads it from the site root.
+
 ## In progress
 - (nothing yet)
 
