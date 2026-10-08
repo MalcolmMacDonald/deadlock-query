@@ -1,8 +1,8 @@
 # kanban — state
 
-- **Status:** M0-M6 done on mocks (UI complete, live layer written) against mocks
-- **Version:** 0.6.0
-- **Current milestone:** M7 (docs, requests surfacing, security review)
+- **Status:** M0-M7 done on mocks (UI, live layer, docs); live acceptance pending against mocks
+- **Version:** 0.7.0
+- **Current milestone:** none (live acceptance and shell wiring remain)
 - **Last updated:** 2026-10-08
 
 ## Done
@@ -17,6 +17,16 @@
 - Live API: `ProxyGitHubApi` (`src/proxy.ts`) implements `GitHubApi` over `/api/github/*` (CSRF header, no token in the browser): issues without PRs, PRs linked by `claude/<module>/<n>-slug` branch with CI from workflow runs, create issue, comments, main CI, promote (`deploy.yml` dispatch with `promote=true`). `GitHubApi` gained `comments`, `addComment`, `mainCi`, `promote` (mock updated). Tested against a fake fetch that enforces the proxy's endpoint allowlist; going live is `Layer` swap in the shell.
 
 - M5/M6 UI: click or Enter on a card opens `Drawer` (comments, PR/CI, per-issue token total, "Send to Claude" posts an `@claude`-prefixed comment); `Header` shows main CI and a Promote button (enabled only when main CI is green, dispatches via `GitHubApi.promote`); the tab title gets a `(n)` badge for cards in Review. Mock round trips are tested; the sandbox-repo round trip and a real promote dispatch still need Malcolm's secrets (see below).
+
+- M7: `README.md` operator guide (secrets, variable, token scope, labels, branch/PR conventions); `extractRequests`/`requestDraft` (`src/requests.ts`) turn each module's STATE.md "Blockers / Requests" into suggested feature drafts (the shell supplies the STATE.md texts; not yet shown on the board).
+
+### Security checklist (for Malcolm's sign-off)
+- [x] No GitHub token in the browser; every call goes through the proxy with the CSRF header (`ProxyGitHubApi`).
+- [x] Issue and comment text is rendered as React text, never as HTML.
+- [x] `claude.yml` only runs for logins in `CLAUDE_ALLOWED_ACTORS`; issue text reaches the job through env vars and the prompt marks it untrusted.
+- [x] One run per module at a time; edits limited to the module by the prompt and the required `check:scope` CI check.
+- [x] Promote is gated on green main CI in the UI; the deploy workflow itself still needs a manual dispatch permission on the proxy token.
+- [ ] Sign-off: token scope (issues RW, PRs RW, contents R, actions RW), actor allowlist contents, and a sandbox-repo run of M3/M5. Malcolm only.
 
 ## In progress
 - (nothing)
