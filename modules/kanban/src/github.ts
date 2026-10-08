@@ -15,12 +15,26 @@ export interface IssueDraft {
   readonly labels: ReadonlyArray<string>
 }
 
+export interface Comment {
+  readonly id: number
+  readonly author: string
+  readonly body: string
+}
+
+export type CiState = "pending" | "success" | "failure"
+
 /** All GitHub access goes through this service; the live implementation is the dev-site proxy (infra M5). */
 export class GitHubApi extends Context.Service<
   GitHubApi,
   {
     readonly listIssues: Effect.Effect<ReadonlyArray<Issue>, Error>
     readonly createIssue: (draft: IssueDraft) => Effect.Effect<Issue, Error>
+    readonly comments: (issue: number) => Effect.Effect<ReadonlyArray<Comment>, Error>
+    readonly addComment: (issue: number, body: string) => Effect.Effect<Comment, Error>
+    /** CI state of the latest workflow run on `main`. */
+    readonly mainCi: Effect.Effect<CiState, Error>
+    /** Dispatches `deploy.yml` with `promote=true` (dev to prod). */
+    readonly promote: Effect.Effect<void, Error>
   }
 >()("@deadlock-query/kanban/GitHubApi") {}
 
@@ -36,6 +50,8 @@ export const fixtureIssues: ReadonlyArray<Issue> = [
 export const MockGitHubApi = (initial: ReadonlyArray<Issue> = fixtureIssues) =>
   Layer.sync(GitHubApi)(() => {
     const issues = [...initial]
+    const comments = new Map<number, Comment[]>()
+    let nextComment = 1
     return {
       listIssues: Effect.sync(() => [...issues]),
       createIssue: (draft) =>
@@ -43,6 +59,15 @@ export const MockGitHubApi = (initial: ReadonlyArray<Issue> = fixtureIssues) =>
           const issue: Issue = { number: Math.max(0, ...issues.map((i) => i.number)) + 1, title: draft.title, labels: draft.labels, state: "open" }
           issues.push(issue)
           return issue
-        })
+        }),
+      comments: (n) => Effect.sync(() => [...(comments.get(n) ?? [])]),
+      addComment: (n, body) =>
+        Effect.sync(() => {
+          const c: Comment = { id: nextComment++, author: "mock-user", body }
+          comments.set(n, [...(comments.get(n) ?? []), c])
+          return c
+        }),
+      mainCi: Effect.succeed("success" as const),
+      promote: Effect.void
     }
   })
